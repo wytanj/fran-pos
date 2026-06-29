@@ -1,0 +1,267 @@
+import { useState, type FormEvent } from 'react'
+import { Loader2, QrCode, Search, UserPlus, UsersRound } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import type { Customer } from '@/pos/data/mock'
+import type { FranCrmClient } from '../lib/fran-crm-client'
+import {
+  customerFromFranMember,
+  type FranCounterSession,
+  type FranMemberLookupMethod,
+  type FranMemberResolution,
+} from '../types'
+
+interface FranCustomerModalProps {
+  open: boolean
+  client: FranCrmClient
+  onClose: () => void
+  onResolved: (session: FranCounterSession, customer: Customer | null) => void
+}
+
+const emptyResolution: FranMemberResolution = {
+  status: 'none',
+  input: { raw: '', method: 'manual' },
+  matches: [],
+  warnings: [],
+}
+
+function lookupMethod(value: string): FranMemberLookupMethod {
+  const trimmed = value.trim()
+  if (/^fran/i.test(trimmed)) return 'member_number'
+  if (/^\+?\d[\d\s-]{5,}$/.test(trimmed)) return 'mobile'
+  return 'manual'
+}
+
+export function FranCustomerModal({ open, client, onClose, onResolved }: FranCustomerModalProps) {
+  const [query, setQuery] = useState('')
+  const [resolution, setResolution] = useState<FranMemberResolution>(emptyResolution)
+  const [loading, setLoading] = useState(false)
+  const [registering, setRegistering] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [registration, setRegistration] = useState({
+    fullName: '',
+    phone: '',
+    birthday: '',
+  })
+
+  const reset = () => {
+    setQuery('')
+    setResolution(emptyResolution)
+    setRegistering(false)
+    setError(null)
+  }
+
+  const close = () => {
+    reset()
+    onClose()
+  }
+
+  const runResolve = async (raw: string, method: FranMemberLookupMethod = lookupMethod(raw)) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return
+    setLoading(true)
+    setError(null)
+    try {
+      const next = await client.resolveMember({ raw: trimmed, method })
+      setResolution(next)
+      if (next.status === 'none') {
+        setRegistration((current) => ({
+          ...current,
+          phone: method === 'mobile' ? trimmed : current.phone,
+          fullName: method === 'manual' ? trimmed : current.fullName,
+        }))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to resolve member.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const selectMember = async (memberId: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const session = await client.getCounterSession({
+        mode: 'member',
+        memberId,
+        lookup: resolution.input,
+      })
+      onResolved(session, session.member ? customerFromFranMember(session.member) : null)
+      close()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to start member session.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const chooseException = async (mode: 'non_member' | 'tourist') => {
+    setLoading(true)
+    setError(null)
+    try {
+      const session = await client.getCounterSession({ mode })
+      onResolved(session, null)
+      close()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to start exception session.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const submitRegistration = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!registration.fullName.trim() || !registration.phone.trim()) return
+    setLoading(true)
+    setError(null)
+    try {
+      const session = await client.getCounterSession({
+        mode: 'member',
+        registration: {
+          fullName: registration.fullName.trim(),
+          phone: registration.phone.trim(),
+          birthday: registration.birthday || null,
+        },
+        lookup: resolution.input.raw ? resolution.input : null,
+      })
+      onResolved(session, session.member ? customerFromFranMember(session.member) : null)
+      close()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to register member.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
+      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto" onClose={close}>
+        <DialogHeader>
+          <DialogTitle>Fran member lookup</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              className="pl-9"
+              value={query}
+              placeholder="Scan QR, barcode, member number, or mobile"
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void runResolve(query)
+                }
+              }}
+            />
+          </div>
+          <Button onClick={() => void runResolve(query)} disabled={loading || !query.trim()}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Search
+          </Button>
+        </div>
+
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <Button variant="outline" onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}>
+            <QrCode className="h-4 w-4" /> QR demo
+          </Button>
+          <Button variant="outline" onClick={() => void chooseException('non_member')}>
+            <UsersRound className="h-4 w-4" /> Non-member
+          </Button>
+          <Button variant="outline" onClick={() => void chooseException('tourist')}>
+            <UsersRound className="h-4 w-4" /> Tourist
+          </Button>
+        </div>
+
+        {error && (
+          <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-4 space-y-2">
+          {resolution.matches.map((member) => (
+            <button
+              key={member.id}
+              type="button"
+              onClick={() => void selectMember(member.id)}
+              className="flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left hover:bg-accent"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{member.name}</span>
+                  <Badge variant="secondary">{member.tier}</Badge>
+                  {member.tourist && <Badge variant="outline">Tourist</Badge>}
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {member.memberNo} - {member.phone} - {member.pointsBalance.toLocaleString()} pts
+                </p>
+                {member.warnings[0] && <p className="mt-1 text-xs text-amber-700">{member.warnings[0]}</p>}
+              </div>
+              <Badge variant="outline">{member.rewardCount} rewards</Badge>
+            </button>
+          ))}
+
+          {resolution.input.raw && resolution.matches.length === 0 && (
+            <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+              No Fran member matched this input.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Inline member registration</p>
+              <p className="text-xs text-muted-foreground">Create a counter-safe starter profile for this sale.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setRegistering((value) => !value)}>
+              <UserPlus className="h-4 w-4" /> {registering ? 'Hide' : 'Register'}
+            </Button>
+          </div>
+
+          {registering && (
+            <form className="space-y-3" onSubmit={submitRegistration}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Full name</Label>
+                  <Input
+                    value={registration.fullName}
+                    onChange={(event) => setRegistration({ ...registration, fullName: event.target.value })}
+                    placeholder="Customer name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Mobile</Label>
+                  <Input
+                    value={registration.phone}
+                    onChange={(event) => setRegistration({ ...registration, phone: event.target.value })}
+                    placeholder="+65 9123 4567"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Birthday</Label>
+                <Input
+                  type="date"
+                  value={registration.birthday}
+                  onChange={(event) => setRegistration({ ...registration, birthday: event.target.value })}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading || !registration.fullName.trim() || !registration.phone.trim()}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                Register and attach
+              </Button>
+            </form>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
