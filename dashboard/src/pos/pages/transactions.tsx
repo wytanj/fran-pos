@@ -22,6 +22,7 @@ function toSale(t: PastTransaction): CompletedSale {
 
   return {
     receiptNo: t.receiptNo,
+    saleStatus: 'completed',
     lines: t.items.map((it, i) => ({
       lineId: `${t.receiptNo}-${i}`,
       sku: it.sku,
@@ -45,6 +46,8 @@ function toSale(t: PastTransaction): CompletedSale {
     cashier: t.cashier,
     timestamp: t.date,
     completedAtIso,
+    voidedAtIso: null,
+    voidReason: null,
     storeCode: STORE.code,
     registerCode: POS_REGISTER_CODE,
     idempotencyKey,

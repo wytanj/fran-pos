@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const migration = readFileSync(new URL('../supabase/migrations/00007_create_pos_source_outbox.sql', import.meta.url), 'utf8')
+const queuedEarnMigration = readFileSync(
+  new URL('../supabase/migrations/00012_allow_fran_points_earn_queued_outbox_event.sql', import.meta.url),
+  'utf8',
+)
 const sharedTypes = readFileSync(new URL('../packages/shared/src/types/database.ts', import.meta.url), 'utf8')
 const outbox = readFileSync(new URL('../dashboard/src/pos/lib/pos-outbox.ts', import.meta.url), 'utf8')
 const salePage = readFileSync(new URL('../dashboard/src/pos/pages/sale.tsx', import.meta.url), 'utf8')
@@ -26,9 +30,13 @@ test('POS source fact migration creates durable sales, returns, and outbox table
     'pos.return.completed',
     'pos.reward.redeem_requested',
     'pos.reward.refund_requested',
+    'fran.points_earn.queued',
   ]) {
     assert.match(migration, new RegExp(eventType.replaceAll('.', '\\.')))
   }
+
+  assert.match(queuedEarnMigration, /drop constraint if exists pos_outbox_events_event_type_check/)
+  assert.match(queuedEarnMigration, /fran\.points_earn\.queued/)
 
   assert.match(migration, /unique\(company_id, idempotency_key\)/)
   assert.match(migration, /pos_outbox_events_status_idx/)

@@ -276,8 +276,22 @@ export function buildPosSaleCompletedEvent(
 ): PosSourceEventEnvelope {
   const idempotencyKey = buildPosOutboxIdempotencyKey('pos.sale.completed', sale)
   const saleLines = sale.lines.filter((line) => line.qty > 0)
+  const franMember = sale.fran?.counterSession?.member ?? null
+  const franRewardReversed = sale.fran?.appliedReward?.status === 'reversed'
+  const franPointsRedeemed = franRewardReversed ? 0 : (sale.fran?.appliedReward?.quote.pointsCost ?? 0)
+  const franPointsBalanceAfter = franMember
+    ? Math.max(
+        0,
+        (sale.fran?.appliedReward?.reverse?.pointsBalanceAfter ??
+          sale.fran?.appliedReward?.commit?.pointsBalanceAfter ??
+          Math.max(0, franMember.pointsBalance - franPointsRedeemed)) + sale.pointsEarned
+      )
+    : null
   return baseEnvelope('pos.sale.completed', sale, options, idempotencyKey, {
     receipt_number: sale.receiptNo,
+    sale_status: sale.saleStatus,
+    voided_at: sale.voidedAtIso,
+    void_reason: sale.voidReason,
     sale_type: sale.isExchange ? 'exchange' : 'sale',
     currency: STORE.currency,
     subtotal: sale.subtotal,
@@ -304,9 +318,12 @@ export function buildPosSaleCompletedEvent(
           member_mode: sale.fran.memberMode,
           member_id: sale.fran.counterSession?.member?.id ?? null,
           basket_preview_id: sale.fran.basketPreview?.previewId ?? null,
+          loyalty_sync: sale.fran.loyaltySync,
           reward_quote_id: sale.fran.appliedReward?.quote.quoteId ?? null,
           reward_commit_id: sale.fran.appliedReward?.commit?.commitId ?? null,
           reward_status: sale.fran.appliedReward?.status ?? null,
+          points_redeemed: franPointsRedeemed,
+          points_balance_after: franPointsBalanceAfter,
         }
       : null,
     source_sale_id: sale.idempotencyKey,
@@ -377,6 +394,7 @@ export function buildFranOutboxEventsForCompletedSale(
   const events: PosSourceEventEnvelope[] = []
   const session = fran.counterSession
   const member = session.member
+  const loyaltySync = fran.loyaltySync
 
   if (member) {
     events.push(baseEnvelope(
@@ -394,6 +412,31 @@ export function buildFranOutboxEventsForCompletedSale(
           tier: member.tier,
           tourist: member.tourist,
         },
+        active_perks: session.activePerks ?? [],
+        points_expiry_alert: session.pointsExpiryAlert ?? null,
+      }
+    ))
+  }
+
+  if (member && loyaltySync?.status === 'queued' && loyaltySync.pointsEarnQueued > 0) {
+    events.push(baseEnvelope(
+      'fran.points_earn.queued',
+      sale,
+      options,
+      buildPosOutboxIdempotencyKey('fran.points_earn.queued', sale, member.id),
+      {
+        receipt_number: sale.receiptNo,
+        session_id: session.sessionId,
+        member_id: member.id,
+        crm_customer_id: member.crmCustomerId,
+        member_no: member.memberNo,
+        points_earned: loyaltySync.pointsEarnQueued,
+        sync_status: 'queued',
+        sync_on_reconnect: loyaltySync.syncOnReconnect,
+        queued_at: loyaltySync.queuedAt,
+        reason: loyaltySync.reason,
+        preview_id: fran.basketPreview?.previewId ?? null,
+        source: fran.basketPreview ? 'fran_crm_preview' : 'pos_fallback',
       }
     ))
   }
@@ -411,6 +454,11 @@ export function buildFranOutboxEventsForCompletedSale(
         preview_id: fran.basketPreview.previewId,
         earn_points: fran.basketPreview.earnPoints,
         projected_points_balance: fran.basketPreview.projectedPointsBalance,
+        earn_projection: fran.basketPreview.earnProjection,
+        tier_progress: fran.basketPreview.tierProgress,
+        points_redemption_offer: fran.basketPreview.pointsRedemption,
+        redeemable_rewards: fran.basketPreview.redeemableRewards,
+        reward_catalogue_size: fran.basketPreview.rewardCatalogueSize,
         reward_count: fran.basketPreview.rewardsAvailable.length,
         warnings: fran.basketPreview.warnings,
       }
@@ -430,9 +478,15 @@ export function buildFranOutboxEventsForCompletedSale(
       session_id: session.sessionId,
       quote_id: reward.quote.quoteId,
       reward_id: reward.quote.rewardId,
+      redemption_kind: reward.quote.redemptionKind,
       decision_ref: reward.quote.decisionRef,
+      line_label: reward.quote.lineLabel,
       amount: reward.quote.amount,
       points_cost: reward.quote.pointsCost,
+      minimum_points: reward.quote.minimumPoints,
+      points_value_rate: reward.quote.pointsValueRate,
+      points_balance_before: reward.quote.pointsBalanceBefore,
+      points_balance_after_redemption: reward.quote.pointsBalanceAfterRedemption,
       line_id: reward.lineId,
     }
   ))
@@ -448,6 +502,7 @@ export function buildFranOutboxEventsForCompletedSale(
         quote_id: reward.quote.quoteId,
         commit_id: reward.commit.commitId,
         crm_event_id: reward.commit.eventId,
+        points_redeemed: reward.quote.pointsCost,
         points_balance_after: reward.commit.pointsBalanceAfter,
       }
     ))
@@ -476,8 +531,13 @@ export function buildFranOutboxEventsForCompletedSale(
       {
         receipt_number: sale.receiptNo,
         quote_id: reward.quote.quoteId,
+        commit_id: reward.commit?.commitId ?? reward.reverse.commitId,
         reverse_id: reward.reverse.reverseId,
         crm_event_id: reward.reverse.eventId,
+        reason: reward.reverse.reason,
+        points_restored: reward.reverse.pointsRestored,
+        points_balance_after: reward.reverse.pointsBalanceAfter,
+        reward_available: reward.reverse.rewardAvailable,
       }
     ))
   }

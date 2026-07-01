@@ -1,18 +1,56 @@
-import { CheckCircle2, Gift, Loader2, ShieldCheck, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertCircle, CheckCircle2, Gift, Loader2, ShieldCheck, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
-import type { FranAppliedReward, FranBasketPreview, FranRewardDecision, FranRewardQuote } from '../types'
+import type {
+  FranAppliedReward,
+  FranBasketPreview,
+  FranRewardCatalogueItem,
+  FranRewardDecision,
+  FranRewardQuote,
+} from '../types'
 
 interface FranRewardRedemptionPanelProps {
   preview: FranBasketPreview | null
   quote: FranRewardQuote | null
   appliedReward: FranAppliedReward | null
   quoteLoading: boolean
-  onQuote: (reward: FranRewardDecision) => void
+  onQuote: (reward: FranRewardDecision, pointsToRedeem?: number) => void
   onConfirmQuote: () => void
   onClearReward: () => void
+}
+
+function roundCurrency(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+function formatRewardExpiry(expiresAt: string | null) {
+  if (!expiresAt) return null
+  const expiry = new Date(expiresAt)
+  if (Number.isNaN(expiry.getTime())) return null
+  return `expires ${new Intl.DateTimeFormat('en-SG', {
+    day: '2-digit',
+    month: 'short',
+  }).format(expiry)}`
+}
+
+function rewardDecisionFromCatalogueItem(reward: FranRewardCatalogueItem): FranRewardDecision {
+  return {
+    id: reward.id,
+    title: reward.name,
+    description: reward.description,
+    kind: 'catalogue_reward',
+    value: reward.value,
+    pointsCost: reward.pointsCost,
+    expiresAt: reward.expiresAt,
+    eligible: true,
+    reason: null,
+    requiresConfirmation: true,
+  }
 }
 
 export function FranRewardRedemptionPanel({
@@ -24,6 +62,70 @@ export function FranRewardRedemptionPanel({
   onConfirmQuote,
   onClearReward,
 }: FranRewardRedemptionPanelProps) {
+  const pointsOffer = preview?.pointsRedemption ?? null
+  const pointsReward = preview?.rewardsAvailable.find((reward) => reward.kind === 'points_redemption') ?? null
+  const redeemableRewards = preview?.redeemableRewards ?? []
+  const basketTotal = preview?.earnProjection.totalAfterDiscount ?? 0
+  const [pointsInput, setPointsInput] = useState('')
+  const [catalogueOpen, setCatalogueOpen] = useState(false)
+  const [selectedCatalogueReward, setSelectedCatalogueReward] = useState<FranRewardCatalogueItem | null>(null)
+
+  useEffect(() => {
+    if (!pointsOffer?.eligible) {
+      setPointsInput('')
+      return
+    }
+    setPointsInput((current) => {
+      const parsed = Number(current)
+      if (
+        !current.trim() ||
+        !Number.isInteger(parsed) ||
+        parsed < pointsOffer.minimumPoints ||
+        parsed > pointsOffer.maximumPoints
+      ) {
+        return String(pointsOffer.minimumPoints)
+      }
+      return current
+    })
+  }, [pointsOffer?.eligible, pointsOffer?.maximumPoints, pointsOffer?.minimumPoints])
+
+  const pointsDraft = useMemo(() => {
+    if (!pointsOffer) {
+      return {
+        parsed: 0,
+        amount: 0,
+        valid: false,
+        error: null as string | null,
+      }
+    }
+
+    const trimmed = pointsInput.trim()
+    const parsed = Number(trimmed)
+    const wholeNumber = /^\d+$/.test(trimmed) && Number.isInteger(parsed)
+    const amount = wholeNumber ? roundCurrency(parsed * pointsOffer.pointsToCurrencyRate) : 0
+    let error: string | null = null
+
+    if (!pointsOffer.eligible) error = pointsOffer.reason ?? 'Points redemption is not available.'
+    else if (!trimmed) error = 'Enter points to redeem.'
+    else if (!wholeNumber) error = 'Enter whole points only.'
+    else if (parsed < pointsOffer.minimumPoints) {
+      error = `Minimum redemption is ${pointsOffer.minimumPoints.toLocaleString()} points.`
+    } else if (parsed > pointsOffer.maximumPoints) {
+      error = `Maximum redemption is ${pointsOffer.maximumPoints.toLocaleString()} points.`
+    } else if (basketTotal <= 0) {
+      error = 'Add sale items before applying redemption.'
+    } else if (amount > basketTotal) {
+      error = 'Redemption value cannot exceed current basket total.'
+    }
+
+    return {
+      parsed,
+      amount,
+      valid: error === null,
+      error,
+    }
+  }, [basketTotal, pointsInput, pointsOffer])
+
   if (!preview) {
     return (
       <div className="rounded-lg border bg-background p-3 text-sm text-muted-foreground">
@@ -42,8 +144,16 @@ export function FranRewardRedemptionPanel({
               <p className="font-medium">{appliedReward.quote.title}</p>
               <p className="mt-0.5 text-xs">
                 {formatCurrency(appliedReward.quote.amount, STORE.currency)} applied as a separate sale line.
-                Commit status: {appliedReward.status}.
+                {appliedReward.quote.pointsCost > 0
+                  ? ' Points deduct only when payment is confirmed.'
+                  : ' Commit status: ' + appliedReward.status + '.'}
               </p>
+              {appliedReward.quote.pointsCost > 0 && (
+                <p className="mt-0.5 text-xs text-green-800">
+                  Points redemption line: {appliedReward.quote.pointsCost.toLocaleString()} pts.
+                  Commit status: {appliedReward.status}.
+                </p>
+              )}
             </div>
           </div>
           {appliedReward.status === 'quoted' && (
@@ -65,9 +175,16 @@ export function FranRewardRedemptionPanel({
             <p className="text-sm font-semibold">{quote.title}</p>
             <p className="mt-1 text-xs text-muted-foreground">{quote.confirmationText}</p>
             {quote.pointsCost > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Points cost: {quote.pointsCost.toLocaleString()}.
-              </p>
+              <div className="mt-2 grid gap-1 rounded-md bg-secondary px-2 py-1.5 text-xs text-muted-foreground sm:grid-cols-3">
+                <span>Points redeemed: {quote.pointsCost.toLocaleString()}</span>
+                <span>Dollar value: {formatCurrency(quote.amount, quote.currency)}</span>
+                <span>
+                  After redemption:{' '}
+                  {quote.pointsBalanceAfterRedemption == null
+                    ? '-'
+                    : quote.pointsBalanceAfterRedemption.toLocaleString()}
+                </span>
+              </div>
             )}
           </div>
         </div>
@@ -76,14 +193,21 @@ export function FranRewardRedemptionPanel({
             Cancel
           </Button>
           <Button onClick={onConfirmQuote}>
-            Confirm redemption
+            Customer confirmed
           </Button>
         </div>
       </div>
     )
   }
 
-  const rewards = preview.rewardsAvailable
+  const rewards = preview.rewardsAvailable.filter((reward) => reward.kind !== 'points_redemption')
+  const showPointsPrompt = Boolean(pointsOffer?.eligible && pointsReward)
+  const showRewardCatalogue = redeemableRewards.length > 0
+  const eligibleCount = rewards.filter((reward) => reward.eligible).length + (showPointsPrompt ? 1 : 0)
+  const selectedRewardBalanceAfter =
+    selectedCatalogueReward && pointsOffer
+      ? Math.max(0, pointsOffer.availablePoints - selectedCatalogueReward.pointsCost)
+      : null
 
   return (
     <div className="rounded-lg border bg-background p-3">
@@ -92,11 +216,173 @@ export function FranRewardRedemptionPanel({
           <Gift className="h-4 w-4 text-primary" />
           <p className="text-sm font-semibold">Fran rewards</p>
         </div>
-        <Badge variant="outline">{rewards.filter((reward) => reward.eligible).length} eligible</Badge>
+        <Badge variant="outline">{eligibleCount} eligible</Badge>
       </div>
 
       <div className="space-y-2">
-        {rewards.length === 0 && (
+        {showRewardCatalogue && (
+          <div className="rounded-md border border-primary/20 bg-secondary/40 p-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full justify-between"
+              aria-expanded={catalogueOpen}
+              onClick={() => setCatalogueOpen((open) => !open)}
+            >
+              <span className="flex items-center gap-2">
+                <Gift className="h-4 w-4" />
+                Rewards Available
+              </span>
+              <Badge variant="secondary">{redeemableRewards.length}</Badge>
+            </Button>
+
+            {catalogueOpen && (
+              <div className="mt-2 space-y-2">
+                {selectedCatalogueReward && (
+                  <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+                    <p className="text-sm font-semibold">
+                      Apply {selectedCatalogueReward.name} ({selectedCatalogueReward.pointsCost.toLocaleString()} pts)?
+                    </p>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+                      <div className="rounded-sm bg-background px-2 py-1">
+                        <p className="text-muted-foreground">Reward</p>
+                        <p className="font-medium">{selectedCatalogueReward.name}</p>
+                        {formatRewardExpiry(selectedCatalogueReward.expiresAt) && (
+                          <p className="text-muted-foreground">{formatRewardExpiry(selectedCatalogueReward.expiresAt)}</p>
+                        )}
+                      </div>
+                      <div className="rounded-sm bg-background px-2 py-1">
+                        <p className="text-muted-foreground">Points cost</p>
+                        <p className="font-medium">{selectedCatalogueReward.pointsCost.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-sm bg-background px-2 py-1">
+                        <p className="text-muted-foreground">Remaining balance</p>
+                        <p className="font-medium">{selectedRewardBalanceAfter?.toLocaleString() ?? '-'}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedCatalogueReward(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={quoteLoading}
+                        onClick={() => {
+                          if (!selectedCatalogueReward) return
+                          const reward = selectedCatalogueReward
+                          setSelectedCatalogueReward(null)
+                          onQuote(rewardDecisionFromCatalogueItem(reward))
+                        }}
+                      >
+                        {quoteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        Yes
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {redeemableRewards.map((reward) => (
+                  <button
+                    key={reward.id}
+                    type="button"
+                    className="w-full rounded-md border bg-background p-2 text-left transition-colors hover:bg-accent"
+                    onClick={() => setSelectedCatalogueReward(reward)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          <span>{reward.name}</span>
+                          {formatRewardExpiry(reward.expiresAt) && (
+                            <>
+                              {' '}
+                              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                - {formatRewardExpiry(reward.expiresAt)}
+                              </span>
+                            </>
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{reward.description}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold">{reward.pointsCost.toLocaleString()} pts</p>
+                        <p className="text-xs text-muted-foreground">{reward.valueLabel}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showPointsPrompt && pointsOffer && pointsReward && (
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  Member has {pointsOffer.availablePoints.toLocaleString()} pts available (worth{' '}
+                  {formatCurrency(pointsOffer.availableValue, pointsOffer.currency)}). Apply redemption?
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Minimum threshold: {pointsOffer.minimumPoints.toLocaleString()} pts (
+                  {formatCurrency(pointsOffer.minimumValue, pointsOffer.currency)}).
+                </p>
+              </div>
+              <Badge variant="secondary">Points</Badge>
+            </div>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <Label htmlFor="fran-points-redemption" className="text-xs">
+                  Points to redeem
+                </Label>
+                <Input
+                  id="fran-points-redemption"
+                  className="mt-1 h-9"
+                  inputMode="numeric"
+                  min={pointsOffer.minimumPoints}
+                  max={pointsOffer.maximumPoints}
+                  step={1}
+                  type="number"
+                  value={pointsInput}
+                  onChange={(event) => setPointsInput(event.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={() => onQuote(pointsReward, pointsDraft.parsed)}
+                disabled={!pointsDraft.valid || quoteLoading}
+              >
+                {quoteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Apply redemption
+              </Button>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-medium">
+                Dollar equivalent: {formatCurrency(pointsDraft.amount, pointsOffer.currency)}
+              </span>
+              <span className="text-muted-foreground">
+                Customer confirmation required.
+              </span>
+            </div>
+            {pointsDraft.error && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-amber-700">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {pointsDraft.error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {rewards.length === 0 && !showPointsPrompt && (
           <p className="rounded-md bg-secondary p-2 text-xs text-muted-foreground">
             No rewards for this sale mode.
           </p>

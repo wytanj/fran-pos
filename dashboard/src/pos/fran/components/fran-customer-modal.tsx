@@ -35,6 +35,61 @@ function lookupMethod(value: string): FranMemberLookupMethod {
   return 'manual'
 }
 
+function offlineSessionId(mode: string) {
+  return `fran_offline_${mode}_${Date.now()}`
+}
+
+function addMinutesIso(minutes: number) {
+  return new Date(Date.now() + minutes * 60 * 1000).toISOString()
+}
+
+function offlineMemberSession(raw: string, method: FranMemberLookupMethod): FranCounterSession {
+  const trimmed = raw.trim()
+  const memberNo = method === 'mobile' ? `MOBILE-${trimmed.replace(/\D/g, '') || 'PENDING'}` : trimmed.toUpperCase()
+  return {
+    sessionId: offlineSessionId('member'),
+    mode: 'member',
+    member: {
+      id: `fran-offline-${Date.now()}`,
+      crmCustomerId: `pending:${trimmed}`,
+      memberNo,
+      name: 'Offline member',
+      phone: method === 'mobile' ? trimmed : '',
+      email: null,
+      tier: 'Base',
+      pointsBalance: 0,
+      memberSince: null,
+      birthday: null,
+      birthdayMonth: null,
+      pointsExpireAt: null,
+      expiresAt: null,
+      rewardCount: 0,
+      tourist: false,
+      warnings: ['Fran CRM offline: member profile and points will reconcile from queued POS events.'],
+    },
+    activePerks: [],
+    pointsExpiryAlert: null,
+    startedAt: new Date().toISOString(),
+    expiresAt: addMinutesIso(45),
+    prompts: ['Fran CRM offline. Complete checkout; points earn will queue locally.'],
+    warnings: ['Fran CRM offline. Loyalty is queued and must not block checkout.'],
+  }
+}
+
+function offlineExceptionSession(mode: 'non_member' | 'tourist'): FranCounterSession {
+  return {
+    sessionId: offlineSessionId(mode),
+    mode,
+    member: null,
+    activePerks: [],
+    pointsExpiryAlert: null,
+    startedAt: new Date().toISOString(),
+    expiresAt: addMinutesIso(45),
+    prompts: [`${mode === 'tourist' ? 'Tourist' : 'Non-member'} selected while Fran CRM is offline.`],
+    warnings: ['Fran CRM offline. Sale can continue without loyalty decisions.'],
+  }
+}
+
 export function FranCustomerModal({ open, client, onClose, onResolved }: FranCustomerModalProps) {
   const [query, setQuery] = useState('')
   const [resolution, setResolution] = useState<FranMemberResolution>(emptyResolution)
@@ -93,7 +148,14 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       onResolved(session, session.member ? customerFromFranMember(session.member) : null)
       close()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start member session.')
+      const raw = resolution.input.raw || query.trim()
+      if (raw) {
+        const session = offlineMemberSession(raw, resolution.input.raw ? resolution.input.method : lookupMethod(raw))
+        onResolved(session, session.member ? customerFromFranMember(session.member) : null)
+        close()
+      } else {
+        setError(err instanceof Error ? err.message : 'Unable to start member session.')
+      }
     } finally {
       setLoading(false)
     }
@@ -106,11 +168,22 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       const session = await client.getCounterSession({ mode })
       onResolved(session, null)
       close()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start exception session.')
+    } catch {
+      const session = offlineExceptionSession(mode)
+      onResolved(session, null)
+      close()
     } finally {
       setLoading(false)
     }
+  }
+
+  const continueOfflineMember = () => {
+    const raw = query.trim() || resolution.input.raw
+    if (!raw) return
+    const method = resolution.input.raw ? resolution.input.method : lookupMethod(raw)
+    const session = offlineMemberSession(raw, method)
+    onResolved(session, session.member ? customerFromFranMember(session.member) : null)
+    close()
   }
 
   const submitRegistration = async (event: FormEvent<HTMLFormElement>) => {
@@ -131,7 +204,18 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       onResolved(session, session.member ? customerFromFranMember(session.member) : null)
       close()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to register member.')
+      if (registration.phone.trim()) {
+        const session = offlineMemberSession(registration.phone.trim(), 'mobile')
+        if (session.member) {
+          session.member.name = registration.fullName.trim() || session.member.name
+          session.member.birthday = registration.birthday || null
+          session.member.birthdayMonth = registration.birthday ? Number(registration.birthday.slice(5, 7)) : null
+        }
+        onResolved(session, session.member ? customerFromFranMember(session.member) : null)
+        close()
+      } else {
+        setError(err instanceof Error ? err.message : 'Unable to register member.')
+      }
     } finally {
       setLoading(false)
     }
@@ -180,8 +264,16 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
         </div>
 
         {error && (
-          <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p>{error}</p>
+            <p className="mt-1 text-xs text-amber-800">
+              Sale can continue offline. Loyalty earn will queue locally and sync on reconnect.
+            </p>
+            {(query.trim() || resolution.input.raw) && (
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={continueOfflineMember}>
+                Continue offline with identifier
+              </Button>
+            )}
           </div>
         )}
 

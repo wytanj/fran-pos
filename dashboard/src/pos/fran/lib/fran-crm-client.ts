@@ -54,14 +54,27 @@ function normalizeEndpoint(value: string | undefined) {
 }
 
 async function postJson<TInput, TOutput>(endpointUrl: string, path: string, input: TInput): Promise<TOutput> {
-  const response = await fetch(`${endpointUrl}${path}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-pos-client': 'fran-pos',
-    },
-    body: JSON.stringify(input),
-  })
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 4000)
+  let response: Response
+
+  try {
+    response = await fetch(`${endpointUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-pos-client': 'fran-pos',
+      },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    throw new Error(error instanceof DOMException && error.name === 'AbortError'
+      ? 'Fran CRM unreachable. Continue checkout offline.'
+      : 'Fran CRM unreachable. Continue checkout offline.')
+  } finally {
+    window.clearTimeout(timeout)
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '')

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Banknote,
   CreditCard,
@@ -10,6 +10,7 @@ import {
   Loader2,
   CheckCircle2,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -34,14 +35,16 @@ interface PaymentModalProps {
   open: boolean
   onClose: () => void
   onComplete: () => void
+  onPaymentFailed?: (reason: string) => void
 }
 
-export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
+export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: PaymentModalProps) {
   const { totals, payments, addPayment, removePayment, customer } = usePos()
   const [mode, setMode] = useState<PaymentModeId | null>(null)
   const [amount, setAmount] = useState('')
   const [cardType, setCardType] = useState<string>(CARD_TYPES[0])
   const [terminalState, setTerminalState] = useState<'idle' | 'waiting' | 'approved'>('idle')
+  const terminalTimers = useRef<number[]>([])
 
   const remaining = totals.balance
   const amountNum = parseFloat(amount) || 0
@@ -51,6 +54,8 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
   const giftAvail = customer?.giftCardBalance ?? 0
 
   const reset = () => {
+    terminalTimers.current.forEach((timerId) => window.clearTimeout(timerId))
+    terminalTimers.current = []
     setMode(null)
     setAmount('')
     setTerminalState('idle')
@@ -92,6 +97,14 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
     setAmount(getTenderLimit(paymentMode).toFixed(2))
   }
 
+  const scheduleTerminalStep = (run: () => void, delayMs: number) => {
+    const timerId = window.setTimeout(() => {
+      terminalTimers.current = terminalTimers.current.filter((id) => id !== timerId)
+      run()
+    }, delayMs)
+    terminalTimers.current.push(timerId)
+  }
+
   const commit = (
     label: string,
     value: number,
@@ -118,9 +131,9 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
     }
     if (mode === 'card') {
       setTerminalState('waiting')
-      setTimeout(() => {
+      scheduleTerminalStep(() => {
         setTerminalState('approved')
-        setTimeout(() => {
+        scheduleTerminalStep(() => {
           const last4 = String(Math.floor(1000 + Math.random() * 8999))
           commit(cardType, amountNum || remaining, `****${last4}`)
         }, 700)
@@ -129,9 +142,9 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
     }
     if (mode === 'square_pos') {
       setTerminalState('waiting')
-      setTimeout(() => {
+      scheduleTerminalStep(() => {
         setTerminalState('approved')
-        setTimeout(() => {
+        scheduleTerminalStep(() => {
           const transactionId = `sq-${Date.now()}`
           commit('Square POS', amountNum || remaining, transactionId, {
             provider: 'square',
@@ -162,6 +175,14 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
     }
     // misc / exchange tender
     commit(modeMeta.label, amountNum || remaining)
+  }
+
+  const failPayment = () => {
+    if (!mode) return
+    const modeMeta = PAYMENT_MODES.find((m) => m.id === mode)
+    const label = mode === 'card' ? cardType : modeMeta?.label ?? 'Payment'
+    onPaymentFailed?.(`${label} payment_failed`)
+    closeAndReset()
   }
 
   const cashTendered = payments.filter((p) => p.mode === 'cash').reduce((s, p) => s + p.amount, 0)
@@ -324,6 +345,11 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
                         <p className="text-xs text-muted-foreground">
                           {mode === 'square_pos' ? 'Opening Square POS handoff' : `Tap, insert or swipe ${cardType}`}
                         </p>
+                        {onPaymentFailed && (
+                          <Button variant="outline" className="mt-4" onClick={failPayment}>
+                            <AlertTriangle className="h-4 w-4" /> Mark payment failed
+                          </Button>
+                        )}
                       </>
                     ) : (
                       <>
@@ -367,19 +393,26 @@ export function PaymentModal({ open, onClose, onComplete }: PaymentModalProps) {
                 )}
 
                 {!((mode === 'card' || mode === 'square_pos') && terminalState !== 'idle') && (
-                  <Button
-                    className="mt-3 h-11 w-full text-base"
-                    onClick={handleConfirm}
-                    disabled={
-                      (mode === 'store-credit' && storeCreditAvail <= 0) ||
-                      (mode === 'gift-card' && giftAvail <= 0) ||
-                      amountTooHigh ||
-                      (mode === 'cash' ? amountNum <= 0 : amountNum < 0)
-                    }
-                  >
-                    {mode === 'card' ? `Charge ${cardType}` : mode === 'square_pos' ? 'Open Square POS' : 'Add tender'}{' '}
-                    {amountNum > 0 && `· ${formatCurrency(amountNum, STORE.currency)}`}
-                  </Button>
+                  <>
+                    <Button
+                      className="mt-3 h-11 w-full text-base"
+                      onClick={handleConfirm}
+                      disabled={
+                        (mode === 'store-credit' && storeCreditAvail <= 0) ||
+                        (mode === 'gift-card' && giftAvail <= 0) ||
+                        amountTooHigh ||
+                        (mode === 'cash' ? amountNum <= 0 : amountNum < 0)
+                      }
+                    >
+                      {mode === 'card' ? `Charge ${cardType}` : mode === 'square_pos' ? 'Open Square POS' : 'Add tender'}{' '}
+                      {amountNum > 0 && `· ${formatCurrency(amountNum, STORE.currency)}`}
+                    </Button>
+                    {(mode === 'card' || mode === 'square_pos') && onPaymentFailed && (
+                      <Button variant="outline" className="mt-2 w-full" onClick={failPayment}>
+                        <AlertTriangle className="h-4 w-4" /> Mark payment failed
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             )}

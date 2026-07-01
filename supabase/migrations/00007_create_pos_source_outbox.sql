@@ -101,7 +101,8 @@ create table if not exists public.pos_outbox_events (
     'fran.reward.quoted',
     'fran.reward.committed',
     'fran.reward.reversed',
-    'fran.reward.commit_failed'
+    'fran.reward.commit_failed',
+    'fran.points_earn.queued'
   )),
   status text not null default 'queued' check (status in ('queued', 'sent', 'acked', 'failed')),
   source_system text not null default 'pos',

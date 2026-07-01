@@ -1,5 +1,10 @@
 import { STORE } from '@/pos/data/mock'
 import type { CompletedSale } from '@/pos/lib/pos-context'
+import {
+  buildReceiptRewardRedemptions,
+  cartLineNetValue,
+  isFranRewardReceiptLine,
+} from '@/pos/lib/reward-receipt'
 import type { CompanySettings, CustomerEmailConnectorSettings, CustomerEmailReceiptPayload } from '@pos/shared'
 
 export interface CustomerEmailConnectorConfig {
@@ -84,9 +89,22 @@ export function buildCustomerEmailReceiptPayload(sale: CompletedSale): CustomerE
         applied_at: sale.cartPriceOverride.appliedAt,
       }
     : null
-  const franRewardTotal = sale.lines
-    .filter((line) => line.lineKind === 'fran_reward' || line.lineKind === 'fran_points')
-    .reduce((sum, line) => sum + line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1), 0)
+  const rewardsRedeemed = buildReceiptRewardRedemptions(sale)
+  const franRewardTotal = -rewardsRedeemed.reduce((sum, reward) => sum + reward.netDollarValueApplied, 0)
+  const rewardReceiptLines = rewardsRedeemed.length > 0
+    ? [
+        '',
+        'Rewards redeemed',
+        ...rewardsRedeemed.flatMap((reward) => [
+          reward.rewardName,
+          `Points used ${reward.pointsUsed.toLocaleString()}`,
+          ...(reward.dollarEquivalent !== null
+            ? [`Dollar equivalent ${formatAmount(reward.dollarEquivalent, reward.currency)}`]
+            : []),
+          `Net value applied ${formatSignedAmount(-reward.netDollarValueApplied, reward.currency)}`,
+        ]),
+      ]
+    : []
 
   const plainTextReceipt = [
     `${STORE.name}`,
@@ -94,10 +112,11 @@ export function buildCustomerEmailReceiptPayload(sale: CompletedSale): CustomerE
     `Date ${sale.timestamp}`,
     `Cashier ${sale.cashier}`,
     '',
-    ...sale.lines.map((line) => {
-      const lineTotal = line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1)
+    ...sale.lines.filter((line) => !isFranRewardReceiptLine(line)).map((line) => {
+      const lineTotal = cartLineNetValue(line)
       return `${line.qty} x ${line.name} (${line.sku}) ${formatAmount(lineTotal)}`
     }),
+    ...rewardReceiptLines,
     '',
     `Subtotal ${formatAmount(sale.subtotal)}`,
     `Discount ${formatAmount(sale.discountTotal)}`,
@@ -133,14 +152,25 @@ export function buildCustomerEmailReceiptPayload(sale: CompletedSale): CustomerE
       points_earned: sale.pointsEarned,
       fran_reward_redemption: franRewardTotal,
     },
-    lines: sale.lines.map((line) => ({
+    rewards_redeemed: rewardsRedeemed.map((reward) => ({
+      line_id: reward.lineId,
+      reward_name: reward.rewardName,
+      reward_id: reward.rewardId,
+      reward_quote_id: reward.rewardQuoteId,
+      status: reward.status,
+      points_used: reward.pointsUsed,
+      dollar_equivalent: reward.dollarEquivalent,
+      net_dollar_value_applied: reward.netDollarValueApplied,
+      currency: reward.currency,
+    })),
+    lines: sale.lines.filter((line) => !isFranRewardReceiptLine(line)).map((line) => ({
       sku: line.sku,
       name: line.name,
       line_kind: line.lineKind ?? 'product',
       quantity: line.qty,
       unit_price: line.unitPrice,
       line_discount: line.lineDiscount,
-      line_total: line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1),
+      line_total: cartLineNetValue(line),
     })),
     payments: sale.payments.map((payment) => ({
       method: payment.mode,
@@ -206,11 +236,11 @@ export async function invokeCustomerEmailConnector(
   }
 }
 
-function formatAmount(value: number) {
-  return `${STORE.currency} ${value.toFixed(2)}`
+function formatAmount(value: number, currency = STORE.currency) {
+  return `${currency} ${value.toFixed(2)}`
 }
 
-function formatSignedAmount(value: number) {
-  if (Math.abs(value) < 0.005) return formatAmount(0)
-  return `${value > 0 ? '+' : '-'}${formatAmount(Math.abs(value))}`
+function formatSignedAmount(value: number, currency = STORE.currency) {
+  if (Math.abs(value) < 0.005) return formatAmount(0, currency)
+  return `${value > 0 ? '+' : '-'}${formatAmount(Math.abs(value), currency)}`
 }

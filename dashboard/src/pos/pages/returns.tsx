@@ -337,6 +337,7 @@ export default function ReturnsPage() {
     const idempotencyKey = buildSkumsSaleIdempotencyKey({ receiptNo, completedAtIso })
     const sale: CompletedSale = {
       receiptNo,
+      saleStatus: 'completed',
       lines,
       cartPriceOverride: null,
       customer: null,
@@ -355,6 +356,8 @@ export default function ReturnsPage() {
       cashier: 'Aisyah Rahman',
       timestamp: completedAt.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }),
       completedAtIso,
+      voidedAtIso: null,
+      voidReason: null,
       storeCode: STORE.code,
       registerCode: POS_REGISTER_CODE,
       idempotencyKey,

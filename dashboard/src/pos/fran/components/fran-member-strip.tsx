@@ -1,9 +1,9 @@
-import { AlertCircle, Loader2, Search, ShieldCheck, Star, UserPlus, X } from 'lucide-react'
+import { AlertCircle, Gift, Loader2, Search, ShieldCheck, Star, UserPlus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
-import type { FranAppliedReward, FranBasketPreview, FranCounterSession } from '../types'
+import type { FranAppliedReward, FranBasketPreview, FranCounterSession, FranLoyaltySyncState } from '../types'
 
 interface FranMemberStripProps {
   session: FranCounterSession | null
@@ -11,6 +11,7 @@ interface FranMemberStripProps {
   appliedReward: FranAppliedReward | null
   previewLoading: boolean
   previewError: string | null
+  loyaltySync: FranLoyaltySyncState | null
   onFindMember: () => void
   onClearSession: () => void
 }
@@ -21,10 +22,12 @@ export function FranMemberStrip({
   appliedReward,
   previewLoading,
   previewError,
+  loyaltySync,
   onFindMember,
   onClearSession,
 }: FranMemberStripProps) {
   const member = session?.member ?? null
+  const activePerks = session?.activePerks ?? []
 
   return (
     <div className="shrink-0 border-b bg-card px-3 py-2">
@@ -60,6 +63,12 @@ export function FranMemberStrip({
               {preview?.projectedPointsBalance != null && (
                 <span>Projected {preview.projectedPointsBalance.toLocaleString()} pts</span>
               )}
+              {loyaltySync?.status === 'queued' && (
+                <span className="flex items-center gap-1 font-medium text-amber-700">
+                  <AlertCircle className="h-3 w-3" /> CRM offline - earn queued
+                  {loyaltySync.pointsEarnQueued > 0 ? ` (${loyaltySync.pointsEarnQueued.toLocaleString()} pts)` : ''}
+                </span>
+              )}
               {appliedReward && (
                 <span>{formatCurrency(appliedReward.quote.amount, STORE.currency)} reward line pending commit</span>
               )}
@@ -69,6 +78,18 @@ export function FranMemberStrip({
                 </span>
               )}
             </div>
+            {activePerks.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="flex items-center gap-1 font-medium text-foreground">
+                  <Gift className="h-3.5 w-3.5" /> Active perks
+                </span>
+                {activePerks.slice(0, 3).map((perk) => (
+                  <Badge key={perk.id} variant="outline">
+                    {perk.title}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

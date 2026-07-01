@@ -1,6 +1,11 @@
 import { formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
 import type { CompletedSale } from '@/pos/lib/pos-context'
+import {
+  buildReceiptRewardRedemptions,
+  cartLineNetValue,
+  isFranRewardReceiptLine,
+} from '@/pos/lib/reward-receipt'
 
 interface ReceiptPreviewProps {
   sale: CompletedSale
@@ -10,10 +15,21 @@ interface ReceiptPreviewProps {
 
 /** Thermal-receipt rendering — covers receipt format requirements (item 23). */
 export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
-  const franRewardTotal = sale.lines
-    .filter((line) => line.lineKind === 'fran_reward' || line.lineKind === 'fran_points')
-    .reduce((sum, line) => sum + line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1), 0)
+  const receiptRewards = buildReceiptRewardRedemptions(sale)
   const franProjectedPoints = sale.fran?.basketPreview?.projectedPointsBalance ?? null
+  const franMember = sale.fran?.counterSession?.member ?? null
+  const franLoyaltySync = sale.fran?.loyaltySync ?? null
+  const franRewardReversed = sale.fran?.appliedReward?.status === 'reversed'
+  const franPointsRedeemed = franRewardReversed ? 0 : (sale.fran?.appliedReward?.quote.pointsCost ?? 0)
+  const franPointsEarned = sale.saleStatus === 'voided' ? 0 : sale.pointsEarned
+  const franRunningPointsBalance = franMember
+    ? Math.max(
+        0,
+        (sale.fran?.appliedReward?.reverse?.pointsBalanceAfter ??
+          sale.fran?.appliedReward?.commit?.pointsBalanceAfter ??
+          Math.max(0, franMember.pointsBalance - franPointsRedeemed)) + franPointsEarned
+      )
+    : null
 
   return (
     <div className="mx-auto w-[320px] bg-white p-5 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner">
@@ -34,6 +50,12 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
         <span>Receipt</span>
         <span>{sale.receiptNo}</span>
       </div>
+      {sale.saleStatus === 'voided' && (
+        <div className="flex justify-between font-bold uppercase">
+          <span>Status</span>
+          <span>Voided</span>
+        </div>
+      )}
       <div className="flex justify-between">
         <span>Date</span>
         <span>{sale.timestamp}</span>
@@ -50,8 +72,8 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
       )}
 
       <Divider />
-      {sale.lines.map((l) => {
-        const lineTotal = l.unitPrice * l.qty - l.lineDiscount * (l.qty < 0 ? -1 : 1)
+      {sale.lines.filter((line) => !isFranRewardReceiptLine(line)).map((l) => {
+        const lineTotal = cartLineNetValue(l)
         return (
           <div key={l.lineId} className="mb-1">
             <div className="flex justify-between">
@@ -69,11 +91,6 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
                 &nbsp;&nbsp;{l.discountLabel ?? 'Discount'}: -{formatCurrency(l.lineDiscount, STORE.currency)}
               </div>
             )}
-            {(l.lineKind === 'fran_reward' || l.lineKind === 'fran_points') && (
-              <div className="text-zinc-500">
-                &nbsp;&nbsp;Fran CRM reward{l.franRewardQuoteId ? `: ${l.franRewardQuoteId}` : ''}
-              </div>
-            )}
             {l.overridden && (
               <div className="text-zinc-500">
                 &nbsp;&nbsp;Price override{l.overrideReason ? `: ${l.overrideReason}` : ' (mgr approved)'}
@@ -83,13 +100,38 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
         )
       })}
 
+      {receiptRewards.length > 0 && (
+        <>
+          <Divider />
+          <p className="font-bold">REWARDS REDEEMED</p>
+          {receiptRewards.map((reward) => (
+            <div key={reward.lineId} className="mb-1">
+              <div className="flex justify-between">
+                <span className="truncate pr-2">{reward.rewardName}</span>
+                <span>{formatSignedCurrency(-reward.netDollarValueApplied)}</span>
+              </div>
+              <div className="flex justify-between text-zinc-500">
+                <span>Points used</span>
+                <span>{reward.pointsUsed.toLocaleString()}</span>
+              </div>
+              {reward.dollarEquivalent !== null && (
+                <div className="flex justify-between text-zinc-500">
+                  <span>Dollar equivalent</span>
+                  <span>{formatCurrency(reward.dollarEquivalent, reward.currency)}</span>
+                </div>
+              )}
+              {reward.status === 'reversed' && (
+                <div className="text-zinc-500">&nbsp;&nbsp;Reward reversed on void.</div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
       <Divider />
       <Row label="Subtotal" value={formatCurrency(sale.subtotal, STORE.currency)} />
       {sale.discountTotal > 0 && (
         <Row label="Discounts" value={`-${formatCurrency(sale.discountTotal, STORE.currency)}`} />
-      )}
-      {Math.abs(franRewardTotal) > 0.005 && (
-        <Row label="Reward redemption" value={formatSignedCurrency(franRewardTotal)} />
       )}
       {sale.cartPriceOverride && (
         <Row
@@ -112,7 +154,22 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
         <>
           <Divider />
           <p className="font-bold">Customer: {sale.customer.name}</p>
-          {sale.customer.points > 0 && (
+          {franMember ? (
+            <>
+              <Row label="Points earned" value={`+${franPointsEarned}`} />
+              {franLoyaltySync?.status === 'queued' && (
+                <Row label="Loyalty sync" value="Queued" />
+              )}
+              <Row label="Points redeemed" value={`${franPointsRedeemed > 0 ? '-' : ''}${franPointsRedeemed}`} />
+              <Row label="Updated balance" value={`${franRunningPointsBalance ?? 0}`} />
+              {franRewardReversed && (
+                <Row
+                  label="Reward reversed"
+                  value={`+${sale.fran?.appliedReward?.reverse?.pointsRestored ?? 0}`}
+                />
+              )}
+            </>
+          ) : sale.customer.points > 0 ? (
             <>
               <Row label="Points earned" value={`+${sale.pointsEarned}`} />
               <Row
@@ -120,9 +177,6 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
                 value={`${franProjectedPoints ?? sale.customer.points + sale.pointsEarned}`}
               />
             </>
-          )}
-          {sale.fran?.appliedReward?.quote.pointsCost ? (
-            <Row label="Points redeemed" value={`-${sale.fran.appliedReward.quote.pointsCost}`} />
           ) : null}
         </>
       )}

@@ -32,7 +32,8 @@ export type PosSourceEventType =
   | 'fran.reward.quoted'
   | 'fran.reward.committed'
   | 'fran.reward.reversed'
-  | 'fran.reward.commit_failed';
+  | 'fran.reward.commit_failed'
+  | 'fran.points_earn.queued';
 export type PosOutboxEventStatus = 'queued' | 'sent' | 'acked' | 'failed';
 
 export interface Company {
@@ -584,6 +585,17 @@ export interface CustomerEmailReceiptPayload {
     points_earned: number;
     fran_reward_redemption?: number;
   };
+  rewards_redeemed: Array<{
+    line_id: string;
+    reward_name: string;
+    reward_id: string | null;
+    reward_quote_id: string | null;
+    status: 'redeemed' | 'reversed' | 'failed' | 'quoted';
+    points_used: number;
+    dollar_equivalent: number | null;
+    net_dollar_value_applied: number;
+    currency: string;
+  }>;
   lines: Array<{
     sku: string;
     name: string;

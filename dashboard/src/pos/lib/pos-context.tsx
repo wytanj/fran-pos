@@ -82,6 +82,7 @@ export interface Payment {
 }
 
 export type PosSaleSyncStatus = 'not_required' | 'syncing' | 'queued' | 'synced' | 'failed'
+export type CompletedSaleLifecycleStatus = 'completed' | 'voided'
 
 export interface PosSaleSyncState {
   status: PosSaleSyncStatus
@@ -95,6 +96,7 @@ export interface PosSaleSyncState {
 
 export interface CompletedSale {
   receiptNo: string
+  saleStatus: CompletedSaleLifecycleStatus
   lines: CartLine[]
   cartPriceOverride: CartPriceOverride | null
   customer: Customer | null
@@ -108,6 +110,8 @@ export interface CompletedSale {
   cashier: string
   timestamp: string
   completedAtIso: string
+  voidedAtIso: string | null
+  voidReason: string | null
   storeCode: string
   registerCode: string
   idempotencyKey: string
@@ -160,6 +164,7 @@ interface PosState {
   clearSale: () => void
   totals: Totals
   lastSale: CompletedSale | null
+  updateLastSale: (sale: CompletedSale) => void
   completeSale: (options?: CompleteSaleOptions) => CompletedSale
   receiptCounter: number
 }
@@ -471,6 +476,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     const idempotencyKey = buildSkumsSaleIdempotencyKey({ receiptNo, completedAtIso })
     const sale: CompletedSale = {
       receiptNo,
+      saleStatus: 'completed',
       lines: cart,
       cartPriceOverride,
       customer,
@@ -484,6 +490,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
       cashier: user?.name ?? 'Demo Cashier',
       timestamp: completedAt.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }),
       completedAtIso,
+      voidedAtIso: null,
+      voidReason: null,
       storeCode: STORE.code,
       registerCode: POS_REGISTER_CODE,
       idempotencyKey,
@@ -531,6 +539,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     clearSale,
     totals,
     lastSale,
+    updateLastSale: setLastSale,
     completeSale,
     receiptCounter,
   }

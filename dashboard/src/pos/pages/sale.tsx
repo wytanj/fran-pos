@@ -34,7 +34,7 @@ import {
   type Product,
   type SalesType,
 } from '@/pos/data/mock'
-import { usePos, type CartLine, type PosSaleSyncState } from '@/pos/lib/pos-context'
+import { usePos, type CartLine, type CompletedSale, type PosSaleSyncState } from '@/pos/lib/pos-context'
 import { LineActionModal, type LineActionMode } from '@/pos/components/line-action-modal'
 import { ManagerAuthModal } from '@/pos/components/manager-auth-modal'
 import { PaymentModal } from '@/pos/components/payment-modal'
@@ -49,6 +49,7 @@ import type {
   FranBasketLineInput,
   FranBasketPreview,
   FranCounterSession,
+  FranLoyaltySyncState,
   FranRewardDecision,
   FranRewardQuote,
   FranSaleContext,
@@ -61,7 +62,9 @@ import {
 } from '@/pos/lib/skums-sale-sync'
 import {
   buildPosOutboxEventsForCompletedSale,
+  pendingPosOutboxEventCount,
   persistPosOutboxEvents,
+  retryPendingPosOutboxEvents,
 } from '@/pos/lib/pos-outbox'
 import { useAuth } from '@/providers/auth-provider'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
@@ -215,6 +218,7 @@ export default function SalePage() {
     removeSavedBasket,
     clearSale,
     completeSale,
+    updateLastSale,
   } = pos
   const franCrm = useMemo(() => createFranCrmClient(), [])
 
@@ -225,6 +229,7 @@ export default function SalePage() {
   const [franPreview, setFranPreview] = useState<FranBasketPreview | null>(null)
   const [franPreviewLoading, setFranPreviewLoading] = useState(false)
   const [franPreviewError, setFranPreviewError] = useState<string | null>(null)
+  const [franLoyaltySync, setFranLoyaltySync] = useState<FranLoyaltySyncState | null>(null)
   const [franQuote, setFranQuote] = useState<FranRewardQuote | null>(null)
   const [franAppliedReward, setFranAppliedReward] = useState<FranAppliedReward | null>(null)
   const [franQuoteLoading, setFranQuoteLoading] = useState(false)
@@ -232,6 +237,7 @@ export default function SalePage() {
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [cartOverrideOpen, setCartOverrideOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
+  const [voidingSale, setVoidingSale] = useState(false)
   const [promoDismissed, setPromoDismissed] = useState(false)
   const [catalog, setCatalog] = useState<Product[]>(PRODUCTS)
   const [catalogSource, setCatalogSource] = useState<'mock' | 'live' | 'skums'>('mock')
@@ -246,6 +252,8 @@ export default function SalePage() {
   const [saleSync, setSaleSync] = useState<PosSaleSyncState | null>(null)
   const [pendingSaleWrites, setPendingSaleWrites] = useState(0)
   const [retryingSaleWrites, setRetryingSaleWrites] = useState(false)
+  const [pendingSourceEvents, setPendingSourceEvents] = useState(0)
+  const [retryingSourceEvents, setRetryingSourceEvents] = useState(false)
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
     if (typeof window === 'undefined') return 'grid'
     return localStorage.getItem('pos_catalog_view') === 'list' ? 'list' : 'grid'
@@ -273,6 +281,10 @@ export default function SalePage() {
       total: saleLines.reduce((sum, line) => sum + cartLineNet(line), 0),
     }
   }, [cart])
+  const provisionalFranEarnPoints = useMemo(
+    () => Math.max(0, Math.floor(franBasketTotals.total)),
+    [franBasketTotals.total]
+  )
 
   useEffect(() => {
     if (!franAppliedReward || !franRewardBasketKey || franBasketKey === franRewardBasketKey) return
@@ -288,6 +300,7 @@ export default function SalePage() {
       setFranPreview(null)
       setFranPreviewError(null)
       setFranPreviewLoading(false)
+      setFranLoyaltySync(null)
       return
     }
 
@@ -295,24 +308,58 @@ export default function SalePage() {
     setFranPreviewError(null)
     franCrm.previewBasket({
       session: franSession,
-      lines: franBasketLines,
-      subtotal: franBasketTotals.subtotal,
-      discountTotal: franBasketTotals.discountTotal,
-      total: franBasketTotals.total,
-      currency: STORE.currency,
+      cart: {
+        cartId: franBasketKey,
+        lines: franBasketLines,
+        subtotal: franBasketTotals.subtotal,
+        discountTotal: franBasketTotals.discountTotal,
+        total: franBasketTotals.total,
+        currency: STORE.currency,
+        updatedAt: new Date().toISOString(),
+      },
     })
       .then((preview) => {
-        if (!cancelled) setFranPreview(preview)
+        if (!cancelled) {
+          setFranPreview(preview)
+          setFranLoyaltySync({
+            status: 'online',
+            pointsEarnQueued: 0,
+            reason: null,
+            queuedAt: null,
+            syncOnReconnect: false,
+          })
+        }
       })
       .catch((err) => {
-        if (!cancelled) setFranPreviewError(err instanceof Error ? err.message : 'Fran CRM preview unavailable')
+        if (!cancelled) {
+          const reason = err instanceof Error ? err.message : 'Fran CRM preview unavailable'
+          setFranPreview(null)
+          setFranPreviewError('Fran CRM offline. Sale can continue; points earn will queue on payment.')
+          setFranLoyaltySync(
+            franSession.member && !franSession.member.tourist
+              ? {
+                  status: 'queued',
+                  pointsEarnQueued: provisionalFranEarnPoints,
+                  reason,
+                  queuedAt: new Date().toISOString(),
+                  syncOnReconnect: true,
+                }
+              : {
+                  status: 'unavailable',
+                  pointsEarnQueued: 0,
+                  reason,
+                  queuedAt: null,
+                  syncOnReconnect: false,
+                }
+          )
+        }
       })
       .finally(() => {
         if (!cancelled) setFranPreviewLoading(false)
       })
 
     return () => { cancelled = true }
-  }, [franBasketKey, franBasketLines, franBasketTotals.discountTotal, franBasketTotals.subtotal, franBasketTotals.total, franCrm, franSession])
+  }, [franBasketKey, franBasketLines, franBasketTotals.discountTotal, franBasketTotals.subtotal, franBasketTotals.total, franCrm, franSession, provisionalFranEarnPoints])
 
   useEffect(() => {
     let cancelled = false
@@ -440,6 +487,44 @@ export default function SalePage() {
       document.removeEventListener('visibilitychange', retryOnVisible)
     }
   }, [mode, refreshPendingSaleWrites, retryQueuedSaleWrites, skumsConnector?.apiKey, skumsConnector?.apiUrl])
+
+  const refreshPendingSourceEvents = useCallback(() => {
+    setPendingSourceEvents(pendingPosOutboxEventCount())
+  }, [])
+
+  const retryQueuedSourceEvents = useCallback(async () => {
+    refreshPendingSourceEvents()
+    if (!company?.id || pendingPosOutboxEventCount() === 0) return
+
+    setRetryingSourceEvents(true)
+    try {
+      await retryPendingPosOutboxEvents(company.id)
+    } finally {
+      refreshPendingSourceEvents()
+      setRetryingSourceEvents(false)
+    }
+  }, [company?.id, refreshPendingSourceEvents])
+
+  useEffect(() => {
+    refreshPendingSourceEvents()
+    if (!company?.id) return
+
+    void retryQueuedSourceEvents()
+    const retryOnReconnect = () => { void retryQueuedSourceEvents() }
+    const retryOnVisible = () => {
+      if (document.visibilityState === 'visible') void retryQueuedSourceEvents()
+    }
+
+    window.addEventListener('focus', retryOnReconnect)
+    window.addEventListener('online', retryOnReconnect)
+    document.addEventListener('visibilitychange', retryOnVisible)
+
+    return () => {
+      window.removeEventListener('focus', retryOnReconnect)
+      window.removeEventListener('online', retryOnReconnect)
+      document.removeEventListener('visibilitychange', retryOnVisible)
+    }
+  }, [company?.id, refreshPendingSourceEvents, retryQueuedSourceEvents])
 
   const categories = useMemo(() => ['All', ...Array.from(new Set(catalog.map((p) => p.category))).sort()], [catalog])
 
@@ -603,6 +688,7 @@ export default function SalePage() {
     setFranSession(null)
     setFranPreview(null)
     setFranPreviewError(null)
+    setFranLoyaltySync(null)
     setCustomer(null)
   }
 
@@ -611,7 +697,7 @@ export default function SalePage() {
     clearFranReward()
   }
 
-  const quoteFranReward = async (reward: FranRewardDecision) => {
+  const quoteFranReward = async (reward: FranRewardDecision, pointsToRedeem?: number) => {
     if (!franSession || !franPreview) return
     setFranQuoteLoading(true)
     setFranPreviewError(null)
@@ -620,6 +706,7 @@ export default function SalePage() {
         session: franSession,
         preview: franPreview,
         rewardId: reward.id,
+        pointsToRedeem,
         basketTotal: franBasketTotals.total,
         currency: STORE.currency,
       })
@@ -639,7 +726,9 @@ export default function SalePage() {
       amount: -Math.abs(franQuote.amount),
       lineKind: franQuote.pointsCost > 0 ? 'fran_points' : 'fran_reward',
       discountLabel: franQuote.title,
-      note: 'Fran CRM quoted reward',
+      note: franQuote.pointsCost > 0
+        ? 'Fran CRM quoted points redemption. Deduct on payment confirmation.'
+        : 'Fran CRM quoted reward',
       franRewardQuoteId: franQuote.quoteId,
       franDecisionRef: franQuote.decisionRef,
     })
@@ -656,12 +745,138 @@ export default function SalePage() {
     setFranQuote(null)
   }
 
-  const buildFranSaleContext = (appliedReward: FranAppliedReward | null): FranSaleContext => ({
+  const buildFranSaleContext = (
+    appliedReward: FranAppliedReward | null,
+    loyaltySync: FranLoyaltySyncState | null = franLoyaltySync
+  ): FranSaleContext => ({
     counterSession: franSession,
     basketPreview: franPreview,
     appliedReward,
+    loyaltySync,
     memberMode: franSession?.mode ?? null,
   })
+
+  const finalFranLoyaltySync = (
+    appliedReward: FranAppliedReward | null,
+    pointsEarned: number
+  ): FranLoyaltySyncState | null => {
+    const member = franSession?.member ?? null
+    if (!member || member.tourist) return null
+
+    const rewardCommitFailed = appliedReward?.status === 'failed'
+    const shouldQueue = rewardCommitFailed || franLoyaltySync?.status === 'queued' || !franPreview
+    if (!shouldQueue) {
+      return {
+        status: 'online',
+        pointsEarnQueued: 0,
+        reason: null,
+        queuedAt: null,
+        syncOnReconnect: false,
+      }
+    }
+
+    return {
+      status: 'queued',
+      pointsEarnQueued: pointsEarned,
+      reason: rewardCommitFailed
+        ? appliedReward?.error ?? 'Fran CRM reward commit failed at payment completion.'
+        : franLoyaltySync?.reason ?? 'Fran CRM preview unavailable at payment completion.',
+      queuedAt: new Date().toISOString(),
+      syncOnReconnect: true,
+    }
+  }
+
+  const franReverseReasonKey = (reason: string) =>
+    reason.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'reversal'
+
+  const reverseCommittedFranReward = async (
+    reward: FranAppliedReward,
+    receiptNo: string,
+    reason: 'payment_failed' | 'transaction_void'
+  ): Promise<FranAppliedReward> => {
+    if (reward.status !== 'committed' || !reward.commit) return reward
+
+    try {
+      const reverse = await franCrm.reverseRewardRedemption({
+        commit: reward.commit,
+        quote: reward.quote,
+        receiptNo,
+        reason,
+        idempotencyKey: `fran:${reward.quote.quoteId}:reverse:${franReverseReasonKey(reason)}`,
+      })
+
+      return {
+        ...reward,
+        status: 'reversed',
+        reverse,
+        error: null,
+      }
+    } catch (err) {
+      return {
+        ...reward,
+        status: 'reverse_failed',
+        error: err instanceof Error ? err.message : 'Fran reward reversal failed',
+      }
+    }
+  }
+
+  const handlePaymentFailure = async (reason: string) => {
+    if (franAppliedReward?.status === 'quoted') {
+      removeLine(franAppliedReward.lineId)
+      setFranAppliedReward(null)
+      setFranQuote(null)
+      setFranRewardBasketKey(null)
+      setFranPreviewError('Payment failed. Fran reward was not committed; reward is available again.')
+    } else if (franAppliedReward?.status === 'committed') {
+      const receiptNo = `${STORE.code}-${String(pos.receiptCounter).padStart(6, '0')}`
+      const reversed = await reverseCommittedFranReward(franAppliedReward, receiptNo, 'payment_failed')
+      setFranAppliedReward(reversed)
+      setFranPreviewError(
+        reversed.status === 'reversed'
+          ? 'Payment failed after Fran reward commit. CRM reversal restored points and made the reward available again.'
+          : reversed.error ?? 'Fran reward reversal failed.'
+      )
+    } else {
+      setFranPreviewError(reason || 'Payment failed.')
+    }
+    setPaymentOpen(false)
+  }
+
+  const handleVoidCompletedSale = async () => {
+    const sale = pos.lastSale
+    if (!sale || sale.saleStatus === 'voided') return
+
+    setVoidingSale(true)
+    try {
+      const reward = sale.fran?.appliedReward ?? null
+      const reversedReward = reward
+        ? await reverseCommittedFranReward(reward, sale.receiptNo, 'transaction_void')
+        : null
+      const voidedAtIso = new Date().toISOString()
+      const voidedSale: CompletedSale = {
+        ...sale,
+        saleStatus: 'voided',
+        voidedAtIso,
+        voidReason: 'transaction_void',
+        payments: sale.payments.map((payment) => ({ ...payment, status: 'voided' })),
+        fran: sale.fran
+          ? {
+              ...sale.fran,
+              appliedReward: reversedReward,
+            }
+          : null,
+      }
+
+      updateLastSale(voidedSale)
+      const outboxEvents = buildPosOutboxEventsForCompletedSale(voidedSale, {
+        workspaceId: company?.id ?? 'demo',
+        actorId: pos.user?.staffMemberId ?? pos.user?.id ?? null,
+      })
+      void persistPosOutboxEvents(company?.id, outboxEvents).then(refreshPendingSourceEvents)
+    } finally {
+      setVoidingSale(false)
+    }
+  }
 
   const completePaidSale = async () => {
     let saleReward = franAppliedReward
@@ -690,34 +905,54 @@ export default function SalePage() {
       }
     }
 
-    const sale = completeSale({
-      fran: buildFranSaleContext(saleReward),
-      pointsEarned: franPreview?.earnPoints ?? totals.pointsEarned,
-    })
-    const outboxEvents = buildPosOutboxEventsForCompletedSale(sale, {
-      workspaceId: company?.id ?? 'demo',
-      actorId: pos.user?.staffMemberId ?? pos.user?.id ?? null,
-    })
-    void persistPosOutboxEvents(company?.id, outboxEvents)
-    const shouldSyncToSkums = mode === 'live' && Boolean(skumsConnector)
-    setSaleSync({
-      status: shouldSyncToSkums ? 'syncing' : 'not_required',
-      idempotencyKey: sale.idempotencyKey,
-      updatedAt: new Date().toISOString(),
-    })
-    if (shouldSyncToSkums && skumsConnector) {
-      void syncSkumsSaleWrite(sale, skumsConnector).then((state) => {
-        setSaleSync(state)
-        refreshPendingSaleWrites()
+    try {
+      const canFranEarn = Boolean(franSession?.member && !franSession.member.tourist)
+      const finalPointsEarned = canFranEarn ? franPreview?.earnPoints ?? provisionalFranEarnPoints : 0
+      const finalLoyaltySync = finalFranLoyaltySync(saleReward, finalPointsEarned)
+      const sale = completeSale({
+        fran: buildFranSaleContext(saleReward, finalLoyaltySync),
+        pointsEarned: finalPointsEarned,
       })
+      const outboxEvents = buildPosOutboxEventsForCompletedSale(sale, {
+        workspaceId: company?.id ?? 'demo',
+        actorId: pos.user?.staffMemberId ?? pos.user?.id ?? null,
+      })
+      void persistPosOutboxEvents(company?.id, outboxEvents).then(refreshPendingSourceEvents)
+      const shouldSyncToSkums = mode === 'live' && Boolean(skumsConnector)
+      setSaleSync({
+        status: shouldSyncToSkums ? 'syncing' : 'not_required',
+        idempotencyKey: sale.idempotencyKey,
+        updatedAt: new Date().toISOString(),
+      })
+      if (shouldSyncToSkums && skumsConnector) {
+        void syncSkumsSaleWrite(sale, skumsConnector).then((state) => {
+          setSaleSync(state)
+          refreshPendingSaleWrites()
+        })
+      }
+      setPaymentOpen(false)
+      setCompletedOpen(true)
+      setFranSession(null)
+      setFranPreview(null)
+      setFranQuote(null)
+      setFranAppliedReward(null)
+      setFranRewardBasketKey(null)
+      setFranLoyaltySync(null)
+      setFranPreviewError(null)
+    } catch (err) {
+      if (saleReward?.status === 'committed') {
+        const reversed = await reverseCommittedFranReward(saleReward, nextReceiptNo, 'payment_failed')
+        setFranAppliedReward(reversed)
+        setFranPreviewError(
+          reversed.status === 'reversed'
+            ? 'Payment failed after Fran reward commit. CRM reversal restored points and made the reward available again.'
+            : reversed.error ?? 'Payment failed after Fran reward commit. Fran reversal needs attention.'
+        )
+      } else {
+        setFranPreviewError(err instanceof Error ? err.message : 'Payment completion failed.')
+      }
+      setPaymentOpen(false)
     }
-    setPaymentOpen(false)
-    setCompletedOpen(true)
-    setFranSession(null)
-    setFranPreview(null)
-    setFranQuote(null)
-    setFranAppliedReward(null)
-    setFranRewardBasketKey(null)
   }
 
   return (
@@ -728,6 +963,7 @@ export default function SalePage() {
         appliedReward={franAppliedReward}
         previewLoading={franPreviewLoading}
         previewError={franPreviewError}
+        loyaltySync={franLoyaltySync}
         onFindMember={() => setFranCustomerOpen(true)}
         onClearSession={clearFranSession}
       />
@@ -851,7 +1087,7 @@ export default function SalePage() {
                 quote={franQuote}
                 appliedReward={franAppliedReward}
                 quoteLoading={franQuoteLoading}
-                onQuote={(reward) => { void quoteFranReward(reward) }}
+                onQuote={(reward, pointsToRedeem) => { void quoteFranReward(reward, pointsToRedeem) }}
                 onConfirmQuote={confirmFranRewardQuote}
                 onClearReward={clearFranReward}
               />
@@ -1033,6 +1269,7 @@ export default function SalePage() {
           clearFranReward()
           setFranSession(session)
           setCustomer(nextCustomer)
+          setFranLoyaltySync(null)
           setFranQuote(null)
           setFranAppliedReward(null)
           setFranRewardBasketKey(null)
@@ -1096,6 +1333,7 @@ export default function SalePage() {
         open={paymentOpen}
         onClose={() => setPaymentOpen(false)}
         onComplete={() => { void completePaidSale() }}
+        onPaymentFailed={(reason) => { void handlePaymentFailure(reason) }}
       />
 
       <SaleCompleteModal
@@ -1104,7 +1342,12 @@ export default function SalePage() {
         skumsSync={saleSync}
         pendingSkumsSaleWrites={pendingSaleWrites}
         retryingSkumsSync={retryingSaleWrites}
+        pendingSourceEvents={pendingSourceEvents}
+        retryingSourceEvents={retryingSourceEvents}
+        onRetrySourceEvents={() => { void retryQueuedSourceEvents() }}
+        voidingSale={voidingSale}
         onRetrySkumsSync={() => { void retryQueuedSaleWrites() }}
+        onVoidSale={() => { void handleVoidCompletedSale() }}
         onNewSale={() => setCompletedOpen(false)}
       />
 
