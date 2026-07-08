@@ -51,7 +51,7 @@ The POS stores only the final counter-safe session on the completed sale. Fran C
 
 ## Counter Profile Card
 
-On successful member lookup, the sale screen renders a compact counter profile card in the cart-side Fran member area, before reward selection and payment.
+On successful member lookup, the sale screen renders a compact counter profile card in a responsive Fran member dialog, opened from the persistent member strip before reward selection and payment.
 
 The card is a POS-safe projection from Fran CRM and should show:
 
@@ -198,7 +198,7 @@ The post-transaction screen must show the loyalty summary values together:
 
 ## Rewards Available Catalogue
 
-When a member has enough points for at least one catalogue reward, Fran POS displays a `Rewards Available` indicator in the Fran reward area. The cashier can tap the indicator to open a compact catalogue filtered to only rewards the member can redeem immediately from the current points balance.
+When a member has enough points for at least one catalogue reward, Fran POS displays a `Rewards Available` indicator in the Fran member dialog. The cashier can tap the indicator to open a compact catalogue filtered to only rewards the member can redeem immediately from the current points balance.
 
 Fran CRM owns the full reward catalogue and returns the filtered `redeemableRewards` list in the basket preview response. Fran POS must not show ineligible catalogue rewards in this filtered view.
 

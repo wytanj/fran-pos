@@ -223,7 +223,7 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto" onClose={close}>
+      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-xl overflow-y-auto p-4 sm:w-full" onClose={close}>
         <DialogHeader>
           <DialogTitle>Fran member lookup</DialogTitle>
         </DialogHeader>

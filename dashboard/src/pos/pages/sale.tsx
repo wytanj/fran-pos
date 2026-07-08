@@ -225,6 +225,7 @@ export default function SalePage() {
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
   const [franCustomerOpen, setFranCustomerOpen] = useState(false)
+  const [franMemberDialogOpen, setFranMemberDialogOpen] = useState(false)
   const [franSession, setFranSession] = useState<FranCounterSession | null>(null)
   const [franPreview, setFranPreview] = useState<FranBasketPreview | null>(null)
   const [franPreviewLoading, setFranPreviewLoading] = useState(false)
@@ -689,6 +690,7 @@ export default function SalePage() {
     setFranPreview(null)
     setFranPreviewError(null)
     setFranLoyaltySync(null)
+    setFranMemberDialogOpen(false)
     setCustomer(null)
   }
 
@@ -939,6 +941,8 @@ export default function SalePage() {
       setFranRewardBasketKey(null)
       setFranLoyaltySync(null)
       setFranPreviewError(null)
+      setFranCustomerOpen(false)
+      setFranMemberDialogOpen(false)
     } catch (err) {
       if (saleReward?.status === 'committed') {
         const reversed = await reverseCommittedFranReward(saleReward, nextReceiptNo, 'payment_failed')
@@ -965,6 +969,7 @@ export default function SalePage() {
         previewError={franPreviewError}
         loyaltySync={franLoyaltySync}
         onFindMember={() => setFranCustomerOpen(true)}
+        onOpenDetails={() => setFranMemberDialogOpen(true)}
         onClearSession={clearFranSession}
       />
       <div className="flex h-full flex-col overflow-y-auto lg:flex-row min-h-0 flex-1 lg:overflow-hidden">
@@ -1077,28 +1082,6 @@ export default function SalePage() {
 
       {/* RIGHT — cart */}
       <div className="flex min-h-[460px] w-full shrink-0 flex-col border-t bg-card lg:min-h-0 lg:w-[380px] lg:border-l lg:border-t-0">
-        {/* Fran member */}
-        <div className="border-b p-3">
-          {franSession ? (
-            <div className="space-y-3">
-              <FranCounterProfileCard session={franSession} preview={franPreview} />
-              <FranRewardRedemptionPanel
-                preview={franPreview}
-                quote={franQuote}
-                appliedReward={franAppliedReward}
-                quoteLoading={franQuoteLoading}
-                onQuote={(reward, pointsToRedeem) => { void quoteFranReward(reward, pointsToRedeem) }}
-                onConfirmQuote={confirmFranRewardQuote}
-                onClearReward={clearFranReward}
-              />
-            </div>
-          ) : (
-            <Button variant="outline" className="w-full" onClick={() => setFranCustomerOpen(true)}>
-              Resolve Fran member / exception
-            </Button>
-          )}
-        </div>
-
         {savedBaskets.length > 0 && (
           <div className="border-b bg-secondary/30 p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -1274,8 +1257,46 @@ export default function SalePage() {
           setFranAppliedReward(null)
           setFranRewardBasketKey(null)
           setFranCustomerOpen(false)
+          setFranMemberDialogOpen(true)
         }}
       />
+
+      <Dialog open={franMemberDialogOpen} onOpenChange={setFranMemberDialogOpen}>
+        <DialogContent
+          className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:w-full"
+          onClose={() => setFranMemberDialogOpen(false)}
+        >
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle>Fran member & rewards</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 overflow-y-auto p-3 sm:p-4">
+            {franSession ? (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                <FranCounterProfileCard session={franSession} preview={franPreview} />
+                <FranRewardRedemptionPanel
+                  preview={franPreview}
+                  quote={franQuote}
+                  appliedReward={franAppliedReward}
+                  quoteLoading={franQuoteLoading}
+                  onQuote={(reward, pointsToRedeem) => { void quoteFranReward(reward, pointsToRedeem) }}
+                  onConfirmQuote={confirmFranRewardQuote}
+                  onClearReward={clearFranReward}
+                />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-center">
+                <p className="text-sm font-semibold">Resolve Fran member / exception</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Scan a member QR/barcode, type a mobile number, or choose non-member/tourist before payment.
+                </p>
+                <Button className="mt-3" onClick={() => setFranCustomerOpen(true)}>
+                  Find member
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <LineActionModal
         open={lineAction !== null}

@@ -9,6 +9,15 @@ interface DialogProps {
 }
 
 function Dialog({ open, onOpenChange, children }: DialogProps) {
+  React.useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onOpenChange(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onOpenChange])
+
   if (!open) return null
 
   return (
@@ -25,6 +34,8 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
   ({ className, children, onClose, ...props }, ref) => (
     <div
       ref={ref}
+      role="dialog"
+      aria-modal="true"
       className={cn(
         "relative z-50 w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg",
         className

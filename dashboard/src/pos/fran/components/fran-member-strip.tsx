@@ -13,6 +13,7 @@ interface FranMemberStripProps {
   previewError: string | null
   loyaltySync: FranLoyaltySyncState | null
   onFindMember: () => void
+  onOpenDetails: () => void
   onClearSession: () => void
 }
 
@@ -24,6 +25,7 @@ export function FranMemberStrip({
   previewError,
   loyaltySync,
   onFindMember,
+  onOpenDetails,
   onClearSession,
 }: FranMemberStripProps) {
   const member = session?.member ?? null
@@ -93,7 +95,12 @@ export function FranMemberStrip({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {session && (
+            <Button variant="outline" size="sm" onClick={onOpenDetails}>
+              <Gift className="h-4 w-4" /> Details
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={onFindMember}>
             {session ? <Search className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
             {session ? 'Change' : 'Find member'}

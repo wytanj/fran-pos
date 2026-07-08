@@ -128,7 +128,7 @@ test('POS customer tagging supports unified search and manual customer add', () 
   assert.match(customerModal, /splitCustomerFullName/)
   assert.match(customerModal, /toPosCustomer/)
   assert.match(salePage, /<FranCustomerModal/)
-  assert.match(salePage, /Resolve Fran member \/ exception/)
+  assert.match(salePage, /Fran member & rewards/)
 })
 
 test('Returns flow supports partial receipt returns instead of returning the full receipt by default', () => {

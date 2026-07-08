@@ -86,6 +86,10 @@ test('Fran CRM client exposes the genesis decision methods with mock fallback', 
 test('Fran sale page requires explicit member or exception and commits rewards after payment', () => {
   assert.match(salePage, /<FranMemberStrip/)
   assert.match(salePage, /<FranCustomerModal/)
+  assert.match(salePage, /const \[franMemberDialogOpen, setFranMemberDialogOpen\]/)
+  assert.match(salePage, /<Dialog open=\{franMemberDialogOpen\}/)
+  assert.match(salePage, /Fran member & rewards/)
+  assert.match(salePage, /max-h-\[92dvh\] w-\[calc\(100vw-1rem\)\]/)
   assert.match(salePage, /<FranRewardRedemptionPanel/)
   assert.match(salePage, /disabled=\{cart\.length === 0 \|\| totals\.total <= 0 \|\| !franSession\}/)
   assert.match(salePage, /quoteFranReward/)
@@ -110,7 +114,9 @@ test('Fran identity tagging supports pre-completion retagging without stale rewa
 
 test('Fran counter profile card shows the successful lookup projection', () => {
   assert.match(franContract, /## Counter Profile Card/)
-  assert.match(franContract, /cart-side Fran member area/)
+  assert.match(franContract, /responsive Fran member dialog/)
+  assert.match(franMemberStrip, /onOpenDetails/)
+  assert.match(franMemberStrip, /Details/)
   assert.match(franContract, /## Active Perks on Lookup/)
   assert.match(franContract, /Free sample threshold/)
   assert.match(franContract, /Birthday discount/)
