@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ScanLine,
   Plus,
@@ -255,6 +255,7 @@ export default function SalePage() {
   const [retryingSaleWrites, setRetryingSaleWrites] = useState(false)
   const [pendingSourceEvents, setPendingSourceEvents] = useState(0)
   const [retryingSourceEvents, setRetryingSourceEvents] = useState(false)
+  const productEntryRef = useRef<HTMLInputElement | null>(null)
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
     if (typeof window === 'undefined') return 'grid'
     return localStorage.getItem('pos_catalog_view') === 'list' ? 'list' : 'grid'
@@ -546,10 +547,17 @@ export default function SalePage() {
     !promoDismissed &&
     cart.filter((l) => l.qty > 0 && catalog.find((p) => p.sku === l.sku)?.category === ACTIVE_PROMOTION.category).length >= 2
 
+  const focusProductEntry = useCallback(() => {
+    if (typeof window === 'undefined') return
+    window.setTimeout(() => productEntryRef.current?.focus(), 0)
+  }, [])
+
   const scanFirst = () => {
     const inStock = catalog.filter((p) => p.qtyOnHand > 0)
     if (inStock.length === 0) return
     addProduct(inStock[Math.floor(Math.random() * inStock.length)])
+    setScanMessage(null)
+    focusProductEntry()
   }
 
   const productFromScanMatch = (match: SkumsPosScanMatch): Product => {
@@ -599,6 +607,7 @@ export default function SalePage() {
       addProduct(exact)
       setSearch('')
       setScanMessage(null)
+      focusProductEntry()
       return
     }
 
@@ -606,11 +615,13 @@ export default function SalePage() {
       addProduct(filtered[0])
       setSearch('')
       setScanMessage(null)
+      focusProductEntry()
       return
     }
 
     if (mode !== 'live' || !skumsConnector) {
-      setScanMessage({ tone: 'warning', text: 'No local product matched this scan.' })
+      setScanMessage({ tone: 'warning', text: 'No local product matched this product code.' })
+      focusProductEntry()
       return
     }
 
@@ -627,6 +638,7 @@ export default function SalePage() {
         addProduct(productFromScanMatch(resolution.matches[0]))
         setSearch('')
         setScanMessage({ tone: 'success', text: 'Resolved by SKUMS and added to cart.' })
+        focusProductEntry()
       } else if (resolution.match_status === 'ambiguous' && resolution.matches.length > 0) {
         setScanChoices(resolution.matches.map((match) => ({
           product: productFromScanMatch(match),
@@ -639,11 +651,20 @@ export default function SalePage() {
     } catch (err) {
       setScanMessage({
         tone: 'error',
-        text: err instanceof Error ? err.message : 'Scan service unavailable. Continue with local search.',
+        text: err instanceof Error ? err.message : 'Scan service unavailable. Continue with product entry.',
       })
+      focusProductEntry()
     } finally {
       setScanResolving(false)
     }
+  }
+
+  const submitProductEntry = async () => {
+    if (search.trim()) {
+      await handleScanSubmit()
+      return
+    }
+    scanFirst()
   }
 
   const setCatalogViewMode = (view: CatalogViewMode) => {
@@ -961,41 +982,41 @@ export default function SalePage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <FranMemberStrip
-        session={franSession}
-        preview={franPreview}
-        appliedReward={franAppliedReward}
-        previewLoading={franPreviewLoading}
-        previewError={franPreviewError}
-        loyaltySync={franLoyaltySync}
-        onFindMember={() => setFranCustomerOpen(true)}
-        onOpenDetails={() => setFranMemberDialogOpen(true)}
-        onClearSession={clearFranSession}
-      />
-      <div className="flex h-full flex-col overflow-y-auto lg:flex-row min-h-0 flex-1 lg:overflow-hidden">
-      {/* LEFT — catalogue */}
-      <div className="flex min-h-[520px] min-w-0 flex-col lg:min-h-0 lg:flex-1">
-        {/* Scan + search */}
-        <div className="flex items-center gap-2 border-b bg-card p-3">
-          <div className="relative flex-1">
+      <form
+        className="flex shrink-0 flex-col gap-2 border-b bg-card p-3 md:flex-row md:items-center"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void submitProductEntry()
+        }}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Label htmlFor="product-entry" className="hidden shrink-0 text-xs font-semibold uppercase text-muted-foreground md:block">
+            Product
+          </Label>
+          <Label htmlFor="product-entry" className="sr-only">Unified product entry</Label>
+          <div className="relative min-w-0 flex-1">
             <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Scan barcode / QR or search product, SKU…"
-              className="pl-9"
+              id="product-entry"
+              ref={productEntryRef}
+              placeholder="Barcode / QR / SKU"
+              aria-label="Product barcode, QR, or SKU"
+              enterKeyHint="done"
+              autoComplete="off"
+              autoFocus
+              className="h-11 pl-9 text-base sm:text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  void handleScanSubmit()
-                }
-              }}
             />
           </div>
-          <Button variant="outline" onClick={scanFirst} disabled={scanResolving}>
-            {scanResolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />} Scan
+          <Button type="submit" className="h-11 shrink-0 gap-2" disabled={scanResolving}>
+            {scanResolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+            <span className="hidden sm:inline">Add product</span>
+            <span className="sm:hidden">Add</span>
           </Button>
-          <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-2 md:justify-end">
+          <Badge variant="secondary" className="shrink-0">
             {catalogSource === 'skums' ? 'SKUMS catalog' : catalogSource === 'live' ? 'Live catalog' : 'Demo catalog'}
           </Badge>
           <div className="flex shrink-0 rounded-md border bg-background p-0.5">
@@ -1027,10 +1048,12 @@ export default function SalePage() {
             </button>
           </div>
         </div>
-        {scanMessage && (
+      </form>
+      {scanMessage && (
+        <div className="shrink-0 bg-card px-3 pb-3">
           <div
             className={cn(
-              'mx-3 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-sm',
+              'flex items-start gap-2 rounded-md border px-3 py-2 text-sm',
               scanMessage.tone === 'success' && 'border-green-200 bg-green-50 text-green-800',
               scanMessage.tone === 'info' && 'border-blue-200 bg-blue-50 text-blue-800',
               scanMessage.tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-800',
@@ -1040,8 +1063,22 @@ export default function SalePage() {
             {scanMessage.tone === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
             <span>{scanMessage.text}</span>
           </div>
-        )}
-
+        </div>
+      )}
+      <FranMemberStrip
+        session={franSession}
+        preview={franPreview}
+        appliedReward={franAppliedReward}
+        previewLoading={franPreviewLoading}
+        previewError={franPreviewError}
+        loyaltySync={franLoyaltySync}
+        onFindMember={() => setFranCustomerOpen(true)}
+        onOpenDetails={() => setFranMemberDialogOpen(true)}
+        onClearSession={clearFranSession}
+      />
+      <div className="flex h-full flex-col overflow-y-auto lg:flex-row min-h-0 flex-1 lg:overflow-hidden">
+      {/* LEFT - catalogue */}
+      <div className="flex min-h-[520px] min-w-0 flex-col lg:min-h-0 lg:flex-1">
         {/* Categories */}
         <div className="flex gap-1.5 overflow-x-auto border-b bg-card px-3 py-2">
           {categories.map((c) => (
@@ -1388,6 +1425,7 @@ export default function SalePage() {
                   setSearch('')
                   setScanChoices([])
                   setScanMessage({ tone: 'success', text: 'Selected SKUMS match added to cart.' })
+                  focusProductEntry()
                 }}
                 className="flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left hover:bg-accent"
               >
