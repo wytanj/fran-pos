@@ -16,6 +16,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Camera,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -105,6 +106,25 @@ function storeLocationCodeFromMetadata(metadata: Record<string, unknown> | null 
 
 type CatalogViewMode = 'grid' | 'list'
 type ScanMessage = { tone: 'info' | 'success' | 'warning' | 'error'; text: string }
+type CameraScanStatus = 'idle' | 'starting' | 'scanning' | 'detected' | 'unsupported' | 'error'
+type BarcodeResult = { rawValue?: string }
+type NativeBarcodeDetector = { detect: (source: CanvasImageSource) => Promise<BarcodeResult[]> }
+type NativeBarcodeDetectorConstructor = new (options?: { formats?: string[] }) => NativeBarcodeDetector
+type WindowWithBarcodeDetector = Window & typeof globalThis & { BarcodeDetector?: NativeBarcodeDetectorConstructor }
+
+const CAMERA_BARCODE_FORMATS = [
+  'qr_code',
+  'ean_13',
+  'ean_8',
+  'upc_a',
+  'upc_e',
+  'code_128',
+  'code_39',
+  'code_93',
+  'codabar',
+  'itf',
+  'data_matrix',
+]
 
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.005) return formatCurrency(0, STORE.currency)
@@ -180,6 +200,15 @@ function isFranAdjustmentLine(line: CartLine) {
   return line.lineKind === 'fran_reward' || line.lineKind === 'fran_points'
 }
 
+function productMatchesEntryQuery(product: Product, normalizedQuery: string) {
+  if (!normalizedQuery) return true
+  return (
+    product.name.toLowerCase().includes(normalizedQuery) ||
+    product.sku.toLowerCase().includes(normalizedQuery) ||
+    (product.storeLocationCode?.toLowerCase().includes(normalizedQuery) ?? false)
+  )
+}
+
 function toFranBasketLine(line: CartLine): FranBasketLineInput {
   return {
     lineId: line.lineId,
@@ -250,12 +279,22 @@ export default function SalePage() {
   const [scanResolving, setScanResolving] = useState(false)
   const [scanMessage, setScanMessage] = useState<ScanMessage | null>(null)
   const [scanChoices, setScanChoices] = useState<Array<{ product: Product; confidence: number }>>([])
+  const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraStatus, setCameraStatus] = useState<CameraScanStatus>('idle')
+  const [cameraMessage, setCameraMessage] = useState('Open the camera and hold a UPC, SKU barcode, or QR in frame.')
+  const [cameraLastValue, setCameraLastValue] = useState<string | null>(null)
   const [saleSync, setSaleSync] = useState<PosSaleSyncState | null>(null)
   const [pendingSaleWrites, setPendingSaleWrites] = useState(0)
   const [retryingSaleWrites, setRetryingSaleWrites] = useState(false)
   const [pendingSourceEvents, setPendingSourceEvents] = useState(0)
   const [retryingSourceEvents, setRetryingSourceEvents] = useState(false)
   const productEntryRef = useRef<HTMLInputElement | null>(null)
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null)
+  const cameraStreamRef = useRef<MediaStream | null>(null)
+  const cameraFrameRef = useRef<number | null>(null)
+  const cameraDetectedRef = useRef(false)
+  const cameraSubmitRef = useRef<(value: string) => Promise<void>>(async () => {})
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
     if (typeof window === 'undefined') return 'grid'
     return localStorage.getItem('pos_catalog_view') === 'list' ? 'list' : 'grid'
@@ -531,15 +570,14 @@ export default function SalePage() {
   const categories = useMemo(() => ['All', ...Array.from(new Set(catalog.map((p) => p.category))).sort()], [catalog])
 
   const filtered = useMemo(
-    () =>
-      catalog.filter(
+    () => {
+      const normalizedSearch = search.trim().toLowerCase()
+      return catalog.filter(
         (p) =>
           (category === 'All' || p.category === category) &&
-          (search === '' ||
-            p.name.toLowerCase().includes(search.toLowerCase()) ||
-            p.sku.toLowerCase().includes(search.toLowerCase()) ||
-            (p.storeLocationCode?.toLowerCase().includes(search.toLowerCase()) ?? false))
-      ),
+          productMatchesEntryQuery(p, normalizedSearch)
+      )
+    },
     [catalog, category, search]
   )
 
@@ -550,6 +588,16 @@ export default function SalePage() {
   const focusProductEntry = useCallback(() => {
     if (typeof window === 'undefined') return
     window.setTimeout(() => productEntryRef.current?.focus(), 0)
+  }, [])
+
+  const stopCameraHardware = useCallback(() => {
+    if (cameraFrameRef.current != null) {
+      window.cancelAnimationFrame(cameraFrameRef.current)
+      cameraFrameRef.current = null
+    }
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    cameraStreamRef.current = null
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
   }, [])
 
   const scanFirst = () => {
@@ -596,12 +644,13 @@ export default function SalePage() {
     }
   }
 
-  const handleScanSubmit = async () => {
-    const needle = search.trim()
+  const handleScanSubmit = async (inputValue = search) => {
+    const needle = inputValue.trim()
     if (!needle) return
+    const normalizedNeedle = needle.toLowerCase()
 
     const exact = catalog.find(
-      (p) => p.sku.toLowerCase() === needle.toLowerCase() || p.id.toLowerCase() === needle.toLowerCase()
+      (p) => p.sku.toLowerCase() === normalizedNeedle || p.id.toLowerCase() === normalizedNeedle
     )
     if (exact) {
       addProduct(exact)
@@ -611,8 +660,14 @@ export default function SalePage() {
       return
     }
 
-    if (filtered.length > 0) {
-      addProduct(filtered[0])
+    const localMatches = catalog.filter(
+      (product) =>
+        (category === 'All' || product.category === category) &&
+        productMatchesEntryQuery(product, normalizedNeedle)
+    )
+
+    if (localMatches.length > 0) {
+      addProduct(localMatches[0])
       setSearch('')
       setScanMessage(null)
       focusProductEntry()
@@ -666,6 +721,124 @@ export default function SalePage() {
     }
     scanFirst()
   }
+
+  cameraSubmitRef.current = async (value: string) => {
+    setSearch(value)
+    await handleScanSubmit(value)
+  }
+
+  useEffect(() => {
+    if (!cameraOpen) {
+      stopCameraHardware()
+      setCameraStatus('idle')
+      return
+    }
+
+    let cancelled = false
+    cameraDetectedRef.current = false
+    setCameraStatus('starting')
+    setCameraLastValue(null)
+    setCameraMessage('Requesting camera access...')
+
+    async function startCameraScanner() {
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') return
+      if (!window.isSecureContext) {
+        setCameraStatus('error')
+        setCameraMessage('Camera requires HTTPS or localhost. Open the app from a secure URL and try again.')
+        return
+      }
+
+      const Detector = (window as WindowWithBarcodeDetector).BarcodeDetector
+      if (!Detector) {
+        setCameraStatus('unsupported')
+        setCameraMessage('This browser does not expose BarcodeDetector. Try desktop Chrome or Edge, or continue with the scanner input.')
+        return
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraStatus('unsupported')
+        setCameraMessage('This browser cannot request camera access. Continue with the scanner input.')
+        return
+      }
+
+      let detector: NativeBarcodeDetector
+      try {
+        detector = new Detector({ formats: CAMERA_BARCODE_FORMATS })
+      } catch {
+        detector = new Detector()
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        })
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+
+        cameraStreamRef.current = stream
+        const video = cameraVideoRef.current
+        if (!video) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+
+        video.srcObject = stream
+        video.muted = true
+        video.playsInline = true
+        await video.play()
+        if (cancelled) return
+
+        setCameraStatus('scanning')
+        setCameraMessage('Hold the UPC, SKU barcode, or QR steady in frame.')
+
+        const scanFrame = async () => {
+          if (cancelled || cameraDetectedRef.current) return
+          const activeVideo = cameraVideoRef.current
+          if (activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            try {
+              const codes = await detector.detect(activeVideo)
+              const value = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim()
+              if (value) {
+                cameraDetectedRef.current = true
+                setCameraLastValue(value)
+                setCameraStatus('detected')
+                setCameraMessage(`Detected ${value}. Adding to cart...`)
+                await cameraSubmitRef.current(value)
+                if (!cancelled) setCameraOpen(false)
+                return
+              }
+            } catch (err) {
+              cameraDetectedRef.current = true
+              setCameraStatus('error')
+              setCameraMessage(err instanceof Error ? err.message : 'Camera scanner failed. Continue with the scanner input.')
+              return
+            }
+          }
+          cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+        }
+
+        cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+      } catch (err) {
+        setCameraStatus('error')
+        setCameraMessage(err instanceof Error ? err.message : 'Camera permission was blocked or no camera was found.')
+      }
+    }
+
+    void startCameraScanner()
+
+    return () => {
+      cancelled = true
+      stopCameraHardware()
+    }
+  }, [cameraOpen, stopCameraHardware])
 
   const setCatalogViewMode = (view: CatalogViewMode) => {
     setCatalogView(view)
@@ -980,6 +1153,83 @@ export default function SalePage() {
     }
   }
 
+  const addFromMobileCatalogue = (product: Product) => {
+    addProduct(product)
+    setMobileCatalogOpen(false)
+    focusProductEntry()
+  }
+
+  const renderCatalogViewToggle = () => (
+    <div className="flex shrink-0 rounded-md border bg-background p-0.5">
+      <button
+        type="button"
+        onClick={() => setCatalogViewMode('grid')}
+        title="Grid view"
+        aria-label="Grid view"
+        aria-pressed={catalogView === 'grid'}
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
+          catalogView === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        )}
+      >
+        <Grid2X2 className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setCatalogViewMode('list')}
+        title="List view"
+        aria-label="List view"
+        aria-pressed={catalogView === 'list'}
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
+          catalogView === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        )}
+      >
+        <List className="h-4 w-4" />
+      </button>
+    </div>
+  )
+
+  const renderCategoryStrip = () => (
+    <div className="flex gap-1.5 overflow-x-auto border-b bg-card px-3 py-2">
+      {categories.map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => setCategory(c)}
+          className={cn(
+            'whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer',
+            category === c ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-accent'
+          )}
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  )
+
+  const renderProductCatalogue = (onProductAdd: (product: Product) => void) => (
+    <div
+      className={cn(
+        'flex-1 overflow-y-auto p-3',
+        catalogView === 'grid'
+          ? 'grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4'
+          : 'space-y-2'
+      )}
+    >
+      {filtered.map((p) =>
+        catalogView === 'grid'
+          ? <ProductCard key={p.id} product={p} onAdd={() => onProductAdd(p)} />
+          : <ProductListRow key={p.id} product={p} onAdd={() => onProductAdd(p)} />
+      )}
+      {filtered.length === 0 && (
+        <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
+          {catalogLoading ? 'Loading products...' : catalogError || 'No products match.'}
+        </p>
+      )}
+    </div>
+  )
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <form
@@ -1019,36 +1269,83 @@ export default function SalePage() {
           <Badge variant="secondary" className="shrink-0">
             {catalogSource === 'skums' ? 'SKUMS catalog' : catalogSource === 'live' ? 'Live catalog' : 'Demo catalog'}
           </Badge>
-          <div className="flex shrink-0 rounded-md border bg-background p-0.5">
-            <button
-              type="button"
-              onClick={() => setCatalogViewMode('grid')}
-              title="Grid view"
-              aria-label="Grid view"
-              aria-pressed={catalogView === 'grid'}
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
-                catalogView === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-              )}
-            >
-              <Grid2X2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCatalogViewMode('list')}
-              title="List view"
-              aria-label="List view"
-              aria-pressed={catalogView === 'list'}
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
-                catalogView === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-              )}
-            >
-              <List className="h-4 w-4" />
-            </button>
+          <Button
+            type="button"
+            variant={cameraOpen ? 'secondary' : 'outline'}
+            size="sm"
+            className="gap-2"
+            aria-label={cameraOpen ? 'Close camera scanner' : 'Open camera scanner'}
+            aria-pressed={cameraOpen}
+            onClick={() => setCameraOpen((open) => !open)}
+          >
+            <Camera className="h-4 w-4" />
+            {cameraOpen ? 'Close camera' : 'Camera'}
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2 md:hidden" onClick={() => setMobileCatalogOpen(true)}>
+            <ShoppingBag className="h-4 w-4" />
+            Catalog
+          </Button>
+          <div className="hidden md:block">
+            {renderCatalogViewToggle()}
           </div>
         </div>
       </form>
+      {cameraOpen && (
+        <div className="shrink-0 border-b bg-card px-3 pb-3">
+          <div className="grid gap-3 rounded-lg border bg-background p-3 md:grid-cols-[minmax(260px,420px)_minmax(0,1fr)]">
+            <div className="relative aspect-video overflow-hidden rounded-md bg-black">
+              <video
+                ref={cameraVideoRef}
+                className="h-full w-full object-cover"
+                muted
+                playsInline
+                autoPlay
+              />
+              <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-24 -translate-y-1/2 rounded-lg border-2 border-white/80 shadow-[0_0_0_999px_rgba(0,0,0,0.18)]" />
+            </div>
+            <div className="flex min-w-0 flex-col justify-between gap-3">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant={
+                      cameraStatus === 'scanning' || cameraStatus === 'detected'
+                        ? 'success'
+                        : cameraStatus === 'error' || cameraStatus === 'unsupported'
+                          ? 'warning'
+                          : 'secondary'
+                    }
+                  >
+                    {cameraStatus === 'starting'
+                      ? 'Starting camera'
+                      : cameraStatus === 'scanning'
+                        ? 'Scanning'
+                        : cameraStatus === 'detected'
+                          ? 'Detected'
+                          : cameraStatus === 'unsupported'
+                            ? 'Unsupported'
+                            : cameraStatus === 'error'
+                              ? 'Needs attention'
+                              : 'Camera ready'}
+                  </Badge>
+                  {cameraLastValue && <Badge variant="outline" className="font-mono">{cameraLastValue}</Badge>}
+                </div>
+                <p className="text-sm font-medium">Desktop webcam scanner</p>
+                <p className="text-sm text-muted-foreground">{cameraMessage}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setCameraOpen(false)}>
+                  <X className="h-4 w-4" />
+                  Close camera
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={focusProductEntry}>
+                  <ScanLine className="h-4 w-4" />
+                  Use input
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {scanMessage && (
         <div className="shrink-0 bg-card px-3 pb-3">
           <div
@@ -1076,49 +1373,15 @@ export default function SalePage() {
         onOpenDetails={() => setFranMemberDialogOpen(true)}
         onClearSession={clearFranSession}
       />
-      <div className="flex h-full flex-col overflow-y-auto lg:flex-row min-h-0 flex-1 lg:overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden md:flex-row">
       {/* LEFT - catalogue */}
-      <div className="flex min-h-[520px] min-w-0 flex-col lg:min-h-0 lg:flex-1">
-        {/* Categories */}
-        <div className="flex gap-1.5 overflow-x-auto border-b bg-card px-3 py-2">
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={cn(
-                'whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer',
-                category === c ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-accent'
-              )}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-
-        {/* Catalogue */}
-        <div
-          className={cn(
-            'flex-1 overflow-y-auto p-3',
-            catalogView === 'grid'
-              ? 'grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4'
-              : 'space-y-2'
-          )}
-        >
-          {filtered.map((p) =>
-            catalogView === 'grid'
-              ? <ProductCard key={p.id} product={p} onAdd={() => addProduct(p)} />
-              : <ProductListRow key={p.id} product={p} onAdd={() => addProduct(p)} />
-          )}
-          {filtered.length === 0 && (
-            <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-              {catalogLoading ? 'Loading products...' : catalogError || 'No products match.'}
-            </p>
-          )}
-        </div>
+      <div className="hidden min-h-0 min-w-0 flex-col md:flex md:flex-1">
+        {renderCategoryStrip()}
+        {renderProductCatalogue(addProduct)}
       </div>
 
       {/* RIGHT — cart */}
-      <div className="flex min-h-[460px] w-full shrink-0 flex-col border-t bg-card lg:min-h-0 lg:w-[380px] lg:border-l lg:border-t-0">
+      <div className="flex min-h-0 w-full flex-1 flex-col bg-card md:w-[380px] md:shrink-0 md:border-l">
         {savedBaskets.length > 0 && (
           <div className="border-b bg-secondary/30 p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -1279,6 +1542,46 @@ export default function SalePage() {
           </Button>
         </div>
       </div>
+
+      {mobileCatalogOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button
+            type="button"
+            aria-label="Dismiss product catalog"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setMobileCatalogOpen(false)}
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Product catalog"
+            className="absolute inset-y-0 right-0 flex w-[min(100vw-1rem,26rem)] flex-col bg-card shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b px-3 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">Product catalog</p>
+                <p className="text-xs text-muted-foreground">Browse only when a product cannot scan.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close product catalog"
+                onClick={() => setMobileCatalogOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-md border bg-background transition-colors hover:bg-accent"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+              <Badge variant="secondary" className="shrink-0">
+                {catalogSource === 'skums' ? 'SKUMS catalog' : catalogSource === 'live' ? 'Live catalog' : 'Demo catalog'}
+              </Badge>
+              {renderCatalogViewToggle()}
+            </div>
+            {renderCategoryStrip()}
+            {renderProductCatalogue(addFromMobileCatalogue)}
+          </aside>
+        </div>
+      )}
 
       {/* Modals */}
       <FranCustomerModal
