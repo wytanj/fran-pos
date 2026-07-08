@@ -215,6 +215,9 @@ test('Fran projected earn preview comes from a Fran SKUMS cart projection', () =
   assert.match(franMock, /kind: 'birthday'/)
   assert.match(franMock, /kind: 'campaign'/)
   assert.match(franMock, /projectedEarnPoints/)
+  assert.match(franMemberStrip, /Loading earn from Fran CRM/)
+  assert.match(franMemberStrip, /Customer will earn \{earnPoints\.toLocaleString\(\)\} points on this order\./)
+  assert.match(franMemberStrip, /Loaded from Fran CRM\./)
   assert.match(outbox, /earn_projection: fran\.basketPreview\.earnProjection/)
 })
 
@@ -241,6 +244,7 @@ test('Fran CRM outage queues loyalty earn without blocking checkout', () => {
   assert.match(salePage, /window\.addEventListener\('online', retryOnReconnect\)/)
   assert.match(salePage, /pendingSourceEvents/)
   assert.match(franMemberStrip, /CRM offline - earn queued/)
+  assert.match(franMemberStrip, /Customer earn will queue for \{loyaltySync\.pointsEarnQueued\.toLocaleString\(\)\} points when payment completes\./)
   assert.match(saleCompleteModal, /FranLoyaltySyncStatus/)
   assert.match(saleCompleteModal, /Sale is complete\. Loyalty will sync on reconnect and must not block checkout\./)
   assert.match(saleCompleteModal, /onRetrySourceEvents/)

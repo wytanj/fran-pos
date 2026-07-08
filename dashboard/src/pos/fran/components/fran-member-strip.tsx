@@ -1,4 +1,4 @@
-import { AlertCircle, Gift, Loader2, Search, ShieldCheck, Star, UserPlus, X } from 'lucide-react'
+import { AlertCircle, Coins, Gift, Loader2, Search, ShieldCheck, Star, UserPlus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
@@ -30,6 +30,7 @@ export function FranMemberStrip({
 }: FranMemberStripProps) {
   const member = session?.member ?? null
   const activePerks = session?.activePerks ?? []
+  const earnPoints = preview?.earnPoints ?? null
 
   return (
     <div className="shrink-0 border-b bg-card px-3 py-2">
@@ -57,11 +58,10 @@ export function FranMemberStrip({
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               {member && <span className="font-medium text-emerald-700">Can spend {member.pointsBalance.toLocaleString()} pts</span>}
               {previewLoading && (
-                <span className="flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Previewing basket
+                <span className="flex items-center gap-1 text-sky-700">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Loading earn from Fran CRM
                 </span>
               )}
-              {preview && <span className="font-medium text-sky-700">Earn +{preview.earnPoints.toLocaleString()} pts</span>}
               {preview?.projectedPointsBalance != null && (
                 <span className="text-blue-700">Projected {preview.projectedPointsBalance.toLocaleString()} pts</span>
               )}
@@ -80,6 +80,23 @@ export function FranMemberStrip({
                 </span>
               )}
             </div>
+            {member && earnPoints != null && (
+              <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs text-sky-950">
+                <Coins className="h-3.5 w-3.5 shrink-0 text-sky-700" />
+                <span className="min-w-0 break-words font-medium">
+                  Customer will earn {earnPoints.toLocaleString()} points on this order.
+                </span>
+                <span className="text-sky-700">Loaded from Fran CRM.</span>
+              </div>
+            )}
+            {member && loyaltySync?.status === 'queued' && loyaltySync.pointsEarnQueued > 0 && (
+              <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                <span className="min-w-0 break-words font-medium">
+                  Customer earn will queue for {loyaltySync.pointsEarnQueued.toLocaleString()} points when payment completes.
+                </span>
+              </div>
+            )}
             {activePerks.length > 0 && (
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="flex items-center gap-1 font-medium text-teal-700">
