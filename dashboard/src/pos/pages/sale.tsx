@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BrowserMultiFormatOneDReader, BrowserQRCodeReader } from '@zxing/browser'
+import { BarcodeFormat, ChecksumException, DecodeHintType, FormatException, NotFoundException } from '@zxing/library'
 import {
   ScanLine,
   Plus,
@@ -111,6 +113,7 @@ type BarcodeResult = { rawValue?: string }
 type NativeBarcodeDetector = { detect: (source: CanvasImageSource) => Promise<BarcodeResult[]> }
 type NativeBarcodeDetectorConstructor = new (options?: { formats?: string[] }) => NativeBarcodeDetector
 type WindowWithBarcodeDetector = Window & typeof globalThis & { BarcodeDetector?: NativeBarcodeDetectorConstructor }
+type CameraScannerControls = { stop: () => void }
 
 const CAMERA_BARCODE_FORMATS = [
   'qr_code',
@@ -125,6 +128,37 @@ const CAMERA_BARCODE_FORMATS = [
   'itf',
   'data_matrix',
 ]
+
+const ZXING_1D_BARCODE_FORMATS = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.CODE_93,
+  BarcodeFormat.CODABAR,
+  BarcodeFormat.ITF,
+]
+
+function createZxingReaders() {
+  const oneDimensionalHints = new Map<DecodeHintType, BarcodeFormat[] | boolean>([
+    [DecodeHintType.POSSIBLE_FORMATS, ZXING_1D_BARCODE_FORMATS],
+    [DecodeHintType.TRY_HARDER, true],
+  ])
+  const qrHints = new Map<DecodeHintType, boolean>([[DecodeHintType.TRY_HARDER, true]])
+
+  return [new BrowserQRCodeReader(qrHints), new BrowserMultiFormatOneDReader(oneDimensionalHints)]
+}
+
+function isExpectedZxingScanMiss(error: unknown) {
+  if (error instanceof NotFoundException || error instanceof ChecksumException || error instanceof FormatException) return true
+  return error instanceof Error && error.message.includes('Could not create a Canvas')
+}
+
+function cameraScanErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Camera scanner failed. Continue with the scanner input.'
+}
 
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.005) return formatCurrency(0, STORE.currency)
@@ -293,6 +327,8 @@ export default function SalePage() {
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null)
   const cameraStreamRef = useRef<MediaStream | null>(null)
   const cameraFrameRef = useRef<number | null>(null)
+  const cameraScanTimeoutRef = useRef<number | null>(null)
+  const cameraScannerControlsRef = useRef<CameraScannerControls | null>(null)
   const cameraDetectedRef = useRef(false)
   const cameraSubmitRef = useRef<(value: string) => Promise<void>>(async () => {})
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
@@ -591,6 +627,12 @@ export default function SalePage() {
   }, [])
 
   const stopCameraHardware = useCallback(() => {
+    cameraScannerControlsRef.current?.stop()
+    cameraScannerControlsRef.current = null
+    if (cameraScanTimeoutRef.current != null) {
+      window.clearTimeout(cameraScanTimeoutRef.current)
+      cameraScanTimeoutRef.current = null
+    }
     if (cameraFrameRef.current != null) {
       window.cancelAnimationFrame(cameraFrameRef.current)
       cameraFrameRef.current = null
@@ -748,24 +790,24 @@ export default function SalePage() {
         return
       }
 
-      const Detector = (window as WindowWithBarcodeDetector).BarcodeDetector
-      if (!Detector) {
-        setCameraStatus('unsupported')
-        setCameraMessage('This browser does not expose BarcodeDetector. Try desktop Chrome or Edge, or continue with the scanner input.')
-        return
-      }
-
       if (!navigator.mediaDevices?.getUserMedia) {
         setCameraStatus('unsupported')
         setCameraMessage('This browser cannot request camera access. Continue with the scanner input.')
         return
       }
 
-      let detector: NativeBarcodeDetector
-      try {
-        detector = new Detector({ formats: CAMERA_BARCODE_FORMATS })
-      } catch {
-        detector = new Detector()
+      const Detector = (window as WindowWithBarcodeDetector).BarcodeDetector
+      let detector: NativeBarcodeDetector | null = null
+      if (Detector) {
+        try {
+          detector = new Detector({ formats: CAMERA_BARCODE_FORMATS })
+        } catch {
+          try {
+            detector = new Detector()
+          } catch {
+            detector = null
+          }
+        }
       }
 
       try {
@@ -797,35 +839,93 @@ export default function SalePage() {
         if (cancelled) return
 
         setCameraStatus('scanning')
-        setCameraMessage('Hold the UPC, SKU barcode, or QR steady in frame.')
+        setCameraMessage(
+          detector
+            ? 'Hold the UPC, SKU barcode, or QR steady in frame.'
+            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback.'
+        )
 
-        const scanFrame = async () => {
+        const handleDetectedValue = async (value: string) => {
           if (cancelled || cameraDetectedRef.current) return
-          const activeVideo = cameraVideoRef.current
-          if (activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-            try {
-              const codes = await detector.detect(activeVideo)
-              const value = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim()
-              if (value) {
-                cameraDetectedRef.current = true
-                setCameraLastValue(value)
-                setCameraStatus('detected')
-                setCameraMessage(`Detected ${value}. Adding to cart...`)
-                await cameraSubmitRef.current(value)
-                if (!cancelled) setCameraOpen(false)
-                return
-              }
-            } catch (err) {
-              cameraDetectedRef.current = true
-              setCameraStatus('error')
-              setCameraMessage(err instanceof Error ? err.message : 'Camera scanner failed. Continue with the scanner input.')
-              return
-            }
-          }
-          cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+          cameraDetectedRef.current = true
+          setCameraLastValue(value)
+          setCameraStatus('detected')
+          setCameraMessage(`Detected ${value}. Adding to cart...`)
+          await cameraSubmitRef.current(value)
+          if (!cancelled) setCameraOpen(false)
         }
 
-        cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+        if (detector) {
+          const scanFrame = async () => {
+            if (cancelled || cameraDetectedRef.current) return
+            const activeVideo = cameraVideoRef.current
+            if (activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+              try {
+                const codes = await detector.detect(activeVideo)
+                const value = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim()
+                if (value) {
+                  await handleDetectedValue(value)
+                  return
+                }
+              } catch (err) {
+                cameraDetectedRef.current = true
+                setCameraStatus('error')
+                setCameraMessage(cameraScanErrorMessage(err))
+                return
+              }
+            }
+            cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+          }
+
+          cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+          return
+        }
+
+        const readers = createZxingReaders()
+        let compatibleScannerStopped = false
+        const stopCompatibleScanner = () => {
+          compatibleScannerStopped = true
+          if (cameraScanTimeoutRef.current != null) {
+            window.clearTimeout(cameraScanTimeoutRef.current)
+            cameraScanTimeoutRef.current = null
+          }
+          if (cameraFrameRef.current != null) {
+            window.cancelAnimationFrame(cameraFrameRef.current)
+            cameraFrameRef.current = null
+          }
+        }
+        cameraScannerControlsRef.current = { stop: stopCompatibleScanner }
+
+        const scanCompatibleFrame = () => {
+          if (cancelled || cameraDetectedRef.current || compatibleScannerStopped) return
+          const activeVideo = cameraVideoRef.current
+          if (activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            for (const reader of readers) {
+              try {
+                const value = reader.decode(activeVideo).getText().trim()
+                if (value) {
+                  stopCompatibleScanner()
+                  void handleDetectedValue(value)
+                  return
+                }
+              } catch (err) {
+                if (!isExpectedZxingScanMiss(err)) {
+                  stopCompatibleScanner()
+                  cameraDetectedRef.current = true
+                  setCameraStatus('error')
+                  setCameraMessage(cameraScanErrorMessage(err))
+                  return
+                }
+              }
+            }
+          }
+
+          cameraScanTimeoutRef.current = window.setTimeout(() => {
+            cameraFrameRef.current = window.requestAnimationFrame(scanCompatibleFrame)
+          }, 120)
+        }
+
+        cameraFrameRef.current = window.requestAnimationFrame(scanCompatibleFrame)
       } catch (err) {
         setCameraStatus('error')
         setCameraMessage(err instanceof Error ? err.message : 'Camera permission was blocked or no camera was found.')
