@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
 import type {
   FranAppliedReward,
@@ -128,7 +128,7 @@ export function FranRewardRedemptionPanel({
 
   if (!preview) {
     return (
-      <div className="rounded-lg border bg-background p-3 text-sm text-muted-foreground">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
         Add products and resolve a Fran sale mode to preview earn and rewards.
       </div>
     )
@@ -136,10 +136,10 @@ export function FranRewardRedemptionPanel({
 
   if (appliedReward) {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+      <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-950">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <div className="min-w-0">
               <p className="font-medium">{appliedReward.quote.title}</p>
               <p className="mt-0.5 text-xs">
@@ -149,7 +149,7 @@ export function FranRewardRedemptionPanel({
                   : ' Commit status: ' + appliedReward.status + '.'}
               </p>
               {appliedReward.quote.pointsCost > 0 && (
-                <p className="mt-0.5 text-xs text-green-800">
+                <p className="mt-0.5 text-xs text-emerald-800">
                   Points redemption line: {appliedReward.quote.pointsCost.toLocaleString()} pts.
                   Commit status: {appliedReward.status}.
                 </p>
@@ -168,14 +168,14 @@ export function FranRewardRedemptionPanel({
 
   if (quote) {
     return (
-      <div className="rounded-lg border bg-background p-3">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-950">
         <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
           <div>
             <p className="text-sm font-semibold">{quote.title}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{quote.confirmationText}</p>
+            <p className="mt-1 text-xs text-blue-800">{quote.confirmationText}</p>
             {quote.pointsCost > 0 && (
-              <div className="mt-2 grid gap-1 rounded-md bg-secondary px-2 py-1.5 text-xs text-muted-foreground sm:grid-cols-3">
+              <div className="mt-2 grid gap-1 rounded-md border border-blue-100 bg-white px-2 py-1.5 text-xs text-blue-800 sm:grid-cols-3">
                 <span>Points redeemed: {quote.pointsCost.toLocaleString()}</span>
                 <span>Dollar value: {formatCurrency(quote.amount, quote.currency)}</span>
                 <span>
@@ -213,52 +213,52 @@ export function FranRewardRedemptionPanel({
     <div className="rounded-lg border bg-background p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Gift className="h-4 w-4 text-primary" />
+          <Gift className="h-4 w-4 text-teal-600" />
           <p className="text-sm font-semibold">Fran rewards</p>
         </div>
-        <Badge variant="outline">{eligibleCount} eligible</Badge>
+        <Badge variant="outline" className="border-teal-200 bg-teal-50 text-teal-800">{eligibleCount} usable now</Badge>
       </div>
 
       <div className="space-y-2">
         {showRewardCatalogue && (
-          <div className="rounded-md border border-primary/20 bg-secondary/40 p-2.5">
+          <div className="rounded-md border border-teal-200 bg-teal-50 p-2.5">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="w-full justify-between"
+              className="w-full justify-between border-teal-300 bg-white text-teal-900 hover:bg-teal-100"
               aria-expanded={catalogueOpen}
               onClick={() => setCatalogueOpen((open) => !open)}
             >
               <span className="flex items-center gap-2">
                 <Gift className="h-4 w-4" />
-                Rewards Available
+                Rewards Available: use now
               </span>
-              <Badge variant="secondary">{redeemableRewards.length}</Badge>
+              <Badge variant="outline" className="border-teal-300 bg-teal-50 text-teal-800">{redeemableRewards.length}</Badge>
             </Button>
 
             {catalogueOpen && (
               <div className="mt-2 space-y-2">
                 {selectedCatalogueReward && (
-                  <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-amber-950">
                     <p className="text-sm font-semibold">
                       Apply {selectedCatalogueReward.name} ({selectedCatalogueReward.pointsCost.toLocaleString()} pts)?
                     </p>
-                    <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
-                      <div className="rounded-sm bg-background px-2 py-1">
-                        <p className="text-muted-foreground">Reward</p>
+                    <div className="mt-2 grid gap-1.5 text-xs sm:grid-cols-3">
+                      <div className="rounded-sm bg-white px-2 py-1">
+                        <p className="text-amber-700">Reward to use</p>
                         <p className="font-medium">{selectedCatalogueReward.name}</p>
                         {formatRewardExpiry(selectedCatalogueReward.expiresAt) && (
-                          <p className="text-muted-foreground">{formatRewardExpiry(selectedCatalogueReward.expiresAt)}</p>
+                          <p className="text-amber-700">{formatRewardExpiry(selectedCatalogueReward.expiresAt)}</p>
                         )}
                       </div>
-                      <div className="rounded-sm bg-background px-2 py-1">
-                        <p className="text-muted-foreground">Points cost</p>
-                        <p className="font-medium">{selectedCatalogueReward.pointsCost.toLocaleString()}</p>
+                      <div className="rounded-sm bg-white px-2 py-1">
+                        <p className="text-amber-700">Points cost</p>
+                        <p className="font-medium text-amber-950">{selectedCatalogueReward.pointsCost.toLocaleString()}</p>
                       </div>
-                      <div className="rounded-sm bg-background px-2 py-1">
-                        <p className="text-muted-foreground">Remaining balance</p>
-                        <p className="font-medium">{selectedRewardBalanceAfter?.toLocaleString() ?? '-'}</p>
+                      <div className="rounded-sm bg-white px-2 py-1">
+                        <p className="text-emerald-700">Remaining balance</p>
+                        <p className="font-medium text-emerald-950">{selectedRewardBalanceAfter?.toLocaleString() ?? '-'}</p>
                       </div>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2">
@@ -292,7 +292,7 @@ export function FranRewardRedemptionPanel({
                   <button
                     key={reward.id}
                     type="button"
-                    className="w-full rounded-md border bg-background p-2 text-left transition-colors hover:bg-accent"
+                    className="w-full rounded-md border border-teal-200 bg-white p-2 text-left transition-colors hover:bg-teal-100"
                     onClick={() => setSelectedCatalogueReward(reward)}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -302,17 +302,17 @@ export function FranRewardRedemptionPanel({
                           {formatRewardExpiry(reward.expiresAt) && (
                             <>
                               {' '}
-                              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                              <span className="ml-1.5 text-xs font-normal text-amber-700">
                                 - {formatRewardExpiry(reward.expiresAt)}
                               </span>
                             </>
                           )}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{reward.description}</p>
+                        <p className="mt-0.5 text-xs text-teal-800">{reward.description}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold">{reward.pointsCost.toLocaleString()} pts</p>
-                        <p className="text-xs text-muted-foreground">{reward.valueLabel}</p>
+                        <p className="text-sm font-semibold text-teal-950">{reward.pointsCost.toLocaleString()} pts</p>
+                        <p className="text-xs text-emerald-700">{reward.valueLabel}</p>
                       </div>
                     </div>
                   </button>
@@ -323,19 +323,19 @@ export function FranRewardRedemptionPanel({
         )}
 
         {showPointsPrompt && pointsOffer && pointsReward && (
-          <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2.5 text-emerald-950">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">
                   Member has {pointsOffer.availablePoints.toLocaleString()} pts available (worth{' '}
                   {formatCurrency(pointsOffer.availableValue, pointsOffer.currency)}). Apply redemption?
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-emerald-800">
                   Minimum threshold: {pointsOffer.minimumPoints.toLocaleString()} pts (
                   {formatCurrency(pointsOffer.minimumValue, pointsOffer.currency)}).
                 </p>
               </div>
-              <Badge variant="secondary">Points</Badge>
+              <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-800">Can spend</Badge>
             </div>
 
             <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -345,7 +345,7 @@ export function FranRewardRedemptionPanel({
                 </Label>
                 <Input
                   id="fran-points-redemption"
-                  className="mt-1 h-9"
+                  className="mt-1 h-9 border-emerald-200 bg-white"
                   inputMode="numeric"
                   min={pointsOffer.minimumPoints}
                   max={pointsOffer.maximumPoints}
@@ -366,10 +366,10 @@ export function FranRewardRedemptionPanel({
             </div>
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="font-medium">
+              <span className="font-medium text-emerald-900">
                 Dollar equivalent: {formatCurrency(pointsDraft.amount, pointsOffer.currency)}
               </span>
-              <span className="text-muted-foreground">
+              <span className="text-emerald-700">
                 Customer confirmation required.
               </span>
             </div>
@@ -388,11 +388,19 @@ export function FranRewardRedemptionPanel({
           </p>
         )}
         {rewards.map((reward) => (
-          <div key={reward.id} className="rounded-md border p-2">
+          <div
+            key={reward.id}
+            className={cn(
+              'rounded-md border p-2',
+              reward.eligible
+                ? 'border-indigo-200 bg-indigo-50 text-indigo-950'
+                : 'border-amber-200 bg-amber-50 text-amber-950'
+            )}
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{reward.title}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{reward.description}</p>
+                <p className={cn('mt-0.5 text-xs', reward.eligible ? 'text-indigo-800' : 'text-amber-800')}>{reward.description}</p>
                 {!reward.eligible && reward.reason && (
                   <p className="mt-1 text-xs text-amber-700">{reward.reason}</p>
                 )}
@@ -400,7 +408,7 @@ export function FranRewardRedemptionPanel({
               <div className="shrink-0 text-right">
                 <p className="text-sm font-semibold">{formatCurrency(reward.value, STORE.currency)}</p>
                 {reward.pointsCost > 0 && (
-                  <p className="text-xs text-muted-foreground">{reward.pointsCost.toLocaleString()} pts</p>
+                  <p className={cn('text-xs', reward.eligible ? 'text-indigo-700' : 'text-amber-700')}>{reward.pointsCost.toLocaleString()} pts</p>
                 )}
               </div>
             </div>

@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
-import type { FranAppliedReward, FranBasketPreview, FranCounterSession, FranLoyaltySyncState } from '../types'
+import type { FranAppliedReward, FranBasketPreview, FranCounterSession, FranCounterTier, FranLoyaltySyncState } from '../types'
 
 interface FranMemberStripProps {
   session: FranCounterSession | null
@@ -49,21 +49,21 @@ export function FranMemberStrip({
                       ? 'Non-member sale selected'
                       : 'Fran member required'}
               </p>
-              {member && <Badge variant="secondary">{member.tier}</Badge>}
-              {session?.mode === 'tourist' && <Badge variant="outline">Tourist</Badge>}
+              {member && <Badge variant="outline" className={tierBadgeClass(member.tier)}>{member.tier}</Badge>}
+              {session?.mode === 'tourist' && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
               {session?.mode === 'non_member' && <Badge variant="outline">No member</Badge>}
-              {appliedReward && <Badge variant="success">Reward applied</Badge>}
+              {appliedReward && <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">Reward applied</Badge>}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {member && <span>{member.pointsBalance.toLocaleString()} pts</span>}
+              {member && <span className="font-medium text-emerald-700">Can spend {member.pointsBalance.toLocaleString()} pts</span>}
               {previewLoading && (
                 <span className="flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" /> Previewing basket
                 </span>
               )}
-              {preview && <span>Earn +{preview.earnPoints.toLocaleString()} pts</span>}
+              {preview && <span className="font-medium text-sky-700">Earn +{preview.earnPoints.toLocaleString()} pts</span>}
               {preview?.projectedPointsBalance != null && (
-                <span>Projected {preview.projectedPointsBalance.toLocaleString()} pts</span>
+                <span className="text-blue-700">Projected {preview.projectedPointsBalance.toLocaleString()} pts</span>
               )}
               {loyaltySync?.status === 'queued' && (
                 <span className="flex items-center gap-1 font-medium text-amber-700">
@@ -72,7 +72,7 @@ export function FranMemberStrip({
                 </span>
               )}
               {appliedReward && (
-                <span>{formatCurrency(appliedReward.quote.amount, STORE.currency)} reward line pending commit</span>
+                <span className="font-medium text-emerald-700">{formatCurrency(appliedReward.quote.amount, STORE.currency)} reward line pending commit</span>
               )}
               {previewError && (
                 <span className="flex items-center gap-1 text-destructive">
@@ -82,11 +82,11 @@ export function FranMemberStrip({
             </div>
             {activePerks.length > 0 && (
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="flex items-center gap-1 font-medium text-foreground">
+                <span className="flex items-center gap-1 font-medium text-teal-700">
                   <Gift className="h-3.5 w-3.5" /> Active perks
                 </span>
                 {activePerks.slice(0, 3).map((perk) => (
-                  <Badge key={perk.id} variant="outline">
+                  <Badge key={perk.id} variant="outline" className="border-teal-200 bg-teal-50 text-teal-800">
                     {perk.title}
                   </Badge>
                 ))}
@@ -114,4 +114,19 @@ export function FranMemberStrip({
       </div>
     </div>
   )
+}
+
+function tierBadgeClass(tier: FranCounterTier) {
+  switch (tier) {
+    case 'Gold':
+      return 'border-amber-300 bg-amber-50 text-amber-800'
+    case 'Silver':
+      return 'border-slate-300 bg-slate-100 text-slate-800'
+    case 'Base':
+      return 'border-blue-200 bg-blue-50 text-blue-800'
+    case 'Tourist':
+      return 'border-cyan-200 bg-cyan-50 text-cyan-800'
+    default:
+      return ''
+  }
 }

@@ -152,27 +152,34 @@ test('Fran counter profile card shows the successful lookup projection', () => {
   assert.doesNotMatch(franMock, /tier: 'Icon'/)
 
   for (const label of [
-    'Current points',
-    'Projected earn',
+    'Can spend',
+    'Earn after basket',
     'Post-discount earn',
-    'Rewards available',
+    'Use now',
     'Member since',
     'Birthday',
-    'Points expiry',
-    'Points expiry alert',
-    'To next tier',
-    'Pre-payment upgrade alert',
-    'YTD spend progress',
+    'Expiry',
+    'Expiring soon',
+    'Tier gap',
+    'Tier upgrade available',
+    'Tier spend progress',
     'Current T12 spend',
     'Gap after basket',
     'Trailing 12-month window',
-    'Active perks',
+    'Use now: active perks',
   ]) {
     assert.match(franProfileCard, new RegExp(label))
   }
 
   assert.match(franMemberStrip, /Active perks/)
   assert.match(franMemberStrip, /activePerks\.slice\(0, 3\)\.map/)
+  assert.match(franMemberStrip, /Can spend \{member\.pointsBalance\.toLocaleString\(\)\} pts/)
+  assert.match(franCustomerModal, /Can spend \{member\.pointsBalance\.toLocaleString\(\)\} pts/)
+  assert.match(franCustomerModal, /Expires \{formatLookupDate\(member\.pointsExpireAt\)\}/)
+  assert.match(franProfileCard, /border-emerald-200 bg-emerald-50/)
+  assert.match(franProfileCard, /border-teal-200 bg-teal-50/)
+  assert.match(franProfileCard, /border-amber-200 bg-amber-50/)
+  assert.match(franProfileCard, /border-blue-200 bg-blue-50/)
   assert.match(franProfileCard, /member\.name/)
   assert.match(franProfileCard, /member\.tier/)
   assert.match(franProfileCard, /member\.pointsBalance/)
@@ -261,8 +268,8 @@ test('Fran CRM tier preview uses trailing 12-month spend and pre-payment upgrade
   assert.match(franMock, /function currentWindowSpendFor/)
   assert.match(franMock, /crossesTierThreshold = currentWindowSpend < next\.annualSpend && projectedWindowSpend >= next\.annualSpend/)
   assert.match(franMock, /This transaction brings \$\{member\.name\} to \$\{next\.tier\}/)
-  assert.match(franProfileCard, /Pre-payment upgrade alert/)
-  assert.match(franProfileCard, /YTD spend progress/)
+  assert.match(franProfileCard, /Tier upgrade available/)
+  assert.match(franProfileCard, /Tier spend progress/)
   assert.match(franProfileCard, /Current T12 spend/)
   assert.match(franProfileCard, /Gap after basket/)
   assert.match(franProfileCard, /Trailing 12-month window/)
@@ -287,6 +294,9 @@ test('Fran points redemption is threshold-gated, partial, and payment-committed'
   assert.match(franMock, /pointsToRedeem > offer\.maximumPoints/)
   assert.match(franMock, /pointsBalanceAfterRedemption/)
   assert.match(franRewardPanel, /Member has .*pts available \(worth/)
+  assert.match(franRewardPanel, /Can spend/)
+  assert.match(franRewardPanel, /Rewards Available: use now/)
+  assert.match(franRewardPanel, /Reward to use/)
   assert.match(franRewardPanel, /Apply redemption\?/)
   assert.match(franRewardPanel, /Dollar equivalent/)
   assert.match(franRewardPanel, /Minimum threshold/)

@@ -10,6 +10,7 @@ import type { FranCrmClient } from '../lib/fran-crm-client'
 import {
   customerFromFranMember,
   type FranCounterSession,
+  type FranCounterTier,
   type FranMemberLookupMethod,
   type FranMemberResolution,
 } from '../types'
@@ -252,13 +253,13 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
         </div>
 
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <Button variant="outline" onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}>
+          <Button variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100" onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}>
             <QrCode className="h-4 w-4" /> QR demo
           </Button>
-          <Button variant="outline" onClick={() => void chooseException('non_member')}>
+          <Button variant="outline" className="border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100" onClick={() => void chooseException('non_member')}>
             <UsersRound className="h-4 w-4" /> Non-member
           </Button>
-          <Button variant="outline" onClick={() => void chooseException('tourist')}>
+          <Button variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100" onClick={() => void chooseException('tourist')}>
             <UsersRound className="h-4 w-4" /> Tourist
           </Button>
         </div>
@@ -283,20 +284,32 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
               key={member.id}
               type="button"
               onClick={() => void selectMember(member.id)}
-              className="flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left hover:bg-accent"
+              className="flex w-full items-start justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50 p-3 text-left text-teal-950 transition-colors hover:bg-teal-100"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{member.name}</span>
-                  <Badge variant="secondary">{member.tier}</Badge>
-                  {member.tourist && <Badge variant="outline">Tourist</Badge>}
+                  <Badge variant="outline" className={tierBadgeClass(member.tier)}>{member.tier}</Badge>
+                  {member.tourist && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {member.memberNo} - {member.phone} - {member.pointsBalance.toLocaleString()} pts
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                  <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-800">
+                    Can spend {member.pointsBalance.toLocaleString()} pts
+                  </Badge>
+                  {member.pointsExpireAt && (
+                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
+                      Expires {formatLookupDate(member.pointsExpireAt)}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-teal-800">
+                  {member.memberNo} - {member.phone}
                 </p>
                 {member.warnings[0] && <p className="mt-1 text-xs text-amber-700">{member.warnings[0]}</p>}
               </div>
-              <Badge variant="outline">{member.rewardCount} rewards</Badge>
+              <Badge variant="outline" className="shrink-0 border-teal-300 bg-white text-teal-800">
+                Use {member.rewardCount} rewards
+              </Badge>
             </button>
           ))}
 
@@ -356,4 +369,28 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       </DialogContent>
     </Dialog>
   )
+}
+
+function formatLookupDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-SG', {
+    day: '2-digit',
+    month: 'short',
+  }).format(date)
+}
+
+function tierBadgeClass(tier: FranCounterTier) {
+  switch (tier) {
+    case 'Gold':
+      return 'border-amber-300 bg-amber-50 text-amber-800'
+    case 'Silver':
+      return 'border-slate-300 bg-slate-100 text-slate-800'
+    case 'Base':
+      return 'border-blue-200 bg-blue-50 text-blue-800'
+    case 'Tourist':
+      return 'border-cyan-200 bg-cyan-50 text-cyan-800'
+    default:
+      return ''
+  }
 }
