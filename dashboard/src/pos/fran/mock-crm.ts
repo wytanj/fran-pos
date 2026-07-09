@@ -10,6 +10,7 @@ import type {
   FranEarnMultiplier,
   FranEarnPolicyBasis,
   FranEarnProjection,
+  FranLoyaltyPolicyBundle,
   FranMembershipTier,
   FranMemberResolution,
   FranMemberResolutionInput,
@@ -28,10 +29,10 @@ import type {
 } from './types'
 
 const tierThresholds = [
-  { tier: 'Base', annualSpend: 0 },
-  { tier: 'Silver', annualSpend: 600 },
-  { tier: 'Gold', annualSpend: 1500 },
-] satisfies Array<{ tier: FranMembershipTier; annualSpend: number }>
+  { tier: 'Base', label: 'Base', annualSpend: 0, earnMultiplier: 1 },
+  { tier: 'Silver', label: 'Silver', annualSpend: 600, earnMultiplier: 1.25 },
+  { tier: 'Gold', label: 'Gold', annualSpend: 1500, earnMultiplier: 1.5 },
+] satisfies Array<{ tier: FranMembershipTier; label: string; annualSpend: number; earnMultiplier: number }>
 
 const rollingSpendByMemberId: Record<string, number> = {
   'fran-member-001': 1450,
@@ -203,6 +204,92 @@ function addDaysIso(days: number) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
 }
 
+export function mockActivePolicyBundle(input: { workspaceId?: string; programKey?: string } = {}): FranLoyaltyPolicyBundle {
+  const workspaceId = input.workspaceId || 'demo'
+  const programKey = input.programKey || 'fran-v2'
+  const policyVersionId = 'fran-v2.1-demo'
+  const assignmentId = 'fran-orchard-demo-assignment'
+  const cachedAt = nowIso()
+
+  return {
+    workspaceId,
+    programKey,
+    policyVersionId,
+    assignmentId,
+    label: 'Fran v2.1 demo loyalty policy',
+    currency: 'SGD',
+    activeFrom: '2026-01-01T00:00:00+08:00',
+    publishedAt: '2026-01-01T00:00:00+08:00',
+    allowedTtlSeconds: 24 * 60 * 60,
+    cache: {
+      status: 'fresh',
+      cacheKey: `${workspaceId}:${programKey}:${policyVersionId}:${assignmentId}`,
+      cachedAt,
+      staleAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    earn: {
+      basis: earnPolicy.basis,
+      pointsPerCurrencyUnit: earnPolicy.pointsPerCurrencyUnit,
+      rounding: 'floor',
+      minimumEligibleAmount: 0,
+      excludedRestrictedFlags: ['no_loyalty_earn'],
+    },
+    tiers: tierThresholds.map((tier, index) => ({
+      key: tier.tier,
+      label: tier.label,
+      annualSpendThreshold: tier.annualSpend,
+      earnMultiplier: tier.earnMultiplier,
+      sortOrder: index,
+    })),
+    redemption: {
+      minimumPoints: pointsRedemptionPolicy.minimumPoints,
+      maximumPointsPerBasket: null,
+      pointsToCurrencyRate: pointsRedemptionPolicy.pointsToCurrencyRate,
+      requiresLiveQuote: true,
+    },
+    bonuses: {
+      birthdayMultiplier: 2,
+      checkInPoints: 0,
+      categoryMultipliers: [
+        {
+          ruleId: 'category-skincare-100',
+          category: 'Skincare',
+          label: 'Skincare category bonus',
+          multiplier: 1.5,
+          minimumSpend: 100,
+        },
+      ],
+      campaignMultipliers: [
+        {
+          ruleId: 'campaign-skn-basket-100',
+          code: 'skincare-basket-100',
+          label: 'Skincare campaign',
+          multiplier: 1.5,
+          minimumSpend: 100,
+          skuPrefixes: ['SKN-'],
+        },
+      ],
+    },
+    expiry: {
+      lookaheadDays: pointsExpiryPolicy.lookaheadDays,
+      defaultMonths: 12,
+    },
+    rewards: activeRewardCatalogue().map((reward) => ({
+      id: reward.id,
+      name: reward.name,
+      description: reward.description,
+      valueType: reward.valueType,
+      pointsCost: reward.pointsCost,
+      value: reward.value,
+      valueLabel: reward.valueLabel,
+      expiresAt: reward.expiresAt,
+      requiresLiveStock: reward.valueType === 'product_value',
+      restrictedFlags: [],
+    })),
+    warnings: [],
+  }
+}
+
 function normalizeLookup(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '')
 }
@@ -232,6 +319,7 @@ function currentWindowSpendFor(member: FranCounterMember) {
 function tierProgress(member: FranCounterMember, basketTotal: number, currency: string): FranTierProgress | null {
   if (member.tourist || member.tier === 'Tourist') return null
   const currentIndex = tierThresholds.findIndex((item) => item.tier === member.tier)
+  const currentTier = tierThresholds[Math.max(currentIndex, 0)] ?? tierThresholds[0]
   const next = tierThresholds[Math.max(currentIndex, 0) + 1] ?? null
   const { windowStart, windowEnd } = trailingWindowDates()
   const currentWindowSpend = currentWindowSpendFor(member)
@@ -240,7 +328,9 @@ function tierProgress(member: FranCounterMember, basketTotal: number, currency: 
   if (!next) {
     return {
       currentTier: member.tier,
+      currentTierLabel: currentTier.label,
       nextTier: null,
+      nextTierLabel: null,
       measurementWindow: 'trailing_12_months',
       windowStart,
       windowEnd,
@@ -264,7 +354,9 @@ function tierProgress(member: FranCounterMember, basketTotal: number, currency: 
   const progressPercent = Math.min(100, Math.round((projectedWindowSpend / next.annualSpend) * 100))
   return {
     currentTier: member.tier,
+    currentTierLabel: currentTier.label,
     nextTier: next.tier,
+    nextTierLabel: next.label,
     measurementWindow: 'trailing_12_months',
     windowStart,
     windowEnd,
@@ -357,6 +449,7 @@ function buildEarnProjection(input: FranBasketPreviewInput): FranEarnProjection 
     policy: {
       basis: earnPolicy.basis,
       pointsPerCurrencyUnit: earnPolicy.pointsPerCurrencyUnit,
+      rounding: 'floor',
       currency: cart.currency,
     },
     baseAmount,
@@ -585,6 +678,10 @@ export async function mockResolveMember(input: FranMemberResolutionInput): Promi
   }
 }
 
+export async function mockGetActivePolicy(input: { workspaceId?: string; programKey?: string } = {}): Promise<FranLoyaltyPolicyBundle> {
+  return mockActivePolicyBundle(input)
+}
+
 export async function mockGetCounterSession(input: FranCounterSessionInput): Promise<FranCounterSession> {
   const registeredMember: FranCounterMember | null = input.registration
     ? {
@@ -646,6 +743,12 @@ export async function mockPreviewBasket(input: FranBasketPreviewInput): Promise<
     earnPoints,
     projectedPointsBalance,
     earnProjection,
+    policyVersionId: 'fran-v2.1-demo',
+    assignmentId: 'fran-orchard-demo-assignment',
+    skumsQuoteId: null,
+    skumsQuote: null,
+    policyCacheStatus: 'fresh',
+    evaluationTrace: null,
     tierProgress: member ? tierProgress(member, positiveTotal, input.cart.currency) : null,
     pointsRedemption,
     redeemableRewards,

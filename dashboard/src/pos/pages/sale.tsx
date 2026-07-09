@@ -47,6 +47,7 @@ import { FranCustomerModal } from '@/pos/fran/components/fran-customer-modal'
 import { FranMemberStrip } from '@/pos/fran/components/fran-member-strip'
 import { FranRewardRedemptionPanel } from '@/pos/fran/components/fran-reward-redemption-panel'
 import { createFranCrmClient } from '@/pos/fran/lib/fran-crm-client'
+import { evaluateFranPolicy } from '@/pos/fran/lib/fran-policy-evaluator'
 import type {
   FranAppliedReward,
   FranBasketLineInput,
@@ -57,7 +58,7 @@ import type {
   FranRewardQuote,
   FranSaleContext,
 } from '@/pos/fran/types'
-import { listSkumsPosCatalog, resolveSkumsPosScan } from '@/pos/lib/skums-client'
+import { listSkumsPosCatalog, quoteSkumsPosBasket, resolveSkumsPosScan } from '@/pos/lib/skums-client'
 import {
   pendingSkumsSaleWriteCount,
   retryPendingSkumsSaleWrites,
@@ -71,7 +72,14 @@ import {
 } from '@/pos/lib/pos-outbox'
 import { useAuth } from '@/providers/auth-provider'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
-import type { Product as DbProduct, SkumsGraphRefs, SkumsPosCatalogItem, SkumsPosScanMatch } from '@pos/shared'
+import type {
+  Product as DbProduct,
+  SkumsGraphRefs,
+  SkumsPosBasketQuoteInput,
+  SkumsPosCatalogItem,
+  SkumsPosScanMatch,
+} from '@pos/shared'
+import { POS_REGISTER_CODE } from '@/pos/lib/skums-sale-adapter'
 
 const graphFields: (keyof SkumsGraphRefs)[] = [
   'product_identity_id',
@@ -234,6 +242,14 @@ function isFranAdjustmentLine(line: CartLine) {
   return line.lineKind === 'fran_reward' || line.lineKind === 'fran_points'
 }
 
+function lightweightHash(value: string) {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash.toString(16)
+}
+
 function productMatchesEntryQuery(product: Product, normalizedQuery: string) {
   if (!normalizedQuery) return true
   return (
@@ -243,15 +259,92 @@ function productMatchesEntryQuery(product: Product, normalizedQuery: string) {
   )
 }
 
-function toFranBasketLine(line: CartLine): FranBasketLineInput {
+function availabilityForProduct(product: Product | undefined) {
+  const availableQuantity = product?.qtyOnHand ?? null
+  return {
+    status: availableQuantity == null
+      ? 'unknown'
+      : availableQuantity <= 0
+        ? 'out_of_stock'
+        : availableQuantity <= 3
+          ? 'low_stock'
+          : 'available',
+    track_inventory: availableQuantity !== 999,
+    available_quantity: availableQuantity,
+    snapshot_at: new Date().toISOString(),
+  } as const
+}
+
+function restrictedFlagsForLine(line: CartLine, product: Product | undefined) {
+  const flags: string[] = []
+  if (!line.returnable || product?.returnable === false) flags.push('final_sale')
+  if (line.lineKind && line.lineKind !== 'product') flags.push(line.lineKind)
+  return flags
+}
+
+function toFranBasketLine(line: CartLine, product?: Product): FranBasketLineInput {
+  const availability = availabilityForProduct(product)
   return {
     lineId: line.lineId,
+    skumsProductId: line.product_id ?? product?.skums?.product_id ?? null,
+    skumsVariantId: line.variant_id ?? product?.skums?.variant_id ?? null,
     sku: line.sku,
+    barcode: line.identifier_id ?? null,
     name: line.name,
     quantity: line.qty,
     unitPrice: line.unitPrice,
+    listPrice: line.listPrice,
     lineTotal: cartLineNet(line),
     lineKind: line.lineKind ?? 'product',
+    quoteLineId: null,
+    priceRevisionId: null,
+    category: product?.category ?? null,
+    brand: null,
+    collection: null,
+    rewardEligible: !isFranAdjustmentLine(line),
+    sampleEligible: !isFranAdjustmentLine(line),
+    restrictedFlags: restrictedFlagsForLine(line, product),
+    availability,
+  }
+}
+
+function toSkumsBasketQuoteLine(line: CartLine, product?: Product): SkumsPosBasketQuoteInput['lines'][number] {
+  return {
+    line_id: line.lineId,
+    product_identity_id: line.product_identity_id ?? product?.skums?.product_identity_id ?? null,
+    trade_unit_id: line.trade_unit_id ?? product?.skums?.trade_unit_id ?? null,
+    listing_id: line.listing_id ?? product?.skums?.listing_id ?? null,
+    channel_id: line.channel_id ?? product?.skums?.channel_id ?? null,
+    sku_assignment_id: line.sku_assignment_id ?? product?.skums?.sku_assignment_id ?? null,
+    identifier_id: line.identifier_id ?? product?.skums?.identifier_id ?? null,
+    product_id: line.product_id ?? product?.skums?.product_id ?? null,
+    variant_id: line.variant_id ?? product?.skums?.variant_id ?? null,
+    batch_id: line.batch_id ?? product?.skums?.batch_id ?? null,
+    sku: line.sku,
+    barcode: line.identifier_id ?? null,
+    display_name: line.name,
+    quantity: line.qty,
+    unit_price: line.unitPrice,
+    list_price: line.listPrice,
+    discount_amount: line.lineDiscount,
+    line_total: cartLineNet(line),
+    line_type: line.qty < 0 ? 'return' : 'sale',
+    price_revision_id: null,
+    category_name: product?.category ?? null,
+    brand_name: null,
+    collection_name: null,
+    reward_eligible: !isFranAdjustmentLine(line),
+    sample_eligible: !isFranAdjustmentLine(line),
+    restricted_flags: restrictedFlagsForLine(line, product),
+    availability: availabilityForProduct(product),
+    metadata: {
+      line_kind: line.lineKind ?? 'product',
+      local_unit_price: line.unitPrice,
+      local_list_price: line.listPrice,
+      local_discount_label: line.discountLabel ?? null,
+      overridden: line.overridden ?? false,
+      override_reason: line.overrideReason ?? null,
+    },
   }
 }
 
@@ -340,13 +433,33 @@ export default function SalePage() {
   const [lineAction, setLineAction] = useState<{ mode: LineActionMode; line: CartLine } | null>(null)
   const [pendingAuth, setPendingAuth] = useState<{ label: string; run: () => void } | null>(null)
   const preOverrideTotal = totals.total - totals.cartAdjustment
+  const catalogProductBySku = useMemo(() => {
+    const bySku = new Map<string, Product>()
+    for (const product of catalog) bySku.set(product.sku, product)
+    return bySku
+  }, [catalog])
   const franBasketLines = useMemo(
-    () => cart.filter((line) => line.qty > 0 && !isFranAdjustmentLine(line)).map(toFranBasketLine),
-    [cart]
+    () => cart
+      .filter((line) => line.qty > 0 && !isFranAdjustmentLine(line))
+      .map((line) => toFranBasketLine(line, catalogProductBySku.get(line.sku))),
+    [cart, catalogProductBySku]
   )
   const franBasketKey = useMemo(
-    () => JSON.stringify(franBasketLines.map((line) => [line.lineId, line.quantity, line.unitPrice, line.lineTotal])),
+    () => JSON.stringify(franBasketLines.map((line) => [
+      line.lineId,
+      line.sku,
+      line.quantity,
+      line.unitPrice,
+      line.lineTotal,
+      line.priceRevisionId,
+    ])),
     [franBasketLines]
+  )
+  const skumsBasketQuoteLines = useMemo(
+    () => cart
+      .filter((line) => line.qty > 0 && !isFranAdjustmentLine(line))
+      .map((line) => toSkumsBasketQuoteLine(line, catalogProductBySku.get(line.sku))),
+    [cart, catalogProductBySku]
   )
   const franBasketTotals = useMemo(() => {
     const saleLines = cart.filter((line) => line.qty > 0 && !isFranAdjustmentLine(line))
@@ -380,40 +493,125 @@ export default function SalePage() {
       setFranLoyaltySync(null)
       return
     }
+    const activeFranSession = franSession
 
     setFranPreviewLoading(true)
     setFranPreviewError(null)
-    franCrm.previewBasket({
-      session: franSession,
-      cart: {
-        cartId: franBasketKey,
-        lines: franBasketLines,
-        subtotal: franBasketTotals.subtotal,
-        discountTotal: franBasketTotals.discountTotal,
-        total: franBasketTotals.total,
-        currency: STORE.currency,
-        updatedAt: new Date().toISOString(),
-      },
-    })
+
+    async function loadFranPreview() {
+      if (mode === 'live') {
+        if (!skumsConnector) {
+          throw new Error('Live Fran loyalty requires a SKUMS basket quote before earn or reward decisions.')
+        }
+        if (!activeFranSession.member || activeFranSession.member.tourist || skumsBasketQuoteLines.length === 0) {
+          return franCrm.previewBasket({
+            session: activeFranSession,
+            cart: {
+              cartId: franBasketKey,
+              lines: franBasketLines,
+              subtotal: franBasketTotals.subtotal,
+              discountTotal: franBasketTotals.discountTotal,
+              total: franBasketTotals.total,
+              currency: STORE.currency,
+              updatedAt: new Date().toISOString(),
+            },
+          })
+        }
+
+        const workspaceId = company?.id ?? 'demo'
+        const programKey = 'fran-v2'
+        const quotedAt = new Date().toISOString()
+        const quoteInput: SkumsPosBasketQuoteInput = {
+          cart_id: franBasketKey,
+          location_id: STORE.inventoryLocationId,
+          register_id: POS_REGISTER_CODE,
+          register_session_id: pos.user?.sessionId ?? null,
+          customer_ref: activeFranSession.member.crmCustomerId,
+          currency: STORE.currency,
+          subtotal: franBasketTotals.subtotal,
+          discount_total: franBasketTotals.discountTotal,
+          total: franBasketTotals.total,
+          idempotency_key: `fran-pos-basket-quote:${activeFranSession.sessionId}:${lightweightHash(franBasketKey)}`,
+          quoted_at: quotedAt,
+          lines: skumsBasketQuoteLines,
+          metadata: {
+            workspace_id: workspaceId,
+            program_key: programKey,
+            member_id: activeFranSession.member.id,
+            crm_customer_id: activeFranSession.member.crmCustomerId,
+          },
+        }
+        const [policyBundle, quoteResponse] = await Promise.all([
+          franCrm.getActivePolicy({ workspaceId, programKey }),
+          quoteSkumsPosBasket(quoteInput, skumsConnector),
+        ])
+        return evaluateFranPolicy({
+          policyBundle,
+          quote: quoteResponse.data,
+          session: activeFranSession,
+          calculatedAt: quotedAt,
+        })
+      }
+
+      return franCrm.previewBasket({
+        session: activeFranSession,
+        cart: {
+          cartId: franBasketKey,
+          lines: franBasketLines,
+          subtotal: franBasketTotals.subtotal,
+          discountTotal: franBasketTotals.discountTotal,
+          total: franBasketTotals.total,
+          currency: STORE.currency,
+          updatedAt: new Date().toISOString(),
+        },
+      })
+    }
+
+    loadFranPreview()
       .then((preview) => {
         if (!cancelled) {
+          const cachedPolicyStatus = preview.policyCacheStatus === 'stale' || preview.policyCacheStatus === 'offline_fallback'
+          const cachedPolicyReason = preview.policyCacheStatus === 'stale'
+            ? 'Cached Fran policy is stale; earn requires CRM replay.'
+            : 'Fran CRM policy loaded from offline cache; earn requires CRM replay.'
           setFranPreview(preview)
-          setFranLoyaltySync({
-            status: 'online',
-            pointsEarnQueued: 0,
-            reason: null,
-            queuedAt: null,
-            syncOnReconnect: false,
-          })
+          setFranPreviewError(
+            preview.policyCacheStatus === 'stale'
+              ? 'Cached Fran policy is stale. Earn can be shown as queued; redemption requires a live refresh.'
+              : preview.policyCacheStatus === 'offline_fallback'
+                ? 'Using cached Fran policy because CRM is offline. Confirm live policy before redemption.'
+                : null
+          )
+          setFranLoyaltySync(
+            cachedPolicyStatus && preview.memberId
+              ? {
+                  status: 'queued',
+                  pointsEarnQueued: preview.earnPoints,
+                  reason: cachedPolicyReason,
+                  queuedAt: new Date().toISOString(),
+                  syncOnReconnect: true,
+                }
+              : {
+                  status: 'online',
+                  pointsEarnQueued: 0,
+                  reason: null,
+                  queuedAt: null,
+                  syncOnReconnect: false,
+                }
+          )
         }
       })
       .catch((err) => {
         if (!cancelled) {
           const reason = err instanceof Error ? err.message : 'Fran CRM preview unavailable'
           setFranPreview(null)
-          setFranPreviewError('Fran CRM offline. Sale can continue; points earn will queue on payment.')
+          setFranPreviewError(
+            mode === 'live'
+              ? 'Fran loyalty quote unavailable. Sale can continue, but earn and rewards are unverified.'
+              : 'Fran CRM offline. Sale can continue; points earn will queue on payment.'
+          )
           setFranLoyaltySync(
-            franSession.member && !franSession.member.tourist
+            franSession.member && !franSession.member.tourist && mode !== 'live'
               ? {
                   status: 'queued',
                   pointsEarnQueued: provisionalFranEarnPoints,
@@ -436,7 +634,21 @@ export default function SalePage() {
       })
 
     return () => { cancelled = true }
-  }, [franBasketKey, franBasketLines, franBasketTotals.discountTotal, franBasketTotals.subtotal, franBasketTotals.total, franCrm, franSession, provisionalFranEarnPoints])
+  }, [
+    company?.id,
+    franBasketKey,
+    franBasketLines,
+    franBasketTotals.discountTotal,
+    franBasketTotals.subtotal,
+    franBasketTotals.total,
+    franCrm,
+    franSession,
+    mode,
+    pos.user?.sessionId,
+    provisionalFranEarnPoints,
+    skumsBasketQuoteLines,
+    skumsConnector,
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -1082,6 +1294,36 @@ export default function SalePage() {
     }
   }
 
+  const sendFranLoyaltyExecutionEvent = (sale: CompletedSale, appliedReward: FranAppliedReward | null) => {
+    const preview = sale.fran?.basketPreview
+    const session = sale.fran?.counterSession
+    const member = session?.member
+    if (!preview || !session || !member || member.tourist) return
+
+    void franCrm.sendEvent({
+      eventType: 'fran.loyalty_execution.committed',
+      idempotencyKey: `fran:${sale.receiptNo}:loyalty-execution:${preview.policyVersionId ?? preview.previewId}`,
+      occurredAt: sale.completedAtIso,
+      payload: {
+        policy_version_id: preview.policyVersionId ?? null,
+        assignment_id: preview.assignmentId ?? null,
+        member_id: member.id,
+        account_id: member.crmCustomerId,
+        skums_quote_id: preview.skumsQuoteId ?? null,
+        skums_reservation_id: null,
+        pos_sale_id: sale.idempotencyKey,
+        receipt_number: sale.receiptNo,
+        reward_quote_id: appliedReward?.quote.quoteId ?? null,
+        reward_commit_id: appliedReward?.commit?.commitId ?? null,
+        reward_status: appliedReward?.status ?? null,
+        points_earned: sale.pointsEarned,
+        evaluation_trace: preview.evaluationTrace ?? null,
+      },
+    }).catch(() => {
+      // The local POS outbox carries the replay-safe execution fact; checkout must not block here.
+    })
+  }
+
   const franReverseReasonKey = (reason: string) =>
     reason.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'reversal'
 
@@ -1203,12 +1445,15 @@ export default function SalePage() {
 
     try {
       const canFranEarn = Boolean(franSession?.member && !franSession.member.tourist)
-      const finalPointsEarned = canFranEarn ? franPreview?.earnPoints ?? provisionalFranEarnPoints : 0
+      const finalPointsEarned = canFranEarn
+        ? franPreview?.earnPoints ?? franLoyaltySync?.pointsEarnQueued ?? (mode === 'demo' ? provisionalFranEarnPoints : 0)
+        : 0
       const finalLoyaltySync = finalFranLoyaltySync(saleReward, finalPointsEarned)
       const sale = completeSale({
         fran: buildFranSaleContext(saleReward, finalLoyaltySync),
         pointsEarned: finalPointsEarned,
       })
+      sendFranLoyaltyExecutionEvent(sale, saleReward)
       const outboxEvents = buildPosOutboxEventsForCompletedSale(sale, {
         workspaceId: company?.id ?? 'demo',
         actorId: pos.user?.staffMemberId ?? pos.user?.id ?? null,

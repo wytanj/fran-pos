@@ -31,6 +31,7 @@ export function FranMemberStrip({
   const member = session?.member ?? null
   const activePerks = session?.activePerks ?? []
   const earnPoints = preview?.earnPoints ?? null
+  const memberTierLabel = member ? tierLabel(member.tier, member.tierLabel) : null
 
   return (
     <div className="shrink-0 border-b bg-card px-3 py-2">
@@ -50,7 +51,7 @@ export function FranMemberStrip({
                       ? 'Non-member sale selected'
                       : 'Fran member required'}
               </p>
-              {member && <Badge variant="outline" className={tierBadgeClass(member.tier)}>{member.tier}</Badge>}
+              {member && <Badge variant="outline" className={tierBadgeClass(member.tier)}>{memberTierLabel}</Badge>}
               {session?.mode === 'tourist' && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
               {session?.mode === 'non_member' && <Badge variant="outline">No member</Badge>}
               {appliedReward && <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">Reward applied</Badge>}
@@ -146,4 +147,8 @@ function tierBadgeClass(tier: FranCounterTier) {
     default:
       return ''
   }
+}
+
+function tierLabel(tier: FranCounterTier, label?: string | null) {
+  return label || tier
 }

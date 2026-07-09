@@ -33,6 +33,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
   const rewardCount = preview?.redeemableRewards.length ?? member.rewardCount
   const activePerks = session.activePerks ?? []
   const pointsExpiryAlert = session.pointsExpiryAlert
+  const memberTierLabel = tierLabel(member.tier, member.tierLabel)
 
   return (
     <div className="rounded-lg border bg-background p-3">
@@ -40,7 +41,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold">{member.name}</p>
-            <Badge variant="outline" className={tierBadgeClass(member.tier)}>{member.tier}</Badge>
+            <Badge variant="outline" className={tierBadgeClass(member.tier)}>{memberTierLabel}</Badge>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {member.memberNo} - {member.phone}
@@ -132,8 +133,8 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
         <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2 text-blue-950">
           <p className="mb-1 text-xs font-semibold">Tier spend progress</p>
           <div className="flex justify-between text-xs">
-            <span>{preview.tierProgress.currentTier}</span>
-            <span>{preview.tierProgress.nextTier ?? 'Top tier'}</span>
+            <span>{preview.tierProgress.currentTierLabel}</span>
+            <span>{preview.tierProgress.nextTierLabel ?? 'Top tier'}</span>
           </div>
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-white">
             <div className="h-full bg-blue-500" style={{ width: `${preview.tierProgress.progressPercent}%` }} />
@@ -144,7 +145,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
               value={formatCurrency(preview.tierProgress.currentWindowSpend, STORE.currency)}
             />
             <ProgressMetric
-              label={preview.tierProgress.nextTier ? `${preview.tierProgress.nextTier} requires` : 'Requirement'}
+              label={preview.tierProgress.nextTierLabel ? `${preview.tierProgress.nextTierLabel} requires` : 'Requirement'}
               value={
                 preview.tierProgress.spendRequiredForNextTier != null
                   ? formatCurrency(preview.tierProgress.spendRequiredForNextTier, STORE.currency)
@@ -231,8 +232,9 @@ function nextTierSpendLabel(preview: FranBasketPreview | null) {
   const progress = preview?.tierProgress
   if (!progress) return 'Preview pending'
   if (!progress.nextTier) return 'Top tier'
-  if (progress.gapRemaining <= 0) return `Ready for ${progress.nextTier}`
-  return `${formatCurrency(progress.gapRemaining, STORE.currency)} to ${progress.nextTier}`
+  const nextLabel = progress.nextTierLabel ?? progress.nextTier
+  if (progress.gapRemaining <= 0) return `Ready for ${nextLabel}`
+  return `${formatCurrency(progress.gapRemaining, STORE.currency)} to ${nextLabel}`
 }
 
 function ProgressMetric({
@@ -331,4 +333,8 @@ function tierBadgeClass(tier: FranCounterTier) {
     default:
       return ''
   }
+}
+
+function tierLabel(tier: FranCounterTier, label?: string | null) {
+  return label || tier
 }

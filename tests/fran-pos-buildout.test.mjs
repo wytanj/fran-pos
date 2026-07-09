@@ -7,6 +7,10 @@ const posContext = readFileSync(new URL('../dashboard/src/pos/lib/pos-context.ts
 const outbox = readFileSync(new URL('../dashboard/src/pos/lib/pos-outbox.ts', import.meta.url), 'utf8')
 const migration = readFileSync(new URL('../supabase/migrations/00007_create_pos_source_outbox.sql', import.meta.url), 'utf8')
 const franClient = readFileSync(new URL('../dashboard/src/pos/fran/lib/fran-crm-client.ts', import.meta.url), 'utf8')
+const franEvaluator = readFileSync(
+  new URL('../dashboard/src/pos/fran/lib/fran-policy-evaluator.ts', import.meta.url),
+  'utf8',
+)
 const franMock = readFileSync(new URL('../dashboard/src/pos/fran/mock-crm.ts', import.meta.url), 'utf8')
 const franTypes = readFileSync(new URL('../dashboard/src/pos/fran/types.ts', import.meta.url), 'utf8')
 const franProfileCard = readFileSync(
@@ -47,12 +51,17 @@ const customerEmailConnector = readFileSync(
 )
 const franContract = readFileSync(new URL('../docs/fran-pos-crm-skums-contract.md', import.meta.url), 'utf8')
 const sharedTypes = readFileSync(new URL('../packages/shared/src/types/database.ts', import.meta.url), 'utf8')
+const loyaltyExecutionMigration = readFileSync(
+  new URL('../supabase/migrations/00013_allow_fran_loyalty_execution_outbox_event.sql', import.meta.url),
+  'utf8',
+)
 
 test('Fran POS keeps Fran-specific workflow in named Fran surfaces', () => {
   for (const fragment of [
     'dashboard/src/pos/fran/types.ts',
     'dashboard/src/pos/fran/mock-crm.ts',
     'dashboard/src/pos/fran/lib/fran-crm-client.ts',
+    'fran-policy-evaluator.ts',
     'fran-member-strip.tsx',
     'fran-customer-modal.tsx',
     'fran-counter-profile-card.tsx',
@@ -66,6 +75,7 @@ test('Fran CRM client exposes the genesis decision methods with mock fallback', 
   for (const method of [
     'resolveMember',
     'getCounterSession',
+    'getActivePolicy',
     'previewBasket',
     'quoteRewardRedemption',
     'commitRewardRedemption',
@@ -76,6 +86,8 @@ test('Fran CRM client exposes the genesis decision methods with mock fallback', 
   }
 
   assert.match(franClient, /VITE_FRAN_CRM_URL/)
+  assert.match(franClient, /\/api\/fran\/loyalty\/policy-versions\/active/)
+  assert.match(franClient, /fran_loyalty_policy_cache:v1/)
   assert.match(franClient, /AbortController/)
   assert.match(franClient, /Fran CRM unreachable\. Continue checkout offline\./)
   assert.match(franClient, /mockResolveMember/)
@@ -126,7 +138,10 @@ test('Fran counter profile card shows the successful lookup projection', () => {
   assert.match(franContract, /default lookahead is 30 days/)
   assert.match(franContract, /pointsExpiryAlert/)
   assert.match(franContract, /points_expiry_alert/)
-  assert.match(franTypes, /export type FranMembershipTier = 'Base' \| 'Silver' \| 'Gold'/)
+  assert.match(franTypes, /export type FranMembershipTier = string/)
+  assert.match(franTypes, /export interface FranLoyaltyPolicyBundle/)
+  assert.match(franTypes, /export interface FranEvaluationTrace/)
+  assert.match(franTypes, /export type FranPolicyCacheStatus = 'fresh' \| 'stale' \| 'offline_fallback'/)
   assert.match(franTypes, /export type FranActivePerkKind = 'free_sample_threshold' \| 'birthday_discount' \| 'tier_specific_offer'/)
   assert.match(franTypes, /export interface FranActivePerk/)
   assert.match(franTypes, /activePerks: FranActivePerk\[\]/)
@@ -182,6 +197,7 @@ test('Fran counter profile card shows the successful lookup projection', () => {
   assert.match(franProfileCard, /border-blue-200 bg-blue-50/)
   assert.match(franProfileCard, /member\.name/)
   assert.match(franProfileCard, /member\.tier/)
+  assert.match(franProfileCard, /tierLabel\(member\.tier, member\.tierLabel\)/)
   assert.match(franProfileCard, /member\.pointsBalance/)
   assert.match(franProfileCard, /member\.memberSince/)
   assert.match(franProfileCard, /member\.pointsExpireAt/)
@@ -200,15 +216,27 @@ test('Fran counter profile card shows the successful lookup projection', () => {
 
 test('Fran projected earn preview comes from a Fran SKUMS cart projection', () => {
   assert.match(franContract, /## Projected Earn Preview/)
-  assert.match(franContract, /submits the current cart object/)
+  assert.match(franContract, /loads the active CRM policy bundle/)
+  assert.match(franContract, /`POST \/fran\/pos\/basket\/quote`/)
   assert.match(franContract, /Source system: `fran_skums`/)
   assert.match(franTypes, /export type FranEarnPolicyBasis = 'pre_discount' \| 'post_discount'/)
   assert.match(franTypes, /export type FranEarnMultiplierKind = 'tier' \| 'birthday' \| 'campaign'/)
   assert.match(franTypes, /export interface FranSkumsCartInput/)
+  assert.match(franTypes, /skumsProductId\?: string \| null/)
+  assert.match(franTypes, /quoteLineId\?: string \| null/)
+  assert.match(franTypes, /restrictedFlags\?: string\[\]/)
+  assert.match(franTypes, /availability\?: SkumsPosAvailabilitySnapshot \| null/)
   assert.match(franTypes, /sourceSystem: 'fran_skums'/)
   assert.match(franTypes, /earnProjection: FranEarnProjection/)
-  assert.match(salePage, /cart: \{[\s\S]*cartId: franBasketKey[\s\S]*lines: franBasketLines[\s\S]*subtotal: franBasketTotals\.subtotal[\s\S]*discountTotal: franBasketTotals\.discountTotal[\s\S]*total: franBasketTotals\.total/)
+  assert.match(salePage, /quoteSkumsPosBasket\(quoteInput, skumsConnector\)/)
+  assert.match(salePage, /evaluateFranPolicy\(\{[\s\S]*policyBundle[\s\S]*quote: quoteResponse\.data[\s\S]*session: activeFranSession/)
+  assert.match(franEvaluator, /export function evaluateFranPolicy/)
+  assert.match(franEvaluator, /evaluationTrace/)
+  assert.match(franEvaluator, /policy\.bonuses\.categoryMultipliers/)
+  assert.match(franEvaluator, /policy\.bonuses\.checkInPoints/)
+  assert.match(franEvaluator, /policy\.cache\.status === 'stale'/)
   assert.match(franMock, /function buildEarnProjection/)
+  assert.match(franMock, /mockGetActivePolicy/)
   assert.match(franMock, /sourceSystem: 'fran_skums'/)
   assert.match(franMock, /basis: 'post_discount'/)
   assert.match(franMock, /kind: 'tier'/)
@@ -267,6 +295,8 @@ test('Fran CRM tier preview uses trailing 12-month spend and pre-payment upgrade
   assert.match(franTypes, /gapBeforeTransaction: number/)
   assert.match(franTypes, /gapRemaining: number/)
   assert.match(franTypes, /crossesTierThreshold: boolean/)
+  assert.match(franTypes, /currentTierLabel: string/)
+  assert.match(franTypes, /nextTierLabel: string \| null/)
   assert.match(franMock, /rollingSpendByMemberId/)
   assert.match(franMock, /function trailingWindowDates/)
   assert.match(franMock, /function currentWindowSpendFor/)
@@ -439,12 +469,17 @@ test('Fran reward lines and events are replay-safe POS facts', () => {
   for (const eventType of [
     'fran.member.resolved',
     'fran.counter_session.previewed',
+    'fran.loyalty_execution.committed',
     'fran.reward.quoted',
     'fran.reward.committed',
     'fran.reward.reversed',
     'fran.reward.commit_failed',
   ]) {
     assert.match(outbox, new RegExp(eventType.replaceAll('.', '\\.')))
-    assert.match(migration, new RegExp(eventType.replaceAll('.', '\\.')))
+    assert.match(`${migration}\n${loyaltyExecutionMigration}`, new RegExp(eventType.replaceAll('.', '\\.')))
   }
+  assert.match(salePage, /sendFranLoyaltyExecutionEvent/)
+  assert.match(salePage, /policy_version_id: preview\.policyVersionId/)
+  assert.match(salePage, /evaluation_trace: preview\.evaluationTrace/)
+  assert.match(sharedTypes, /'fran\.loyalty_execution\.committed'/)
 })

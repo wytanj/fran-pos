@@ -111,9 +111,13 @@ export function toSkumsPosSaleInput(sale: CompletedSale): SkumsPosSaleInput {
             member_mode: sale.fran.memberMode,
             member_id: sale.fran.counterSession?.member?.id ?? null,
             basket_preview_id: sale.fran.basketPreview?.previewId ?? null,
+            policy_version_id: sale.fran.basketPreview?.policyVersionId ?? null,
+            assignment_id: sale.fran.basketPreview?.assignmentId ?? null,
+            skums_quote_id: sale.fran.basketPreview?.skumsQuoteId ?? null,
             reward_quote_id: sale.fran.appliedReward?.quote.quoteId ?? null,
             reward_commit_id: sale.fran.appliedReward?.commit?.commitId ?? null,
             reward_status: sale.fran.appliedReward?.status ?? null,
+            evaluation_trace_id: sale.fran.basketPreview?.evaluationTrace?.traceId ?? null,
           }
         : null,
       cart_price_override: sale.cartPriceOverride

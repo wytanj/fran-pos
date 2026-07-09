@@ -33,6 +33,7 @@ export type PosSourceEventType =
   | 'fran.reward.committed'
   | 'fran.reward.reversed'
   | 'fran.reward.commit_failed'
+  | 'fran.loyalty_execution.committed'
   | 'fran.points_earn.queued';
 export type PosOutboxEventStatus = 'queued' | 'sent' | 'acked' | 'failed';
 

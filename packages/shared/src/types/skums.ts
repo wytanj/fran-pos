@@ -74,6 +74,128 @@ export interface SkumsPosCatalogResponse {
   revision?: SkumsPosCatalogRevision | null;
 }
 
+export type SkumsPosAvailabilityStatus = 'available' | 'low_stock' | 'out_of_stock' | 'unknown';
+
+export interface SkumsPosAvailabilitySnapshot {
+  status: SkumsPosAvailabilityStatus;
+  track_inventory: boolean;
+  available_quantity: number | null;
+  reserved_quantity?: number | null;
+  snapshot_at: string;
+}
+
+export interface SkumsPosBasketQuoteLineInput extends Partial<SkumsGraphRefs> {
+  line_id: string;
+  sku: string;
+  barcode?: string | null;
+  display_name: string;
+  quantity: number;
+  unit_price: number;
+  list_price?: number | null;
+  discount_amount?: number;
+  line_total: number;
+  line_type?: SkumsPosLineType;
+  price_revision_id?: string | null;
+  category_name?: string | null;
+  brand_name?: string | null;
+  collection_name?: string | null;
+  reward_eligible?: boolean;
+  sample_eligible?: boolean;
+  restricted_flags?: string[];
+  availability?: SkumsPosAvailabilitySnapshot | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SkumsPosBasketQuoteInput {
+  cart_id: string;
+  location_id?: string | null;
+  register_id?: string | null;
+  register_session_id?: string | null;
+  customer_ref?: string | null;
+  currency: string;
+  subtotal: number;
+  discount_total: number;
+  total: number;
+  idempotency_key: string;
+  quoted_at?: string;
+  lines: SkumsPosBasketQuoteLineInput[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface SkumsPosBasketQuoteLine extends SkumsGraphRefs {
+  quote_line_id: string;
+  source_line_id: string;
+  sku: string;
+  barcode: string | null;
+  display_name: string;
+  quantity: number;
+  unit_price: number;
+  list_price: number | null;
+  discount_amount: number;
+  line_total: number;
+  currency: string;
+  price_revision_id: string | null;
+  category_name: string | null;
+  brand_name: string | null;
+  collection_name: string | null;
+  reward_eligible: boolean;
+  sample_eligible: boolean;
+  restricted_flags: string[];
+  availability: SkumsPosAvailabilitySnapshot;
+  metadata: Record<string, unknown>;
+}
+
+export interface SkumsPosBasketQuote {
+  quote_id: string;
+  cart_id: string;
+  currency: string;
+  subtotal: number;
+  discount_total: number;
+  total: number;
+  price_book_id: string | null;
+  price_book_revision_id: string | null;
+  quoted_at: string;
+  expires_at: string;
+  stale: boolean;
+  lines: SkumsPosBasketQuoteLine[];
+  warnings: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface SkumsPosBasketQuoteResponse {
+  data: SkumsPosBasketQuote;
+  duplicate?: boolean;
+}
+
+export interface SkumsPosReservationInput {
+  quote_id: string;
+  receipt_number?: string | null;
+  idempotency_key: string;
+  hold_reason?: 'reward' | 'stock_sensitive_sale' | 'manager_override' | string;
+  expires_at?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SkumsPosReservationResponse {
+  data: {
+    reservation_id: string;
+    quote_id: string;
+    status: 'held' | 'committed' | 'released' | 'expired' | 'failed';
+    expires_at: string | null;
+    warnings: string[];
+    metadata: Record<string, unknown>;
+  };
+  duplicate?: boolean;
+}
+
+export interface SkumsPosReservationMutationInput {
+  reservation_id: string;
+  receipt_number?: string | null;
+  idempotency_key: string;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
 export type SkumsPosAttentionStatus =
   | 'open'
   | 'pending_approval'

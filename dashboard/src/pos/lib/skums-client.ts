@@ -1,7 +1,12 @@
 import type {
+  SkumsPosBasketQuoteInput,
+  SkumsPosBasketQuoteResponse,
   SkumsPosCatalogResponse,
   SkumsPosInventoryEventInput,
   SkumsPosInventoryEventResponse,
+  SkumsPosReservationInput,
+  SkumsPosReservationMutationInput,
+  SkumsPosReservationResponse,
   SkumsPosSaleInput,
   SkumsPosSaleResponse,
   SkumsPosScanResolution,
@@ -81,6 +86,72 @@ export async function listSkumsPosCatalog(params: {
   const res = await fetch(url, { headers: headers(config) })
   if (!res.ok) throw await skumsError(res)
   return (await res.json()) as SkumsPosCatalogResponse
+}
+
+export async function quoteSkumsPosBasket(input: SkumsPosBasketQuoteInput, connector?: SkumsConnectorConfig) {
+  if (!input.idempotency_key?.trim()) {
+    throw new Error('SKUMS basket quotes require an idempotency key')
+  }
+
+  const config = configOrThrow(connector)
+  const res = await fetch(`${config.apiUrl}/fran/pos/basket/quote`, {
+    method: 'POST',
+    headers: headers(config),
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as SkumsPosBasketQuoteResponse
+}
+
+export async function createSkumsPosReservation(input: SkumsPosReservationInput, connector?: SkumsConnectorConfig) {
+  if (!input.idempotency_key?.trim()) {
+    throw new Error('SKUMS reservations require an idempotency key')
+  }
+
+  const config = configOrThrow(connector)
+  const res = await fetch(`${config.apiUrl}/fran/pos/reservation/create`, {
+    method: 'POST',
+    headers: headers(config),
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as SkumsPosReservationResponse
+}
+
+export async function commitSkumsPosReservation(
+  input: SkumsPosReservationMutationInput,
+  connector?: SkumsConnectorConfig
+) {
+  if (!input.idempotency_key?.trim()) {
+    throw new Error('SKUMS reservation commits require an idempotency key')
+  }
+
+  const config = configOrThrow(connector)
+  const res = await fetch(`${config.apiUrl}/fran/pos/reservation/commit`, {
+    method: 'POST',
+    headers: headers(config),
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as SkumsPosReservationResponse
+}
+
+export async function releaseSkumsPosReservation(
+  input: SkumsPosReservationMutationInput,
+  connector?: SkumsConnectorConfig
+) {
+  if (!input.idempotency_key?.trim()) {
+    throw new Error('SKUMS reservation releases require an idempotency key')
+  }
+
+  const config = configOrThrow(connector)
+  const res = await fetch(`${config.apiUrl}/fran/pos/reservation/release`, {
+    method: 'POST',
+    headers: headers(config),
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as SkumsPosReservationResponse
 }
 
 export async function createSkumsPosSale(input: SkumsPosSaleInput, connector?: SkumsConnectorConfig) {

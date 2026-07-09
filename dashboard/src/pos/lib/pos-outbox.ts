@@ -463,6 +463,35 @@ export function buildFranOutboxEventsForCompletedSale(
         warnings: fran.basketPreview.warnings,
       }
     ))
+
+    if (member && !member.tourist && sale.saleStatus === 'completed') {
+      events.push(baseEnvelope(
+        'fran.loyalty_execution.committed',
+        sale,
+        options,
+        buildPosOutboxIdempotencyKey(
+          'fran.loyalty_execution.committed',
+          sale,
+          `${fran.basketPreview.policyVersionId ?? fran.basketPreview.previewId}:${fran.basketPreview.skumsQuoteId ?? 'no-skums-quote'}`
+        ),
+        {
+          receipt_number: sale.receiptNo,
+          session_id: session.sessionId,
+          policy_version_id: fran.basketPreview.policyVersionId ?? null,
+          assignment_id: fran.basketPreview.assignmentId ?? null,
+          member_id: member.id,
+          account_id: member.crmCustomerId,
+          skums_quote_id: fran.basketPreview.skumsQuoteId ?? null,
+          skums_reservation_id: null,
+          pos_sale_id: sale.idempotencyKey,
+          reward_quote_id: fran.appliedReward?.quote.quoteId ?? null,
+          reward_commit_id: fran.appliedReward?.commit?.commitId ?? null,
+          reward_status: fran.appliedReward?.status ?? null,
+          points_earned: sale.pointsEarned,
+          evaluation_trace: fran.basketPreview.evaluationTrace,
+        }
+      ))
+    }
   }
 
   const reward = fran.appliedReward

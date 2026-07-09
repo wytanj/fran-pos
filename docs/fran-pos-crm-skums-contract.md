@@ -4,13 +4,13 @@
 
 Fran POS owns physical checkout: scan/search, basket state, cashier prompts, payment capture, receipt rendering, local audit trail, and replay-safe outbox events.
 
-Fran CRM owns customer identity, counter-safe member profile, loyalty account state, tier progress, reward eligibility, reward quote, reward commit, and reward reversal.
+Fran CRM owns customer identity, counter-safe member profile, active loyalty policy versions, policy assignments, loyalty account state, ledger truth, reward quote, reward commit, and reward reversal.
 
-SKUMS owns product identity, POS-enabled catalog, stock availability, cart valuation, projected earn calculation, sale sync, return sync, inventory events, and fulfillment/store-ops handoff.
+SKUMS owns product identity, POS-enabled catalog, stock availability, cart valuation, price revisions, sale sync, return sync, inventory events, and fulfillment/store-ops handoff.
 
 ## Runtime Shape
 
-The first build uses `dashboard/src/pos/fran/mock-crm.ts` through `dashboard/src/pos/fran/lib/fran-crm-client.ts`. The sale page does not iframe CRM screens and does not calculate loyalty economics beyond rendering CRM decisions.
+The first build uses `dashboard/src/pos/fran/mock-crm.ts` through `dashboard/src/pos/fran/lib/fran-crm-client.ts`. The live execution path loads a CRM policy bundle, asks SKUMS for a basket quote, and runs `dashboard/src/pos/fran/lib/fran-policy-evaluator.ts` locally in the POS. The sale page does not iframe CRM screens and does not author loyalty policy.
 
 Live Fran CRM can replace the mock by setting `VITE_FRAN_CRM_URL` or by disabling mock mode in Settings > Integrations > Fran CRM. Browser code must call a POS-safe endpoint or proxy. Do not expose CRM, loyalty, SKUMS, Supabase service-role, or database credentials through `VITE_` variables.
 
@@ -20,7 +20,8 @@ Initial POS-side client methods:
 
 - `resolveMember(input)`: scan/search QR, barcode, member number, or mobile.
 - `getCounterSession(input)`: starts a member, non-member, or tourist counter session.
-- `previewBasket(input)`: submits the current POS cart object and returns Fran SKUMS projected earn, projected points balance, tier progress, reward decisions, and warnings.
+- `getActivePolicy(input)`: loads `GET /api/fran/loyalty/policy-versions/active`, caches the bundle by workspace, program, policy version, and assignment, and marks cached bundles as stale or offline fallback when live CRM is unavailable.
+- `previewBasket(input)`: demo/offline fallback used by the mock CRM path. Live checkout does not use this as final loyalty truth when SKUMS is configured.
 - `quoteRewardRedemption(input)`: returns a short-lived quote for a selected reward or cashier-entered partial points redemption.
 - `commitRewardRedemption(input)`: commits the quote after payment confirmation.
 - `reverseRewardRedemption(input)`: reverses a committed reward on transaction void or payment failure after commit.
@@ -28,13 +29,20 @@ Initial POS-side client methods:
 
 Suggested live endpoints:
 
+- `GET /api/fran/loyalty/policy-versions/active`
 - `POST /fran/pos/member/resolve`
 - `POST /fran/pos/counter-session`
-- `POST /fran/pos/basket/preview`
 - `POST /fran/pos/rewards/quote`
 - `POST /fran/pos/rewards/commit`
 - `POST /fran/pos/rewards/reverse`
 - `POST /api/v1/events`
+
+Suggested SKUMS endpoints:
+
+- `POST /fran/pos/basket/quote`
+- `POST /fran/pos/reservation/create`
+- `POST /fran/pos/reservation/commit`
+- `POST /fran/pos/reservation/release`
 
 ## Start-of-Transaction Identity Tagging
 
@@ -56,7 +64,7 @@ On successful member lookup, the sale screen renders a compact counter profile c
 The card is a POS-safe projection from Fran CRM and should show:
 
 - Customer name.
-- Tier badge. Fran CRM currently returns `Base`, `Silver`, or `Gold`.
+- Tier badge. Fran CRM policy can return dynamic tier keys and labels; POS displays `tierLabel` when present and only uses static colors as a harmless visual fallback.
 - Current points balance.
 - Projected earn from the current basket.
 - Earn policy basis, either pre-discount or post-discount.
@@ -97,11 +105,11 @@ Fran POS displays this alert on the cashier profile card as a warning with the a
 
 ## Projected Earn Preview
 
-Projected earn is not calculated from local POS display state alone. When the cart changes, Fran POS submits the current cart object to the preview path. The live implementation should route the cart valuation to Fran SKUMS and return a `fran_skums` earn projection.
+Projected earn is not calculated from local POS display state alone. When the cart changes in live mode, Fran POS loads the active CRM policy bundle, sends the basket to SKUMS with `POST /fran/pos/basket/quote`, and evaluates the policy locally over the SKUMS quote. The old CRM basket preview remains demo/offline fallback only.
 
 The cart object includes:
 
-- Product lines with `lineId`, SKU, name, quantity, unit price, line total, and line kind.
+- Product lines with `lineId`, SKUMS product id, variant id, SKU, barcode, quote line id, price revision, category, brand, collection, reward eligibility, sample eligibility, restricted flags, availability snapshot, quantity, unit price, line total, and line kind.
 - Basket subtotal.
 - Discount total.
 - Total after discount.
@@ -111,16 +119,18 @@ The cart object includes:
 The returned earn projection includes:
 
 - Source system: `fran_skums`.
+- Policy version id and assignment id.
+- SKUMS quote id.
 - Earn policy basis: `pre_discount` or `post_discount`.
 - Earn base amount.
 - Points per currency unit.
-- Tier multiplier.
-- Birthday multiplier.
-- Campaign multiplier.
+- Tier multiplier from the loaded policy.
+- Birthday, category, campaign, and check-in bonuses from the loaded policy.
 - Total multiplier.
 - Projected earn points.
+- Evaluation trace with rule ids, inputs, rounding mode, blocked reasons, and final decisions.
 
-Fran POS displays the returned projection live as items, discounts, and reward lines change. POS may show loading or unavailable state, but it should not silently calculate final earn truth when Fran SKUMS is configured.
+Fran POS displays the evaluated projection live as items, discounts, and reward lines change. POS may show loading or unavailable state, but it must not silently use local `unitPrice` as final loyalty truth when Fran SKUMS is configured.
 
 ## CRM Unreachable and Offline Loyalty Queue
 
@@ -130,22 +140,24 @@ Rules:
 
 - If a member was already identified, POS continues checkout with a clear `CRM offline - earn queued` indicator.
 - If lookup or counter-session creation fails before a member profile is returned, POS allows a local offline member session from the scanned identifier or an explicit non-member/tourist exception.
-- POS clears stale CRM preview decisions when preview fails. Reward redemption and catalogue reward actions require a live CRM quote and must not be inferred offline.
-- POS may calculate a provisional earn amount for the queued event, but the event must be marked as POS fallback when no Fran CRM preview exists.
+- POS clears stale preview decisions when policy or SKUMS quote loading fails. Reward redemption and catalogue reward actions require a live CRM quote and must not be inferred offline.
+- Offline earn can be shown as queued only when POS has a cached CRM policy bundle and a cached/current SKUMS price quote; otherwise loyalty is marked unavailable instead of guessed from local prices.
 - On payment completion, POS emits `fran.points_earn.queued` with the receipt, member identifier, queued points, reason, and `sync_on_reconnect: true`.
 - The local POS outbox keeps the event when Supabase or Fran CRM sync is unavailable and retries on browser reconnect, focus, or visibility return.
 - The post-transaction screen and receipt preview must show loyalty as queued when earn was not confirmed live.
 
 ## Tier Progress Preview
 
-Tier progress is supplied by Fran CRM in the basket preview response. Fran POS does not calculate tier qualification locally.
+Tier progress is evaluated locally from the loaded CRM policy, the counter-safe CRM member snapshot, and the SKUMS quote. Fran POS does not author tier policy or mutate tier truth locally.
 
 The tier projection must use the same trailing 12-month spend window as the membership tier logic. When Fran CRM adds the current transaction value to the member's trailing 12-month spend, it returns whether the projected value crosses the next threshold.
 
 The returned tier projection includes:
 
 - Current tier.
+- Current tier label.
 - Next tier.
+- Next tier label.
 - Measurement window: `trailing_12_months`.
 - Window start and end timestamps.
 - Current trailing 12-month spend.
@@ -293,6 +305,7 @@ The POS outbox remains the local source-event buffer. Fran-specific events are a
 - `fran.reward.committed`
 - `fran.reward.reversed`
 - `fran.reward.commit_failed`
+- `fran.loyalty_execution.committed`
 - `fran.points_earn.queued`
 
 Existing generic POS events remain:
@@ -312,6 +325,8 @@ Fran POS continues to use SKUMS for product and stock decisions:
 - Product scan resolution.
 - POS catalog.
 - Stock availability.
+- Basket quote before loyalty decisions.
+- Reservation create/commit/release for rewards or stock-sensitive items.
 - Sale sync.
 - Return sync.
 - Inventory events.

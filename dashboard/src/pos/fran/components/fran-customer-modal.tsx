@@ -289,7 +289,9 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{member.name}</span>
-                  <Badge variant="outline" className={tierBadgeClass(member.tier)}>{member.tier}</Badge>
+                  <Badge variant="outline" className={tierBadgeClass(member.tier)}>
+                    {tierLabel(member.tier, member.tierLabel)}
+                  </Badge>
                   {member.tourist && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
@@ -393,4 +395,8 @@ function tierBadgeClass(tier: FranCounterTier) {
     default:
       return ''
   }
+}
+
+function tierLabel(tier: FranCounterTier, label?: string | null) {
+  return label || tier
 }

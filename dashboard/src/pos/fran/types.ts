@@ -1,13 +1,106 @@
 import type { Customer } from '@/pos/data/mock'
+import type { SkumsPosAvailabilitySnapshot, SkumsPosBasketQuote } from '@pos/shared'
 
 export type FranMemberLookupMethod = 'qr' | 'barcode' | 'member_number' | 'mobile' | 'manual'
 export type FranCounterSessionMode = 'member' | 'non_member' | 'tourist'
-export type FranMembershipTier = 'Base' | 'Silver' | 'Gold'
+export type FranMembershipTier = string
 export type FranCounterTier = FranMembershipTier | 'Tourist'
 export type FranEarnPolicyBasis = 'pre_discount' | 'post_discount'
-export type FranEarnMultiplierKind = 'tier' | 'birthday' | 'campaign'
+export type FranEarnRoundingMode = 'floor' | 'round' | 'ceil'
+export type FranEarnMultiplierKind = 'tier' | 'birthday' | 'campaign' | 'category' | 'check_in'
 export type FranActivePerkKind = 'free_sample_threshold' | 'birthday_discount' | 'tier_specific_offer'
 export type FranLoyaltySyncStatus = 'online' | 'queued' | 'unavailable'
+export type FranPolicyCacheStatus = 'fresh' | 'stale' | 'offline_fallback'
+
+export interface FranPolicyCacheMeta {
+  status: FranPolicyCacheStatus
+  cacheKey: string
+  cachedAt: string
+  staleAt: string
+}
+
+export interface FranPolicyTier {
+  key: string
+  label: string
+  annualSpendThreshold: number
+  earnMultiplier: number
+  sortOrder: number
+}
+
+export interface FranCategoryBonusRule {
+  ruleId: string
+  category: string
+  label: string
+  multiplier: number
+  minimumSpend: number
+}
+
+export interface FranCampaignBonusRule {
+  ruleId: string
+  code: string
+  label: string
+  multiplier: number
+  minimumSpend: number
+  skuPrefixes: string[]
+}
+
+export interface FranLoyaltyPolicyReward {
+  id: string
+  name: string
+  description: string
+  valueType: FranRewardCatalogueValueType
+  pointsCost: number
+  value: number
+  valueLabel: string
+  expiresAt: string | null
+  eligibleTierKeys?: string[]
+  requiresLiveStock?: boolean
+  restrictedFlags?: string[]
+}
+
+export interface FranLoyaltyPolicyBundle {
+  workspaceId: string
+  programKey: string
+  policyVersionId: string
+  assignmentId: string
+  label: string
+  currency: string
+  activeFrom: string
+  publishedAt: string
+  allowedTtlSeconds: number
+  cache: FranPolicyCacheMeta
+  earn: {
+    basis: FranEarnPolicyBasis
+    pointsPerCurrencyUnit: number
+    rounding: FranEarnRoundingMode
+    minimumEligibleAmount: number
+    excludedRestrictedFlags: string[]
+  }
+  tiers: FranPolicyTier[]
+  redemption: {
+    minimumPoints: number
+    maximumPointsPerBasket: number | null
+    pointsToCurrencyRate: number
+    requiresLiveQuote: boolean
+  }
+  bonuses: {
+    birthdayMultiplier: number
+    checkInPoints: number
+    categoryMultipliers: FranCategoryBonusRule[]
+    campaignMultipliers: FranCampaignBonusRule[]
+  }
+  expiry: {
+    lookaheadDays: number
+    defaultMonths: number
+  }
+  rewards: FranLoyaltyPolicyReward[]
+  warnings: string[]
+}
+
+export interface FranActivePolicyInput {
+  workspaceId: string
+  programKey: string
+}
 
 export interface FranMemberResolutionInput {
   raw: string
@@ -22,7 +115,9 @@ export interface FranCounterMember {
   phone: string
   email: string | null
   tier: FranCounterTier
+  tierLabel?: string | null
   pointsBalance: number
+  trailingTwelveMonthSpend?: number | null
   memberSince: string | null
   birthday: string | null
   birthdayMonth: number | null
@@ -84,12 +179,25 @@ export interface FranPointsExpiryAlert {
 
 export interface FranBasketLineInput {
   lineId: string
+  skumsProductId?: string | null
+  skumsVariantId?: string | null
   sku: string
+  barcode?: string | null
   name: string
   quantity: number
   unitPrice: number
+  listPrice?: number | null
   lineTotal: number
   lineKind?: string | null
+  quoteLineId?: string | null
+  priceRevisionId?: string | null
+  category?: string | null
+  brand?: string | null
+  collection?: string | null
+  rewardEligible?: boolean
+  sampleEligible?: boolean
+  restrictedFlags?: string[]
+  availability?: SkumsPosAvailabilitySnapshot | null
 }
 
 export interface FranSkumsCartInput {
@@ -109,7 +217,9 @@ export interface FranBasketPreviewInput {
 
 export interface FranTierProgress {
   currentTier: FranMembershipTier
+  currentTierLabel: string
   nextTier: FranMembershipTier | null
+  nextTierLabel: string | null
   measurementWindow: 'trailing_12_months'
   windowStart: string
   windowEnd: string
@@ -181,7 +291,10 @@ export interface FranEarnProjection {
   policy: {
     basis: FranEarnPolicyBasis
     pointsPerCurrencyUnit: number
+    rounding: FranEarnRoundingMode
     currency: string
+    policyVersionId?: string
+    assignmentId?: string
   }
   baseAmount: number
   subtotal: number
@@ -193,10 +306,43 @@ export interface FranEarnProjection {
   calculatedAt: string
 }
 
+export interface FranEvaluationTraceRule {
+  ruleId: string
+  type: 'earn' | 'tier' | 'redemption' | 'reward' | 'bonus' | 'expiry'
+  label: string
+  inputs: Record<string, unknown>
+  output: Record<string, unknown>
+  rounding?: FranEarnRoundingMode | null
+  blockedReason?: string | null
+}
+
+export interface FranEvaluationTrace {
+  traceId: string
+  policyVersionId: string
+  assignmentId: string
+  skumsQuoteId: string
+  evaluatedAt: string
+  rules: FranEvaluationTraceRule[]
+  blockedReasons: string[]
+  warnings: string[]
+  final: {
+    earnPoints: number
+    projectedPointsBalance: number | null
+    rewardDecisionCount: number
+    redemptionEligible: boolean
+  }
+}
+
 export interface FranBasketPreview {
   previewId: string
   sessionId: string
   memberId: string | null
+  policyVersionId?: string | null
+  assignmentId?: string | null
+  skumsQuoteId?: string | null
+  skumsQuote?: SkumsPosBasketQuote | null
+  policyCacheStatus?: FranPolicyCacheStatus | null
+  evaluationTrace?: FranEvaluationTrace | null
   earnPoints: number
   projectedPointsBalance: number | null
   earnProjection: FranEarnProjection
