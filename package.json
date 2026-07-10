@@ -8,11 +8,24 @@
   "scripts": {
     "dev": "npm run dev --workspace=dashboard",
     "build": "npm run build --workspace=dashboard",
+    "build:web": "npm run build --workspace=dashboard",
+    "build:android:sync": "npm run build:web && npx cap sync android",
+    "build:apk:debug": "npm run build:android:sync && npm run android:assemble:debug",
+    "build:apk:release": "npm run build:android:sync && npm run android:assemble:release",
+    "android:assemble:debug": "node scripts/android-gradle.mjs assembleDebug",
+    "android:assemble:release": "node scripts/android-gradle.mjs assembleRelease",
+    "android:open": "npx cap open android",
+    "cap:sync": "npx cap sync android",
     "test": "node --test tests/*.test.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:migrate:status": "node scripts/migrate.mjs --status"
   },
   "dependencies": {
     "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1"
   }
 }

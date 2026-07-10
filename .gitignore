@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Root dist/ holds published Android APKs (and any future non-web artifacts)
+# dashboard/dist is the Vite web build (also covered by dist/ above via nested path patterns as needed)
 .env
 .env.local
 .env.*.local
@@ -10,3 +12,22 @@ dist/
 .vercel
 .claude/
 supabase/.temp/
+
+# Capacitor / Android — keep the native project; ignore local/build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/capacitor-cordova-android-plugins/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.jks
+*.keystore
+!android/app/debug.keystore
