@@ -213,7 +213,8 @@ export async function submitSkumsStoreReceive(
   connector?: SkumsConnectorConfig,
 ) {
   const config = configOrThrow(connector)
-  const res = await fetch(`${config.apiUrl}/api/store-ops/receive`, {
+  // Prefer Fran route; falls back path is same body contract
+  const res = await fetch(`${config.apiUrl}/fran/store-ops/receive`, {
     method: 'POST',
     headers: headers(config),
     body: JSON.stringify(input),
