@@ -5,6 +5,8 @@ import {
   RefreshCcw,
   Truck,
   Boxes,
+  ClipboardList,
+  PackageCheck,
   Receipt,
   BarChart3,
   LockKeyhole,
@@ -16,7 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePos } from '@/pos/lib/pos-context'
-import { STORE } from '@/pos/data/mock'
+import { getActiveStore } from '@/pos/lib/pos-store-config'
 import { useAuth } from '@/providers/auth-provider'
 
 const navItems = [
@@ -24,6 +26,8 @@ const navItems = [
   { to: '/pos/returns', icon: RefreshCcw, label: 'Returns & Exchange' },
   { to: '/pos/transfers', icon: Truck, label: 'Transfers' },
   { to: '/pos/stock', icon: Boxes, label: 'Stock' },
+  { to: '/pos/request-stock', icon: ClipboardList, label: 'Request stock' },
+  { to: '/pos/receive', icon: PackageCheck, label: 'Receive' },
   { to: '/pos/transactions', icon: Receipt, label: 'Transactions' },
   { to: '/pos/reports', icon: BarChart3, label: 'Reports & Closing' },
 ]
@@ -74,7 +78,7 @@ export function PosShell() {
             <ShoppingBag className="h-4 w-4" />
           </div>
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-sm font-semibold">{STORE.name}</p>
+            <p className="truncate text-sm font-semibold">{getActiveStore().name}</p>
             {(company || (accountUser && mode === 'demo')) && (
               <p className="truncate text-xs font-medium text-foreground">{company?.name ?? 'Account demo'}</p>
             )}
@@ -127,7 +131,7 @@ export function PosShell() {
           >
             <div className="flex items-center justify-between border-b px-3 py-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{STORE.name}</p>
+                <p className="truncate text-sm font-semibold">{getActiveStore().name}</p>
                 <p className="text-xs text-muted-foreground">Register navigation</p>
               </div>
               <button

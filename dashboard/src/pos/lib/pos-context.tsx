@@ -11,7 +11,8 @@ import {
 } from '@/pos/data/mock'
 import type { SkumsGraphRefs } from '@pos/shared'
 import type { FranSaleContext } from '@/pos/fran/types'
-import { buildSkumsSaleIdempotencyKey, POS_REGISTER_CODE } from './skums-sale-adapter'
+import { buildSkumsSaleIdempotencyKey, getPosRegisterCode } from './skums-sale-adapter'
+import { getActiveStore } from './pos-store-config'
 
 export type PosMode = 'demo' | 'live'
 
@@ -471,7 +472,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const completeSale = (options: CompleteSaleOptions = {}): CompletedSale => {
     const completedAt = new Date()
     const completedAtIso = completedAt.toISOString()
-    const receiptNo = `${STORE.code}-${String(receiptCounter).padStart(6, '0')}`
+    const receiptNo = `${getActiveStore().code}-${String(receiptCounter).padStart(6, '0')}`
     const isExchange = cart.some((l) => l.qty < 0)
     const idempotencyKey = buildSkumsSaleIdempotencyKey({ receiptNo, completedAtIso })
     const sale: CompletedSale = {
@@ -492,8 +493,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
       completedAtIso,
       voidedAtIso: null,
       voidReason: null,
-      storeCode: STORE.code,
-      registerCode: POS_REGISTER_CODE,
+      storeCode: getActiveStore().code,
+      registerCode: getPosRegisterCode(),
       idempotencyKey,
       skumsSync: {
         status: 'not_required',

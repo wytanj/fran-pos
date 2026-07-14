@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/providers/auth-provider'
 import { listSkumsPosCatalog } from '@/pos/lib/skums-client'
+import { getActiveStore } from '@/pos/lib/pos-store-config'
 import { SKUMS_CONNECTOR_MISSING_MESSAGE } from '@/pos/lib/skums-connector'
 import { loadSkumsConnectorForCompany } from '@/hooks/use-skums-connector'
 import type { Product, SkumsGraphRefs, SkumsPosCatalogItem } from '@pos/shared'
@@ -148,7 +149,13 @@ export function useImportSkumsCatalog() {
       }
 
       while (hasMore) {
-        const response = await listSkumsPosCatalog({ limit: pageSize, offset }, connector)
+        const store = getActiveStore()
+        const response = await listSkumsPosCatalog({
+          limit: pageSize,
+          offset,
+          pos_location_code: store.code,
+          location_id: store.inventoryLocationId,
+        }, connector)
         const rows: ProductInput[] = []
 
         for (const item of response.data.filter((entry) => entry.pos_enabled && entry.status === 'active')) {

@@ -26,6 +26,8 @@ import TransfersPage from '@/pos/pages/transfers'
 import StockPage from '@/pos/pages/stock'
 import TransactionsPage from '@/pos/pages/transactions'
 import ReportsPage from '@/pos/pages/reports'
+import RequestStockPage from '@/pos/pages/request-stock'
+import ReceiveDeliveryPage from '@/pos/pages/receive-delivery'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -57,6 +59,8 @@ export const router = createBrowserRouter([
           { path: 'returns', element: <ReturnsPage /> },
           { path: 'transfers', element: <TransfersPage /> },
           { path: 'stock', element: <StockPage /> },
+          { path: 'request-stock', element: <RequestStockPage /> },
+          { path: 'receive', element: <ReceiveDeliveryPage /> },
           { path: 'transactions', element: <TransactionsPage /> },
           { path: 'reports', element: <ReportsPage /> },
         ],

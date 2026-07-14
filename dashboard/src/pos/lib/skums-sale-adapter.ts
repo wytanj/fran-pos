@@ -1,8 +1,13 @@
 import type { SkumsPosSaleInput } from '@pos/shared'
 import type { CompletedSale } from '@/pos/lib/pos-context'
-import { STORE } from '@/pos/data/mock'
+import { getActiveStore } from '@/pos/lib/pos-store-config'
 
-export const POS_REGISTER_CODE = `${STORE.code}-REG-01`
+export function getPosRegisterCode() {
+  return `${getActiveStore().code}-REG-01`
+}
+
+/** @deprecated use getPosRegisterCode() — kept for import stability */
+export const POS_REGISTER_CODE = `${getActiveStore().code}-REG-01`
 
 function keyPart(value: string | null | undefined) {
   return (value || 'unknown')
@@ -13,21 +18,23 @@ function keyPart(value: string | null | undefined) {
 }
 
 export function buildSkumsSaleIdempotencyKey(sale: Pick<CompletedSale, 'receiptNo' | 'completedAtIso'>) {
+  const store = getActiveStore()
   return [
     'vantage-pos-sale',
-    keyPart(STORE.code),
-    keyPart(POS_REGISTER_CODE),
+    keyPart(store.code),
+    keyPart(getPosRegisterCode()),
     keyPart(sale.receiptNo),
     keyPart(sale.completedAtIso),
   ].join(':')
 }
 
 export function toSkumsPosSaleInput(sale: CompletedSale): SkumsPosSaleInput {
+  const store = getActiveStore()
   const idempotencyKey = sale.idempotencyKey || buildSkumsSaleIdempotencyKey(sale)
 
   return {
-    location_id: STORE.inventoryLocationId,
-    register_id: POS_REGISTER_CODE,
+    location_id: store.inventoryLocationId,
+    register_id: getPosRegisterCode(),
     receipt_number: sale.receiptNo,
     sale_type: sale.isExchange ? 'exchange' : 'sale',
     status: 'completed',
@@ -131,13 +138,13 @@ export function toSkumsPosSaleInput(sale: CompletedSale): SkumsPosSaleInput {
           }
         : null,
       store: {
-        id: STORE.id,
-        code: STORE.code,
-        name: STORE.name,
-        inventory_location_id: STORE.inventoryLocationId,
+        id: store.id,
+        code: store.code,
+        name: store.name,
+        inventory_location_id: store.inventoryLocationId,
       },
       register: {
-        code: POS_REGISTER_CODE,
+        code: getPosRegisterCode(),
       },
     },
   }

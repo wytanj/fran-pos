@@ -1,4 +1,5 @@
-import { STORE, type StoreDestination } from '@/pos/data/mock'
+import type { StoreDestination } from '@/pos/data/mock'
+import { getActiveStore } from '@/pos/lib/pos-store-config'
 import type { SkumsGraphRefs, SkumsPosInventoryEventInput, SkumsPosInventoryEventType } from '@pos/shared'
 
 export type StockInboundReason = 'supplier_delivery' | 'manual_count' | 'transfer_receipt' | 'opening_balance' | 'adjustment'
@@ -70,7 +71,7 @@ export interface PosInventoryEventInput {
 }
 
 export function createStockInboundPayload(input: StockInboundInput): StockInboundPayload {
-  const store = input.store ?? STORE
+  const store = input.store ?? getActiveStore()
   const occurredAt = input.occurredAt ?? new Date().toISOString()
 
   return {
@@ -105,7 +106,7 @@ export function createStockInboundPayload(input: StockInboundInput): StockInboun
 }
 
 export function createPosInventoryEventPayload(input: PosInventoryEventInput): SkumsPosInventoryEventInput {
-  const store = input.store ?? STORE
+  const store = input.store ?? getActiveStore()
   const occurredAt = input.occurredAt ?? new Date().toISOString()
 
   return {

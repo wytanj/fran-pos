@@ -72,6 +72,9 @@ export async function listSkumsPosCatalog(params: {
   limit?: number;
   offset?: number;
   include_disabled?: boolean;
+  /** Store-scoped ATS from SKUMS inventory_levels (TODO-LOFT A.4) */
+  pos_location_code?: string;
+  location_id?: string;
 } = {}, connector?: SkumsConnectorConfig) {
   const config = configOrThrow(connector)
   const qs = new URLSearchParams()
@@ -80,6 +83,8 @@ export async function listSkumsPosCatalog(params: {
   if (cappedLimit !== undefined) qs.set('limit', String(cappedLimit))
   if (params.offset !== undefined) qs.set('offset', String(params.offset))
   if (params.include_disabled !== undefined) qs.set('include_disabled', String(params.include_disabled))
+  if (params.pos_location_code) qs.set('pos_location_code', params.pos_location_code)
+  if (params.location_id) qs.set('location_id', params.location_id)
 
   const query = qs.toString()
   const url = `${config.apiUrl}/api/v1/pos/catalog${query ? `?${query}` : ''}`
@@ -152,6 +157,127 @@ export async function releaseSkumsPosReservation(
   })
   if (!res.ok) throw await skumsError(res)
   return (await res.json()) as SkumsPosReservationResponse
+}
+
+/** Expected deliveries for this store (Phase C receive list). */
+export async function listSkumsExpectedDeliveries(
+  params: { pos_location_code?: string; location_id?: string; workspace_id?: string } = {},
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  const qs = new URLSearchParams()
+  if (params.workspace_id) qs.set('workspace_id', params.workspace_id)
+  if (params.pos_location_code) qs.set('pos_location_code', params.pos_location_code)
+  if (params.location_id) qs.set('location_id', params.location_id)
+  const res = await fetch(
+    `${config.apiUrl}/api/store-ops/expected-deliveries?${qs.toString()}`,
+    { headers: headers(config) },
+  )
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as {
+    data: Array<{
+      id: string
+      order_number: string
+      status: string
+      delivery_mode?: string | null
+      lines: Array<{
+        id: string
+        sku: string
+        expected_qty: number
+        product_id?: string | null
+      }>
+    }>
+  }
+}
+
+/** Submit store receive (good qty + exception report to HQ). */
+export async function submitSkumsStoreReceive(
+  input: {
+    order_id: string
+    idempotency_key: string
+    pos_location_code?: string
+    received_by_ref?: string
+    collector_name?: string
+    collector_note?: string
+    lines: Array<{
+      sku: string
+      expected_qty: number
+      received_qty: number
+      damaged_qty?: number
+      exception_type?: string | null
+      note?: string | null
+      replenishment_order_line_id?: string | null
+      product_id?: string | null
+    }>
+  },
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  const res = await fetch(`${config.apiUrl}/api/store-ops/receive`, {
+    method: 'POST',
+    headers: headers(config),
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as {
+    ok: boolean
+    message?: string
+    order_status?: string
+    exceptions?: unknown[]
+    applied?: unknown[]
+    duplicate?: boolean
+  }
+}
+
+/** Signal-only store replenishment request (HQ inbox — never Loft). */
+export async function createSkumsStoreReplenishmentRequest(
+  input: {
+    idempotency_key: string
+    priority?: string
+    reason?: string
+    needed_by?: string
+    pos_location_code?: string
+    store_location_id?: string
+    inventory_location_id?: string
+    lines: Array<{ sku: string; requested_qty: number; reason?: string }>
+  },
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  const res = await fetch(`${config.apiUrl}/fran/store-ops/requests`, {
+    method: 'POST',
+    headers: headers(config),
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as {
+    data: {
+      request: Record<string, unknown>
+      lines: unknown[]
+      notification_id?: string | null
+      hq_status?: string
+      message?: string
+    }
+  }
+}
+
+export async function listSkumsStoreReplenishmentRequests(
+  params: { workspace_id?: string; status?: string; limit?: number } = {},
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  // workspace is implied by API key; optional filters only
+  const qs = new URLSearchParams()
+  if (params.workspace_id) qs.set('workspace_id', params.workspace_id)
+  if (params.status) qs.set('status', params.status)
+  if (params.limit) qs.set('limit', String(params.limit))
+  // POS list requires workspace_id on SKUMS — callers pass company mapping if known
+  const res = await fetch(
+    `${config.apiUrl}/api/store-ops/requests?${qs.toString()}`,
+    { headers: headers(config) },
+  )
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as { data: unknown[] }
 }
 
 export async function createSkumsPosSale(input: SkumsPosSaleInput, connector?: SkumsConnectorConfig) {
