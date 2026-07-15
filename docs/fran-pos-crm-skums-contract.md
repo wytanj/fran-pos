@@ -8,6 +8,8 @@ Fran CRM owns customer identity, counter-safe member profile, active loyalty pol
 
 SKUMS owns product identity, POS-enabled catalog, stock availability, cart valuation, price revisions, sale sync, return sync, inventory events, and fulfillment/store-ops handoff.
 
+**Inventory / store-ops structure for POS engineers (post Loft P–F):** see [`docs/SKUMS_INVENTORY_STRUCTURE_HANDOFF.md`](./SKUMS_INVENTORY_STRUCTURE_HANDOFF.md).
+
 ## Runtime Shape
 
 The first build uses `dashboard/src/pos/fran/mock-crm.ts` through `dashboard/src/pos/fran/lib/fran-crm-client.ts`. The live execution path loads a CRM policy bundle, asks SKUMS for a basket quote, and runs `dashboard/src/pos/fran/lib/fran-policy-evaluator.ts` locally in the POS. The sale page does not iframe CRM screens and does not author loyalty policy.
