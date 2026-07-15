@@ -165,8 +165,13 @@ function isExpectedZxingScanMiss(error: unknown) {
 }
 
 function cameraScanErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Camera scanner failed. Continue with the scanner input.'
+  return error instanceof Error ? error.message : 'Camera scanner failed. Continue with the product entry field.'
 }
+
+/** Pause re-accept while the cart processes a hit, then keep the stream open. */
+const CAMERA_RESCAN_COOLDOWN_MS = 1200
+/** Ignore the same code still held in frame after it was accepted. */
+const CAMERA_SAME_CODE_DEBOUNCE_MS = 2500
 
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.005) return formatCurrency(0, STORE.currency)
@@ -409,7 +414,9 @@ export default function SalePage() {
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraStatus, setCameraStatus] = useState<CameraScanStatus>('idle')
-  const [cameraMessage, setCameraMessage] = useState('Open the camera and hold a UPC, SKU barcode, or QR in frame.')
+  const [cameraMessage, setCameraMessage] = useState(
+    'Open the camera — scanning stays on and the first recognized barcode or QR is added automatically.'
+  )
   const [cameraLastValue, setCameraLastValue] = useState<string | null>(null)
   const [saleSync, setSaleSync] = useState<PosSaleSyncState | null>(null)
   const [pendingSaleWrites, setPendingSaleWrites] = useState(0)
@@ -421,8 +428,11 @@ export default function SalePage() {
   const cameraStreamRef = useRef<MediaStream | null>(null)
   const cameraFrameRef = useRef<number | null>(null)
   const cameraScanTimeoutRef = useRef<number | null>(null)
+  const cameraCooldownRef = useRef<number | null>(null)
   const cameraScannerControlsRef = useRef<CameraScannerControls | null>(null)
-  const cameraDetectedRef = useRef(false)
+  /** True while accepting a code or during the short post-accept cooldown. */
+  const cameraBusyRef = useRef(false)
+  const cameraLastAcceptedRef = useRef<{ value: string; at: number } | null>(null)
   const cameraSubmitRef = useRef<(value: string) => Promise<void>>(async () => {})
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
     if (typeof window === 'undefined') return 'grid'
@@ -845,10 +855,15 @@ export default function SalePage() {
       window.clearTimeout(cameraScanTimeoutRef.current)
       cameraScanTimeoutRef.current = null
     }
+    if (cameraCooldownRef.current != null) {
+      window.clearTimeout(cameraCooldownRef.current)
+      cameraCooldownRef.current = null
+    }
     if (cameraFrameRef.current != null) {
       window.cancelAnimationFrame(cameraFrameRef.current)
       cameraFrameRef.current = null
     }
+    cameraBusyRef.current = false
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
     cameraStreamRef.current = null
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
@@ -989,7 +1004,8 @@ export default function SalePage() {
     }
 
     let cancelled = false
-    cameraDetectedRef.current = false
+    cameraBusyRef.current = false
+    cameraLastAcceptedRef.current = null
     setCameraStatus('starting')
     setCameraLastValue(null)
     setCameraMessage('Requesting camera access...')
@@ -1004,7 +1020,7 @@ export default function SalePage() {
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setCameraStatus('unsupported')
-        setCameraMessage('This browser cannot request camera access. Continue with the scanner input.')
+        setCameraMessage('This browser cannot request camera access. Use the product entry field instead.')
         return
       }
 
@@ -1053,40 +1069,76 @@ export default function SalePage() {
         setCameraStatus('scanning')
         setCameraMessage(
           detector
-            ? 'Hold the UPC, SKU barcode, or QR steady in frame.'
-            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback.'
+            ? 'Scanning stays on. The first recognized barcode or QR is added automatically.'
+            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback — first recognized code is added automatically.'
         )
 
+        const scheduleRescan = () => {
+          if (cameraCooldownRef.current != null) {
+            window.clearTimeout(cameraCooldownRef.current)
+            cameraCooldownRef.current = null
+          }
+          cameraCooldownRef.current = window.setTimeout(() => {
+            cameraCooldownRef.current = null
+            if (cancelled) return
+            cameraBusyRef.current = false
+            setCameraStatus('scanning')
+            setCameraMessage('Scanning for the next barcode or QR...')
+          }, CAMERA_RESCAN_COOLDOWN_MS)
+        }
+
         const handleDetectedValue = async (value: string) => {
-          if (cancelled || cameraDetectedRef.current) return
-          cameraDetectedRef.current = true
-          setCameraLastValue(value)
+          const normalized = value.trim()
+          if (!normalized || cancelled || cameraBusyRef.current) return
+
+          const last = cameraLastAcceptedRef.current
+          const now = Date.now()
+          if (last && last.value === normalized && now - last.at < CAMERA_SAME_CODE_DEBOUNCE_MS) {
+            return
+          }
+
+          cameraBusyRef.current = true
+          setCameraLastValue(normalized)
           setCameraStatus('detected')
-          setCameraMessage(`Detected ${value}. Adding to cart...`)
-          await cameraSubmitRef.current(value)
-          if (!cancelled) setCameraOpen(false)
+          setCameraMessage(`Detected ${normalized}. Adding to cart...`)
+
+          try {
+            await cameraSubmitRef.current(normalized)
+            cameraLastAcceptedRef.current = { value: normalized, at: Date.now() }
+            if (!cancelled) {
+              setCameraMessage(`Accepted ${normalized}. Keep scanning for the next item.`)
+            }
+          } catch (err) {
+            if (!cancelled) {
+              setCameraStatus('error')
+              setCameraMessage(cameraScanErrorMessage(err))
+            }
+          }
+
+          if (!cancelled) scheduleRescan()
         }
 
         if (detector) {
           const scanFrame = async () => {
-            if (cancelled || cameraDetectedRef.current) return
+            if (cancelled) return
             const activeVideo = cameraVideoRef.current
-            if (activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            if (!cameraBusyRef.current && activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
               try {
                 const codes = await detector.detect(activeVideo)
                 const value = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim()
                 if (value) {
-                  await handleDetectedValue(value)
-                  return
+                  void handleDetectedValue(value)
                 }
               } catch (err) {
-                cameraDetectedRef.current = true
-                setCameraStatus('error')
-                setCameraMessage(cameraScanErrorMessage(err))
-                return
+                if (!cancelled) {
+                  setCameraStatus('error')
+                  setCameraMessage(cameraScanErrorMessage(err))
+                }
               }
             }
-            cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+            if (!cancelled) {
+              cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
+            }
           }
 
           cameraFrameRef.current = window.requestAnimationFrame(() => { void scanFrame() })
@@ -1109,29 +1161,30 @@ export default function SalePage() {
         cameraScannerControlsRef.current = { stop: stopCompatibleScanner }
 
         const scanCompatibleFrame = () => {
-          if (cancelled || cameraDetectedRef.current || compatibleScannerStopped) return
+          if (cancelled || compatibleScannerStopped) return
           const activeVideo = cameraVideoRef.current
-          if (activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          if (!cameraBusyRef.current && activeVideo && activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
             for (const reader of readers) {
               try {
                 const value = reader.decode(activeVideo).getText().trim()
                 if (value) {
-                  stopCompatibleScanner()
                   void handleDetectedValue(value)
-                  return
+                  break
                 }
               } catch (err) {
                 if (!isExpectedZxingScanMiss(err)) {
-                  stopCompatibleScanner()
-                  cameraDetectedRef.current = true
-                  setCameraStatus('error')
-                  setCameraMessage(cameraScanErrorMessage(err))
-                  return
+                  if (!cancelled) {
+                    setCameraStatus('error')
+                    setCameraMessage(cameraScanErrorMessage(err))
+                  }
+                  // Keep the loop alive for transient decode failures.
+                  break
                 }
               }
             }
           }
 
+          if (cancelled || compatibleScannerStopped) return
           cameraScanTimeoutRef.current = window.setTimeout(() => {
             cameraFrameRef.current = window.requestAnimationFrame(scanCompatibleFrame)
           }, 120)
@@ -1665,7 +1718,7 @@ export default function SalePage() {
                       : cameraStatus === 'scanning'
                         ? 'Scanning'
                         : cameraStatus === 'detected'
-                          ? 'Detected'
+                          ? 'Accepted'
                           : cameraStatus === 'unsupported'
                             ? 'Unsupported'
                             : cameraStatus === 'error'
@@ -1681,10 +1734,6 @@ export default function SalePage() {
                 <Button type="button" variant="outline" size="sm" onClick={() => setCameraOpen(false)}>
                   <X className="h-4 w-4" />
                   Close camera
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={focusProductEntry}>
-                  <ScanLine className="h-4 w-4" />
-                  Use input
                 </Button>
               </div>
             </div>
