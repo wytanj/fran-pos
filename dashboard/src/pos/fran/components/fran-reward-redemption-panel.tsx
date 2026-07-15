@@ -19,6 +19,10 @@ interface FranRewardRedemptionPanelProps {
   quote: FranRewardQuote | null
   appliedReward: FranAppliedReward | null
   quoteLoading: boolean
+  previewLoading?: boolean
+  previewError?: string | null
+  hasSession?: boolean
+  hasSaleItems?: boolean
   onQuote: (reward: FranRewardDecision, pointsToRedeem?: number) => void
   onConfirmQuote: () => void
   onClearReward: () => void
@@ -58,6 +62,10 @@ export function FranRewardRedemptionPanel({
   quote,
   appliedReward,
   quoteLoading,
+  previewLoading = false,
+  previewError = null,
+  hasSession = false,
+  hasSaleItems = false,
   onQuote,
   onConfirmQuote,
   onClearReward,
@@ -127,6 +135,44 @@ export function FranRewardRedemptionPanel({
   }, [basketTotal, pointsInput, pointsOffer])
 
   if (!preview) {
+    if (previewLoading) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          Loading earn and rewards preview...
+        </div>
+      )
+    }
+    if (previewError) {
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium">Earn and rewards preview unavailable</p>
+              <p className="mt-0.5 text-xs text-amber-800">{previewError}</p>
+              {!hasSaleItems && (
+                <p className="mt-1 text-xs text-amber-800">Add products to the cart, then open member details again.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )
+    }
+    if (hasSession && !hasSaleItems) {
+      return (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          Member resolved. Add products to the cart to preview earn and rewards.
+        </div>
+      )
+    }
+    if (hasSession) {
+      return (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          Member resolved. Earn and rewards preview will appear shortly.
+        </div>
+      )
+    }
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
         Add products, then resolve member / non-member / tourist to preview earn and rewards.

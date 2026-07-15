@@ -47,6 +47,7 @@ import { FranCustomerModal } from '@/pos/fran/components/fran-customer-modal'
 import { FranMemberStrip } from '@/pos/fran/components/fran-member-strip'
 import { FranRewardRedemptionPanel } from '@/pos/fran/components/fran-reward-redemption-panel'
 import { createFranCrmClient } from '@/pos/fran/lib/fran-crm-client'
+import { mockPreviewBasket } from '@/pos/fran/mock-crm'
 import { evaluateFranPolicy } from '@/pos/fran/lib/fran-policy-evaluator'
 import type {
   FranAppliedReward,
@@ -381,7 +382,11 @@ export default function SalePage() {
     completeSale,
     updateLastSale,
   } = pos
-  const franCrm = useMemo(() => createFranCrmClient(), [])
+  // Demo register always uses mock Fran CRM so earn/rewards preview works without a live CRM URL.
+  const franCrm = useMemo(
+    () => createFranCrmClient(mode === 'demo' ? { mode: 'mock' } : undefined),
+    [mode]
+  )
 
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
@@ -508,73 +513,73 @@ export default function SalePage() {
     setFranPreviewLoading(true)
     setFranPreviewError(null)
 
-    async function loadFranPreview() {
-      if (mode === 'live') {
-        if (!skumsConnector) {
-          throw new Error('Live Fran loyalty requires a SKUMS basket quote before earn or reward decisions.')
-        }
-        if (!activeFranSession.member || activeFranSession.member.tourist || skumsBasketQuoteLines.length === 0) {
-          return franCrm.previewBasket({
-            session: activeFranSession,
-            cart: {
-              cartId: franBasketKey,
-              lines: franBasketLines,
-              subtotal: franBasketTotals.subtotal,
-              discountTotal: franBasketTotals.discountTotal,
-              total: franBasketTotals.total,
-              currency: STORE.currency,
-              updatedAt: new Date().toISOString(),
-            },
-          })
-        }
+    const cartPreviewInput = {
+      session: activeFranSession,
+      cart: {
+        cartId: franBasketKey,
+        lines: franBasketLines,
+        subtotal: franBasketTotals.subtotal,
+        discountTotal: franBasketTotals.discountTotal,
+        total: franBasketTotals.total,
+        currency: STORE.currency,
+        updatedAt: new Date().toISOString(),
+      },
+    }
 
-        const workspaceId = company?.id ?? 'demo'
-        const programKey = 'fran-v2'
-        const quotedAt = new Date().toISOString()
-        const quoteInput: SkumsPosBasketQuoteInput = {
-          cart_id: franBasketKey,
-          location_id: STORE.inventoryLocationId,
-          register_id: POS_REGISTER_CODE,
-          register_session_id: pos.user?.sessionId ?? null,
-          customer_ref: activeFranSession.member.crmCustomerId,
-          currency: STORE.currency,
-          subtotal: franBasketTotals.subtotal,
-          discount_total: franBasketTotals.discountTotal,
-          total: franBasketTotals.total,
-          idempotency_key: `fran-pos-basket-quote:${activeFranSession.sessionId}:${lightweightHash(franBasketKey)}`,
-          quoted_at: quotedAt,
-          lines: skumsBasketQuoteLines,
-          metadata: {
-            workspace_id: workspaceId,
-            program_key: programKey,
-            member_id: activeFranSession.member.id,
-            crm_customer_id: activeFranSession.member.crmCustomerId,
-          },
+    async function loadFranPreview() {
+      // Preferred live path: SKUMS basket quote + active Fran policy evaluation.
+      if (
+        mode === 'live' &&
+        skumsConnector &&
+        activeFranSession.member &&
+        !activeFranSession.member.tourist &&
+        skumsBasketQuoteLines.length > 0
+      ) {
+        try {
+          const workspaceId = company?.id ?? 'demo'
+          const programKey = 'fran-v2'
+          const quotedAt = new Date().toISOString()
+          const quoteInput: SkumsPosBasketQuoteInput = {
+            cart_id: franBasketKey,
+            location_id: STORE.inventoryLocationId,
+            register_id: POS_REGISTER_CODE,
+            register_session_id: pos.user?.sessionId ?? null,
+            customer_ref: activeFranSession.member.crmCustomerId,
+            currency: STORE.currency,
+            subtotal: franBasketTotals.subtotal,
+            discount_total: franBasketTotals.discountTotal,
+            total: franBasketTotals.total,
+            idempotency_key: `fran-pos-basket-quote:${activeFranSession.sessionId}:${lightweightHash(franBasketKey)}`,
+            quoted_at: quotedAt,
+            lines: skumsBasketQuoteLines,
+            metadata: {
+              workspace_id: workspaceId,
+              program_key: programKey,
+              member_id: activeFranSession.member.id,
+              crm_customer_id: activeFranSession.member.crmCustomerId,
+            },
+          }
+          const [policyBundle, quoteResponse] = await Promise.all([
+            franCrm.getActivePolicy({ workspaceId, programKey }),
+            quoteSkumsPosBasket(quoteInput, skumsConnector),
+          ])
+          return evaluateFranPolicy({
+            policyBundle,
+            quote: quoteResponse.data,
+            session: activeFranSession,
+            calculatedAt: quotedAt,
+          })
+        } catch {
+          // Fall through to Fran basket preview (mock or live CRM).
         }
-        const [policyBundle, quoteResponse] = await Promise.all([
-          franCrm.getActivePolicy({ workspaceId, programKey }),
-          quoteSkumsPosBasket(quoteInput, skumsConnector),
-        ])
-        return evaluateFranPolicy({
-          policyBundle,
-          quote: quoteResponse.data,
-          session: activeFranSession,
-          calculatedAt: quotedAt,
-        })
       }
 
-      return franCrm.previewBasket({
-        session: activeFranSession,
-        cart: {
-          cartId: franBasketKey,
-          lines: franBasketLines,
-          subtotal: franBasketTotals.subtotal,
-          discountTotal: franBasketTotals.discountTotal,
-          total: franBasketTotals.total,
-          currency: STORE.currency,
-          updatedAt: new Date().toISOString(),
-        },
-      })
+      try {
+        return await franCrm.previewBasket(cartPreviewInput)
+      } catch {
+        // Last-resort demo-safe preview so the rewards panel is never blank after member resolve.
+        return mockPreviewBasket(cartPreviewInput)
+      }
     }
 
     loadFranPreview()
@@ -621,7 +626,7 @@ export default function SalePage() {
               : 'Fran CRM offline. Sale can continue; points earn will queue on payment.'
           )
           setFranLoyaltySync(
-            franSession.member && !franSession.member.tourist && mode !== 'live'
+            franSession.member && !franSession.member.tourist
               ? {
                   status: 'queued',
                   pointsEarnQueued: provisionalFranEarnPoints,
@@ -2029,6 +2034,10 @@ export default function SalePage() {
                   quote={franQuote}
                   appliedReward={franAppliedReward}
                   quoteLoading={franQuoteLoading}
+                  previewLoading={franPreviewLoading}
+                  previewError={franPreviewError}
+                  hasSession={Boolean(franSession)}
+                  hasSaleItems={franBasketLines.length > 0}
                   onQuote={(reward, pointsToRedeem) => { void quoteFranReward(reward, pointsToRedeem) }}
                   onConfirmQuote={confirmFranRewardQuote}
                   onClearReward={clearFranReward}
