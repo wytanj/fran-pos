@@ -129,7 +129,7 @@ export function FranRewardRedemptionPanel({
   if (!preview) {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-        Add products and resolve a Fran sale mode to preview earn and rewards.
+        Add products, then resolve member / non-member / tourist to preview earn and rewards.
       </div>
     )
   }

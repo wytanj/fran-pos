@@ -1250,7 +1250,26 @@ export default function SalePage() {
     setFranPreviewError(null)
     setFranLoyaltySync(null)
     setFranMemberDialogOpen(false)
+    setFranCustomerOpen(false)
     setCustomer(null)
+  }
+
+  /** Reset register after a completed sale (or explicit New Sale). Cart must not retain prior lines. */
+  const startNewSale = () => {
+    clearSale()
+    clearFranSession()
+    setFranQuote(null)
+    setFranAppliedReward(null)
+    setFranRewardBasketKey(null)
+    setBasketLabel('')
+    setBasketNotice(null)
+    setScanMessage(null)
+    setSearch('')
+    setPromoDismissed(false)
+    setPaymentOpen(false)
+    setCompletedOpen(false)
+    setSaleSync(null)
+    focusProductEntry()
   }
 
   const handleClearBasket = () => {
@@ -1524,17 +1543,15 @@ export default function SalePage() {
           refreshPendingSaleWrites()
         })
       }
-      setPaymentOpen(false)
-      setCompletedOpen(true)
-      setFranSession(null)
-      setFranPreview(null)
+      // completeSale already emptied the cart; clear Fran counter state for the next transaction.
+      clearFranSession()
       setFranQuote(null)
       setFranAppliedReward(null)
       setFranRewardBasketKey(null)
-      setFranLoyaltySync(null)
-      setFranPreviewError(null)
-      setFranCustomerOpen(false)
-      setFranMemberDialogOpen(false)
+      setBasketLabel('')
+      setSearch('')
+      setPaymentOpen(false)
+      setCompletedOpen(true)
     } catch (err) {
       if (saleReward?.status === 'committed') {
         const reversed = await reverseCommittedFranReward(saleReward, nextReceiptNo, 'payment_failed')
@@ -2103,7 +2120,7 @@ export default function SalePage() {
         voidingSale={voidingSale}
         onRetrySkumsSync={() => { void retryQueuedSaleWrites() }}
         onVoidSale={() => { void handleVoidCompletedSale() }}
-        onNewSale={() => setCompletedOpen(false)}
+        onNewSale={startNewSale}
       />
 
       <Dialog open={scanChoices.length > 0} onOpenChange={(open) => !open && setScanChoices([])}>

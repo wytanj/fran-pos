@@ -109,6 +109,11 @@ test('Fran sale page requires explicit member or exception and commits rewards a
   assert.match(salePage, /addAdjustmentLine/)
   assert.match(salePage, /commitRewardRedemption/)
   assert.match(salePage, /onComplete=\{\(\) => \{ void completePaidSale\(\) \}\}/)
+  assert.match(salePage, /const startNewSale = \(\) => \{/)
+  assert.match(salePage, /onNewSale=\{startNewSale\}/)
+  assert.match(salePage, /clearFranSession\(\)/)
+  assert.match(posContext, /saleSnapshotRef/)
+  assert.match(posContext, /snapshot\.cart\.map/)
 })
 
 test('Fran identity tagging supports pre-completion retagging without stale rewards', () => {

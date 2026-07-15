@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   TAX_RATE,
   POINTS_PER_DOLLAR,
@@ -389,6 +389,103 @@ export function PosProvider({ children }: { children: ReactNode }) {
 
   const removePayment = (id: string) => setPayments((prev) => prev.filter((p) => p.id !== id))
 
+  const clearSale = useCallback(() => {
+    setCart([])
+    setCartPriceOverride(null)
+    setCustomer(null)
+    setSalesType('normal')
+    setPayments([])
+  }, [])
+
+  const totals = useMemo<Totals>(() => {
+    let subtotal = 0
+    let discountTotal = 0
+    let itemCount = 0
+    for (const l of cart) {
+      const gross = l.unitPrice * l.qty
+      subtotal += gross
+      discountTotal += lineDiscountImpact(l)
+      itemCount += l.qty
+    }
+    subtotal = roundCurrency(subtotal)
+    discountTotal = roundCurrency(discountTotal)
+    const baseNet = roundCurrency(subtotal - discountTotal)
+    const cartAdjustment = cartPriceOverride ? roundCurrency(cartPriceOverride.targetTotal - baseNet) : 0
+    const net = roundCurrency(baseNet + cartAdjustment)
+    // GST is inclusive: extract the tax component for display.
+    const taxIncluded = net - net / (1 + TAX_RATE)
+    const paid = payments.reduce((s, p) => s + p.amount, 0)
+    const total = net
+    const balance = total - paid
+    const pointsEarned = net > 0 ? Math.floor(net * POINTS_PER_DOLLAR) : 0
+    return { subtotal, discountTotal, cartAdjustment, taxIncluded, total, paid, balance, itemCount, pointsEarned }
+  }, [cart, cartPriceOverride, payments])
+
+  // Always read the latest register state so payment completion cannot capture a stale cart.
+  const saleSnapshotRef = useRef({
+    cart,
+    cartPriceOverride,
+    customer,
+    salesType,
+    payments,
+    totals,
+    user,
+    receiptCounter,
+  })
+  saleSnapshotRef.current = {
+    cart,
+    cartPriceOverride,
+    customer,
+    salesType,
+    payments,
+    totals,
+    user,
+    receiptCounter,
+  }
+
+  const completeSale = useCallback((options: CompleteSaleOptions = {}): CompletedSale => {
+    const snapshot = saleSnapshotRef.current
+    const completedAt = new Date()
+    const completedAtIso = completedAt.toISOString()
+    const receiptNo = `${getActiveStore().code}-${String(snapshot.receiptCounter).padStart(6, '0')}`
+    const isExchange = snapshot.cart.some((l) => l.qty < 0)
+    const idempotencyKey = buildSkumsSaleIdempotencyKey({ receiptNo, completedAtIso })
+    const sale: CompletedSale = {
+      receiptNo,
+      saleStatus: 'completed',
+      lines: snapshot.cart.map((line) => ({ ...line })),
+      cartPriceOverride: snapshot.cartPriceOverride,
+      customer: snapshot.customer,
+      salesType: snapshot.salesType,
+      payments: snapshot.payments.map((payment) => ({ ...payment })),
+      subtotal: snapshot.totals.subtotal,
+      discountTotal: snapshot.totals.discountTotal,
+      tax: snapshot.totals.taxIncluded,
+      total: snapshot.totals.total,
+      pointsEarned: options.pointsEarned ?? snapshot.totals.pointsEarned,
+      cashier: snapshot.user?.name ?? 'Demo Cashier',
+      timestamp: completedAt.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }),
+      completedAtIso,
+      voidedAtIso: null,
+      voidReason: null,
+      storeCode: getActiveStore().code,
+      registerCode: getPosRegisterCode(),
+      idempotencyKey,
+      skumsSync: {
+        status: 'not_required',
+        idempotencyKey,
+        updatedAt: completedAtIso,
+      },
+      isExchange,
+      fran: options.fran ?? null,
+    }
+    setLastSale(sale)
+    setReceiptCounter((c) => c + 1)
+    // Clear cart / tenders immediately so the next sale starts empty (member, non-member, or tourist).
+    clearSale()
+    return sale
+  }, [clearSale])
+
   const saveBasket = (label?: string) => {
     if (cart.length === 0) return null
     const basket: SavedBasket = {
@@ -434,79 +531,6 @@ export function PosProvider({ children }: { children: ReactNode }) {
       writeSavedBaskets(mode, next)
       return next
     })
-  }
-
-  const clearSale = () => {
-    setCart([])
-    setCartPriceOverride(null)
-    setCustomer(null)
-    setSalesType('normal')
-    setPayments([])
-  }
-
-  const totals = useMemo<Totals>(() => {
-    let subtotal = 0
-    let discountTotal = 0
-    let itemCount = 0
-    for (const l of cart) {
-      const gross = l.unitPrice * l.qty
-      subtotal += gross
-      discountTotal += lineDiscountImpact(l)
-      itemCount += l.qty
-    }
-    subtotal = roundCurrency(subtotal)
-    discountTotal = roundCurrency(discountTotal)
-    const baseNet = roundCurrency(subtotal - discountTotal)
-    const cartAdjustment = cartPriceOverride ? roundCurrency(cartPriceOverride.targetTotal - baseNet) : 0
-    const net = roundCurrency(baseNet + cartAdjustment)
-    // GST is inclusive: extract the tax component for display.
-    const taxIncluded = net - net / (1 + TAX_RATE)
-    const paid = payments.reduce((s, p) => s + p.amount, 0)
-    const total = net
-    const balance = total - paid
-    const pointsEarned = net > 0 ? Math.floor(net * POINTS_PER_DOLLAR) : 0
-    return { subtotal, discountTotal, cartAdjustment, taxIncluded, total, paid, balance, itemCount, pointsEarned }
-  }, [cart, cartPriceOverride, payments])
-
-  const completeSale = (options: CompleteSaleOptions = {}): CompletedSale => {
-    const completedAt = new Date()
-    const completedAtIso = completedAt.toISOString()
-    const receiptNo = `${getActiveStore().code}-${String(receiptCounter).padStart(6, '0')}`
-    const isExchange = cart.some((l) => l.qty < 0)
-    const idempotencyKey = buildSkumsSaleIdempotencyKey({ receiptNo, completedAtIso })
-    const sale: CompletedSale = {
-      receiptNo,
-      saleStatus: 'completed',
-      lines: cart,
-      cartPriceOverride,
-      customer,
-      salesType,
-      payments,
-      subtotal: totals.subtotal,
-      discountTotal: totals.discountTotal,
-      tax: totals.taxIncluded,
-      total: totals.total,
-      pointsEarned: options.pointsEarned ?? totals.pointsEarned,
-      cashier: user?.name ?? 'Demo Cashier',
-      timestamp: completedAt.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }),
-      completedAtIso,
-      voidedAtIso: null,
-      voidReason: null,
-      storeCode: getActiveStore().code,
-      registerCode: getPosRegisterCode(),
-      idempotencyKey,
-      skumsSync: {
-        status: 'not_required',
-        idempotencyKey,
-        updatedAt: completedAtIso,
-      },
-      isExchange,
-      fran: options.fran ?? null,
-    }
-    setLastSale(sale)
-    setReceiptCounter((c) => c + 1)
-    clearSale()
-    return sale
   }
 
   const value: PosState = {
