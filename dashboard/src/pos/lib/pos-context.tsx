@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import {
-  STORE,
   TAX_RATE,
   POINTS_PER_DOLLAR,
   storeLocationCodeForSku,

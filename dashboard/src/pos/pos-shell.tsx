@@ -83,7 +83,7 @@ export function PosShell() {
               <p className="truncate text-xs font-medium text-foreground">{company?.name ?? 'Account demo'}</p>
             )}
             <p className="truncate text-xs text-muted-foreground">
-              Store {STORE.code} · Register 01
+              Store {getActiveStore().code} · Register 01
             </p>
           </div>
         </div>
