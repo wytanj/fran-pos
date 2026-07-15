@@ -2,11 +2,11 @@
  * Store replenishment REQUEST (signal only).
  * TODO-LOFT B.5 — never calls Loft; HQ reviews Mon/Thu wave vs lift.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, Plus, Send, Trash2 } from 'lucide-react'
 import { usePos } from '@/pos/lib/pos-context'
 import { canRequestReplenishment, getActiveStore } from '@/pos/lib/pos-store-config'
-import { createSkumsStoreReplenishmentRequest } from '@/pos/lib/skums-client'
+import { createSkumsStoreReplenishmentRequest, fetchSkumsNextWave } from '@/pos/lib/skums-client'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
 import { PRODUCTS } from '@/pos/data/mock'
 
@@ -27,8 +27,41 @@ export default function RequestStockPage() {
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [waveHint, setWaveHint] = useState<string | null>(null)
 
   const catalog = useMemo(() => PRODUCTS.slice(0, 40), [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadWave() {
+      if (mode === 'demo' || !skumsConnector) {
+        setWaveHint('Next scheduled replenishment: Monday / Thursday (demo cadence). Ad-hoc requests are for lift/urgent only.')
+        return
+      }
+      try {
+        const next = await fetchSkumsNextWave(
+          {
+            pos_location_code: store.code,
+            inventory_location_id: store.inventoryLocationId || undefined,
+          },
+          skumsConnector,
+        )
+        if (!cancelled) {
+          setWaveHint(next.message || (next.next_wave
+            ? `Next scheduled replenishment: ${next.next_wave.weekday_label} ${next.next_wave.wave_date}`
+            : next.cadence
+              ? `Default cadence: ${next.cadence}`
+              : null))
+        }
+      } catch {
+        if (!cancelled) {
+          setWaveHint('Next scheduled replenishment: Monday / Thursday (could not load live wave).')
+        }
+      }
+    }
+    void loadWave()
+    return () => { cancelled = true }
+  }, [mode, skumsConnector, store.code, store.inventoryLocationId])
 
   function addLine() {
     const sku = skuInput.trim().toUpperCase()
@@ -142,6 +175,11 @@ export default function RequestStockPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             Store: <span className="font-medium text-foreground">{store.code}</span> · {store.name}
           </p>
+          {waveHint && (
+            <p className="mt-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-900 dark:text-sky-100">
+              {waveHint}
+            </p>
+          )}
         </div>
       </div>
 

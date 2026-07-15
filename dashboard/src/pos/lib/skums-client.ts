@@ -230,6 +230,33 @@ export async function submitSkumsStoreReceive(
   }
 }
 
+/** Next Mon/Thu (or workspace) wave for POS request form copy. */
+export async function fetchSkumsNextWave(
+  params: { pos_location_code?: string; inventory_location_id?: string } = {},
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  const qs = new URLSearchParams()
+  if (params.pos_location_code) qs.set('pos_location_code', params.pos_location_code)
+  if (params.inventory_location_id) qs.set('inventory_location_id', params.inventory_location_id)
+  const res = await fetch(`${config.apiUrl}/fran/store-ops/next-wave?${qs.toString()}`, {
+    method: 'GET',
+    headers: headers(config),
+  })
+  if (!res.ok) throw await skumsError(res)
+  return (await res.json()) as {
+    cadence?: string
+    message?: string
+    next_wave?: {
+      wave_date: string
+      weekday_label: string
+      open_for_defer?: boolean
+      cutoff_at?: string
+    } | null
+    upcoming_waves?: unknown[]
+  }
+}
+
 /** Signal-only store replenishment request (HQ inbox — never Loft). */
 export async function createSkumsStoreReplenishmentRequest(
   input: {
