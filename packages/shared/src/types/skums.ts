@@ -261,6 +261,7 @@ export interface SkumsPosPaymentInput {
 
 export type SkumsPosInventoryEventType =
   | 'inventory.damage.reported'
+  | 'inventory.cycle_count.reported'
   | 'inventory.found_stock.reported'
   | 'inventory.transfer_receive.reported';
 

@@ -3,7 +3,7 @@ import { getActiveStore } from '@/pos/lib/pos-store-config'
 import type { SkumsGraphRefs, SkumsPosInventoryEventInput, SkumsPosInventoryEventType } from '@pos/shared'
 
 export type StockInboundReason = 'supplier_delivery' | 'manual_count' | 'transfer_receipt' | 'opening_balance' | 'adjustment'
-export type PosFloorInventoryAction = 'damage' | 'found_stock'
+export type PosFloorInventoryAction = 'damage' | 'found_stock' | 'cycle_count'
 
 export interface StockMovementProduct extends Partial<SkumsGraphRefs> {
   id: string

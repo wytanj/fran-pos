@@ -3,7 +3,11 @@ export type OrderStatus = 'draft' | 'completed' | 'refunded' | 'voided';
 export type BusinessType = 'retail' | 'restaurant';
 export type PaymentMethodType = 'cash' | 'card' | 'digital' | 'square_pos' | 'other';
 export type PosStaffSourceProvider = 'manual' | 'rippling' | 'shopify' | 'custom';
-export type PosInventoryEventType = 'inventory.damage.reported' | 'inventory.found_stock.reported' | 'inventory.transfer_receive.reported';
+export type PosInventoryEventType =
+  | 'inventory.damage.reported'
+  | 'inventory.found_stock.reported'
+  | 'inventory.transfer_receive.reported'
+  | 'inventory.cycle_count.reported';
 export type PosInventoryEventStatus = 'queued' | 'sent' | 'synced' | 'pending_approval' | 'failed';
 export type PosReturnRequestedAction = 'refund' | 'exchange' | 'store_credit' | 'either';
 export type PosReturnAllowedAction = 'refund' | 'exchange' | 'store_credit';

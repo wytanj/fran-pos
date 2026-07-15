@@ -79,6 +79,7 @@ const INBOUND_REASONS: { value: StockInboundReason; label: string }[] = [
 const FLOOR_ACTIONS: { value: PosFloorInventoryAction; label: string; eventType: SkumsPosInventoryEventInput['event_type'] }[] = [
   { value: 'damage', label: 'Damage / impair', eventType: 'inventory.damage.reported' },
   { value: 'found_stock', label: 'Found stock', eventType: 'inventory.found_stock.reported' },
+  { value: 'cycle_count', label: 'Cycle count (physical qty)', eventType: 'inventory.cycle_count.reported' },
 ]
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -466,7 +467,12 @@ export default function StockPage() {
       }
 
       if (!liveEnabled) {
-        const delta = floorAction === 'found_stock' ? inboundQty : -inboundQty
+        const delta =
+          floorAction === 'found_stock'
+            ? inboundQty
+            : floorAction === 'cycle_count'
+              ? inboundQty - selectedProduct.qtyOnHand
+              : -inboundQty
         nextQty = Math.max(0, selectedProduct.qtyOnHand + delta)
         setDemoAdjustments((prev) => ({
           ...prev,
@@ -477,7 +483,7 @@ export default function StockPage() {
       setNote('')
       flash(
         liveEnabled
-          ? `${selectedFloorAction.label} reported to SKUMS for ${skumsStatus(response) === 'applied' ? 'ledger update' : 'approval'}`
+          ? `${selectedFloorAction.label} reported to SKUMS for ${skumsStatus(response) === 'applied' ? 'ledger update' : 'HQ approval (no stock change until applied)'}`
           : `${selectedFloorAction.label} recorded - demo on hand is now ${nextQty.toLocaleString()}`
       )
     } catch (err) {
@@ -537,9 +543,15 @@ export default function StockPage() {
           <div className="flex items-center gap-2">
             <PackagePlus className="h-5 w-5 text-primary" />
             <div>
-              <p className="font-semibold">Stock inbound</p>
-              <p className="text-xs text-muted-foreground">Destination is locked to {STORE.name} ({STORE.code}).</p>
+              <p className="font-semibold">Floor stock tools</p>
+              <p className="text-xs text-muted-foreground">
+                Display cache for {STORE.name} ({STORE.code}). Canonical stock is SKUMS ledger only.
+              </p>
             </div>
+          </div>
+          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+            Loft / HQ deliveries: use <span className="font-semibold">Receive delivery</span> — not free-form receive.
+            Damage, found, and cycle count report to SKUMS for approval before ledger apply.
           </div>
 
           <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -583,7 +595,9 @@ export default function StockPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Quantity received</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  {floorAction === 'cycle_count' ? 'Physical counted qty' : 'Quantity'}
+                </label>
                 <Input className="mt-1" type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
               </div>
               <div>
@@ -629,8 +643,10 @@ export default function StockPage() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <div>
-                  <p className="text-sm font-semibold">Floor exception</p>
-                  <p className="text-xs text-muted-foreground">Damage and found stock are sent to SKUMS as approval-ready inventory events.</p>
+                  <p className="text-sm font-semibold">Floor report (SKUMS approve → ledger)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Damage, found, and cycle count never change sellable stock until SKUMS applies the adjustment.
+                  </p>
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -676,22 +692,29 @@ export default function StockPage() {
             {selectedProduct && (
               <div className="rounded-md border bg-secondary/60 p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Projected on hand</span>
+                  <span className="text-muted-foreground">Display on hand (cache)</span>
                   <span className="font-semibold tabular-nums">
-                    {selectedProduct.qtyOnHand.toLocaleString()} {'->'} {(selectedProduct.qtyOnHand + inboundQty).toLocaleString()}
+                    {selectedProduct.qtyOnHand.toLocaleString()}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Movement will be marked pending for inventory_management_system and SKUMS sync.
+                  Free-form “receive stock” no longer applies the SKUMS ledger. Use Receive delivery for Loft, or floor reports above for HQ approval.
                 </p>
               </div>
             )}
 
             {error && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
-            <Button className="w-full" type="button" onClick={() => { void submitInbound() }} disabled={submitting || isLoading}>
+            <Button
+              className="w-full"
+              type="button"
+              variant="outline"
+              onClick={() => { void submitInbound() }}
+              disabled={submitting || isLoading || liveEnabled}
+              title={liveEnabled ? 'Disabled in live mode — use Receive delivery or floor reports' : 'Demo-only local display adjust'}
+            >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
-              Receive stock
+              {liveEnabled ? 'Receive stock (use Receive delivery)' : 'Demo receive (display only)'}
             </Button>
           </div>
         </section>
