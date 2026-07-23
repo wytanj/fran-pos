@@ -188,13 +188,23 @@ async function getActivePolicy(endpointUrl: string, input: FranActivePolicyInput
   const params = new URLSearchParams({
     workspaceId: input.workspaceId,
     programKey: input.programKey,
+    // L-base: CRM returns POS FranLoyaltyPolicyBundle when format=pos
+    format: 'pos',
   })
 
   try {
-    const bundle = await getJson<FranLoyaltyPolicyBundle>(
+    const raw = await getJson<FranLoyaltyPolicyBundle & { posPolicyBundle?: FranLoyaltyPolicyBundle }>(
       endpointUrl,
       `/api/fran/loyalty/policy-versions/active?${params.toString()}`
     )
+    // Support both root POS shape and CRM envelope with posPolicyBundle
+    const bundle =
+      raw && typeof raw === 'object' && 'posPolicyBundle' in raw && raw.posPolicyBundle
+        ? raw.posPolicyBundle
+        : (raw as FranLoyaltyPolicyBundle)
+    if (!bundle?.policyVersionId) {
+      throw new Error('Fran CRM active policy missing policyVersionId')
+    }
     return writePolicyCache(input, bundle)
   } catch (error) {
     const cached = readPolicyCache(input)
