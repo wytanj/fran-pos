@@ -1378,7 +1378,7 @@ export default function SalePage() {
     if (!preview || !session || !member || member.tourist) return
 
     const pointsRedeemed = appliedReward?.quote.pointsCost ?? 0
-    const redeemDiscountAmount = appliedReward?.quote.value ?? 0
+    const redeemDiscountAmount = appliedReward?.quote.amount ?? 0
     const idempotencyKey = `fran:${sale.receiptNo}:loyalty-execution:${preview.policyVersionId ?? preview.previewId}`
 
     // L-pos: commit_sale to CRM ledger (earn + redeem) — non-blocking; outbox is replay-safe.
