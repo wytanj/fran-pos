@@ -28,16 +28,26 @@ import type {
   FranTierProgress,
 } from './types'
 
+/** FWB PDF tiers F1/F2/F3 — calendar-year thresholds $500 / $1,250 */
 const tierThresholds = [
-  { tier: 'Base', label: 'Base', annualSpend: 0, earnMultiplier: 1 },
-  { tier: 'Silver', label: 'Silver', annualSpend: 600, earnMultiplier: 1.25 },
-  { tier: 'Gold', label: 'Gold', annualSpend: 1500, earnMultiplier: 1.5 },
+  { tier: 'F1', label: 'Tier 1', annualSpend: 0, earnMultiplier: 1 },
+  { tier: 'F2', label: 'Tier 2', annualSpend: 500, earnMultiplier: 1.25 },
+  { tier: 'F3', label: 'Tier 3', annualSpend: 1250, earnMultiplier: 1.5 },
 ] satisfies Array<{ tier: FranMembershipTier; label: string; annualSpend: number; earnMultiplier: number }>
 
-const rollingSpendByMemberId: Record<string, number> = {
-  'fran-member-001': 1450,
-  'fran-member-002': 420,
+const calendarYtdSpendByMemberId: Record<string, number> = {
+  'fran-member-001': 620,
+  'fran-member-002': 180,
 }
+
+/** FWB PDF §3 fixed redemption dens */
+const fwbRedeemDens = [
+  { points: 200, discount: 6 },
+  { points: 500, discount: 20 },
+  { points: 1000, discount: 50 },
+  { points: 1500, discount: 90 },
+  { points: 2500, discount: 175 },
+]
 
 const earnPolicy: { basis: FranEarnPolicyBasis; pointsPerCurrencyUnit: number } = {
   basis: 'post_discount',
@@ -45,8 +55,8 @@ const earnPolicy: { basis: FranEarnPolicyBasis; pointsPerCurrencyUnit: number } 
 }
 
 const pointsRedemptionPolicy = {
-  minimumPoints: 500,
-  pointsToCurrencyRate: 0.01,
+  minimumPoints: 200,
+  pointsToCurrencyRate: 0.03,
 }
 
 const pointsExpiryPolicy = {
@@ -143,8 +153,11 @@ export const FRAN_MOCK_MEMBERS: FranCounterMember[] = [
     name: 'Mei Lin Koh',
     phone: '+65 9123 4567',
     email: 'meilin.koh@example.com',
-    tier: 'Silver',
+    tier: 'F2',
+    tierLabel: 'Tier 2',
     pointsBalance: 2480,
+    calendarYtdSpend: 620,
+    trailingTwelveMonthSpend: 620,
     memberSince: '2024-03-18',
     birthday: '1991-07-18',
     birthdayMonth: 7,
@@ -161,8 +174,11 @@ export const FRAN_MOCK_MEMBERS: FranCounterMember[] = [
     name: 'Alicia Tan',
     phone: '+65 9876 5432',
     email: 'alicia.tan@example.com',
-    tier: 'Base',
+    tier: 'F1',
+    tierLabel: 'Tier 1',
     pointsBalance: 840,
+    calendarYtdSpend: 180,
+    trailingTwelveMonthSpend: 180,
     memberSince: '2025-01-09',
     birthday: '1996-11-03',
     birthdayMonth: 11,
@@ -216,7 +232,7 @@ export function mockActivePolicyBundle(input: { workspaceId?: string; programKey
     programKey,
     policyVersionId,
     assignmentId,
-    label: 'Fran v2.1 demo loyalty policy',
+    label: "Fran's With Benefits (FWB) demo policy",
     currency: 'SGD',
     activeFrom: '2026-01-01T00:00:00+08:00',
     publishedAt: '2026-01-01T00:00:00+08:00',
@@ -246,29 +262,24 @@ export function mockActivePolicyBundle(input: { workspaceId?: string; programKey
       maximumPointsPerBasket: null,
       pointsToCurrencyRate: pointsRedemptionPolicy.pointsToCurrencyRate,
       requiresLiveQuote: true,
+      fixedDenominations: fwbRedeemDens.map((d) => ({ ...d })),
     },
     bonuses: {
       birthdayMultiplier: 2,
       checkInPoints: 0,
+      // Demo: auto-apply category when spend met (voucher optional in mock)
+      birthdayRequiresVoucher: false,
+      categoryRequiresVoucher: false,
       categoryMultipliers: [
         {
-          ruleId: 'category-skincare-100',
+          ruleId: 'category-skincare-bonus',
           category: 'Skincare',
-          label: 'Skincare category bonus',
-          multiplier: 1.5,
-          minimumSpend: 100,
+          label: 'Category bonus (FWB +1.00)',
+          multiplier: 2,
+          minimumSpend: 0,
         },
       ],
-      campaignMultipliers: [
-        {
-          ruleId: 'campaign-skn-basket-100',
-          code: 'skincare-basket-100',
-          label: 'Skincare campaign',
-          multiplier: 1.5,
-          minimumSpend: 100,
-          skuPrefixes: ['SKN-'],
-        },
-      ],
+      campaignMultipliers: [],
     },
     expiry: {
       lookaheadDays: pointsExpiryPolicy.lookaheadDays,
@@ -302,18 +313,16 @@ function sessionId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`
 }
 
-function trailingWindowDates() {
-  const end = new Date()
-  const start = new Date(end)
-  start.setFullYear(start.getFullYear() - 1)
+function calendarYearWindowDates() {
+  const year = new Date().getFullYear()
   return {
-    windowStart: start.toISOString(),
-    windowEnd: end.toISOString(),
+    windowStart: new Date(Date.UTC(year, 0, 1)).toISOString(),
+    windowEnd: new Date(Date.UTC(year, 11, 31, 23, 59, 59)).toISOString(),
   }
 }
 
 function currentWindowSpendFor(member: FranCounterMember) {
-  return rollingSpendByMemberId[member.id] ?? 0
+  return calendarYtdSpendByMemberId[member.id] ?? member.calendarYtdSpend ?? member.trailingTwelveMonthSpend ?? 0
 }
 
 function tierProgress(member: FranCounterMember, basketTotal: number, currency: string): FranTierProgress | null {
@@ -321,7 +330,7 @@ function tierProgress(member: FranCounterMember, basketTotal: number, currency: 
   const currentIndex = tierThresholds.findIndex((item) => item.tier === member.tier)
   const currentTier = tierThresholds[Math.max(currentIndex, 0)] ?? tierThresholds[0]
   const next = tierThresholds[Math.max(currentIndex, 0) + 1] ?? null
-  const { windowStart, windowEnd } = trailingWindowDates()
+  const { windowStart, windowEnd } = calendarYearWindowDates()
   const currentWindowSpend = currentWindowSpendFor(member)
   const transactionValue = roundCurrency(Math.max(basketTotal, 0))
   const projectedWindowSpend = roundCurrency(currentWindowSpend + transactionValue)
@@ -331,7 +340,7 @@ function tierProgress(member: FranCounterMember, basketTotal: number, currency: 
       currentTierLabel: currentTier.label,
       nextTier: null,
       nextTierLabel: null,
-      measurementWindow: 'trailing_12_months',
+      measurementWindow: 'calendar_year',
       windowStart,
       windowEnd,
       currency,
@@ -357,7 +366,7 @@ function tierProgress(member: FranCounterMember, basketTotal: number, currency: 
     currentTierLabel: currentTier.label,
     nextTier: next.tier,
     nextTierLabel: next.label,
-    measurementWindow: 'trailing_12_months',
+    measurementWindow: 'calendar_year',
     windowStart,
     windowEnd,
     currency,
@@ -371,7 +380,7 @@ function tierProgress(member: FranCounterMember, basketTotal: number, currency: 
     crossesTierThreshold,
     progressPercent,
     upgradeAlert: crossesTierThreshold
-      ? `This transaction brings ${member.name} to ${next.tier} based on trailing 12-month spend.`
+      ? `This transaction brings ${member.name} to ${next.label} based on FWB calendar-year spend.`
       : null,
   }
 }
@@ -381,8 +390,9 @@ function roundCurrency(value: number) {
 }
 
 function tierEarnMultiplier(member: FranCounterMember) {
-  if (member.tier === 'Gold') return 1.5
-  if (member.tier === 'Silver') return 1.25
+  const key = String(member.tier || '').toUpperCase()
+  if (key === 'F3' || key === 'GOLD') return 1.5
+  if (key === 'F2' || key === 'SILVER') return 1.25
   return 1
 }
 
@@ -390,14 +400,17 @@ function buildEarnMultipliers(input: FranBasketPreviewInput, member: FranCounter
   const cart = input.cart
   const currentMonth = new Date().getMonth() + 1
   const birthdayApplies = member.birthdayMonth === currentMonth
-  const hasCampaignSku = cart.lines.some((line) => line.sku.startsWith('SKN-'))
-  const campaignApplies = hasCampaignSku && cart.total >= 100
+  const hasSkincare = cart.lines.some(
+    (line) =>
+      String(line.category || '').toLowerCase() === 'skincare' || line.sku.startsWith('SKN-'),
+  )
+  const categoryApplies = hasSkincare
 
   return [
     {
       kind: 'tier',
       code: `tier-${member.tier.toLowerCase()}`,
-      label: `${member.tier} tier`,
+      label: `${member.tierLabel ?? member.tier} tier rate`,
       multiplier: tierEarnMultiplier(member),
       applied: true,
       reason: null,
@@ -405,22 +418,18 @@ function buildEarnMultipliers(input: FranBasketPreviewInput, member: FranCounter
     {
       kind: 'birthday',
       code: 'birthday-month',
-      label: 'Birthday month',
-      multiplier: birthdayApplies ? 2 : 1,
+      label: 'Birthday bonus (+1.00)',
+      multiplier: birthdayApplies ? 1 : 0,
       applied: birthdayApplies,
       reason: birthdayApplies ? null : 'Not birthday month.',
     },
     {
-      kind: 'campaign',
-      code: 'skincare-basket-100',
-      label: 'Skincare campaign',
-      multiplier: campaignApplies ? 1.5 : 1,
-      applied: campaignApplies,
-      reason: campaignApplies
-        ? null
-        : hasCampaignSku
-          ? 'Skincare basket must be at least SGD 100.'
-          : 'No campaign product in basket.',
+      kind: 'category',
+      code: 'category-skincare-bonus',
+      label: 'Category bonus (+1.00)',
+      multiplier: categoryApplies ? 1 : 0,
+      applied: categoryApplies,
+      reason: categoryApplies ? null : 'No category-bonus product in basket.',
     },
   ]
 }
@@ -436,10 +445,11 @@ function buildEarnProjection(input: FranBasketPreviewInput): FranEarnProjection 
     ? earnPolicy.basis === 'pre_discount' ? subtotal : totalAfterDiscount
     : 0
   const multipliers = canEarn && member ? buildEarnMultipliers(input, member) : []
-  const totalMultiplier = multipliers.reduce(
-    (product, multiplier) => product * (multiplier.applied ? multiplier.multiplier : 1),
-    1
-  )
+  // FWB additive: tier + birthday + category (not product)
+  const tierRate = multipliers.find((m) => m.kind === 'tier' && m.applied)?.multiplier ?? 1
+  const birthdayAdd = multipliers.find((m) => m.kind === 'birthday' && m.applied)?.multiplier ?? 0
+  const categoryAdd = multipliers.find((m) => m.kind === 'category' && m.applied)?.multiplier ?? 0
+  const totalMultiplier = canEarn ? tierRate + birthdayAdd + categoryAdd : 0
   const projectedEarnPoints = canEarn
     ? Math.floor(baseAmount * earnPolicy.pointsPerCurrencyUnit * totalMultiplier)
     : 0
@@ -470,22 +480,30 @@ function buildPointsRedemptionOffer(
   if (!member || member.tourist) return null
 
   const availablePoints = Math.max(0, member.pointsBalance)
-  const minimumPoints = pointsRedemptionPolicy.minimumPoints
-  const pointsToCurrencyRate = pointsRedemptionPolicy.pointsToCurrencyRate
-  const eligible = availablePoints >= minimumPoints
+  const options = fwbRedeemDens
+    .filter((d) => availablePoints >= d.points)
+    .map((d) => ({
+      points: d.points,
+      discount: d.discount,
+      conversionPerPoint: d.discount / d.points,
+    }))
+  const best = options[options.length - 1] ?? null
+  const minimumPoints = fwbRedeemDens[0].points
+  const eligible = Boolean(best)
 
   return {
     availablePoints,
     minimumPoints,
-    maximumPoints: availablePoints,
-    pointsToCurrencyRate,
-    availableValue: roundCurrency(availablePoints * pointsToCurrencyRate),
-    minimumValue: roundCurrency(minimumPoints * pointsToCurrencyRate),
+    maximumPoints: best?.points ?? 0,
+    pointsToCurrencyRate: best ? best.conversionPerPoint : pointsRedemptionPolicy.pointsToCurrencyRate,
+    availableValue: best ? roundCurrency(best.discount) : 0,
+    minimumValue: roundCurrency(fwbRedeemDens[0].discount),
     currency,
     eligible,
     reason: eligible
       ? null
-      : `Member needs at least ${minimumPoints.toLocaleString()} points to redeem.`,
+      : `Member needs at least ${minimumPoints.toLocaleString()} points (FWB fixed dens).`,
+    fixedDenominations: options,
   }
 }
 
@@ -523,26 +541,26 @@ function rewardsFor(member: FranCounterMember | null, basketTotal: number, curre
   const rewardCap = Math.max(0, basketTotal - 1)
   const month = new Date().getMonth() + 1
   const birthdayValue = Math.min(15, rewardCap)
-  const hasTierReward = ['Silver', 'Gold'].includes(member.tier)
+  const hasTierReward = ['F2', 'F3', 'Silver', 'Gold'].includes(member.tier)
   const pointsOffer = buildPointsRedemptionOffer(member, currency)
 
   return [
     {
       id: 'fran-points-redemption',
       title: 'Points redemption',
-      description: 'Cashier-selected partial points redemption. Customer confirmation required.',
+      description: 'FWB fixed dens (200 / 500 / 1000 / 1500 / 2500). Customer confirmation required.',
       kind: 'points_redemption',
       value: pointsOffer?.availableValue ?? 0,
-      pointsCost: 0,
+      pointsCost: pointsOffer?.maximumPoints ?? 0,
       expiresAt: addMinutes(10),
       eligible: Boolean(pointsOffer?.eligible),
       reason: pointsOffer?.reason ?? 'Member is not eligible for points redemption.',
       requiresConfirmation: true,
     },
     {
-      id: 'fran-silver-10',
-      title: ['Silver', 'Gold'].includes(member.tier) ? `${member.tier} tier reward` : 'Silver tier reward',
-      description: 'CRM-approved reward for Silver and Gold members.',
+      id: 'fran-tier-10',
+      title: hasTierReward ? `${member.tierLabel ?? member.tier} tier reward` : 'Tier 2+ reward',
+      description: 'CRM-approved reward for Tier 2 and Tier 3 members.',
       kind: 'amount_discount',
       value: Math.min(10, rewardCap),
       pointsCost: 0,
@@ -550,7 +568,7 @@ function rewardsFor(member: FranCounterMember | null, basketTotal: number, curre
       eligible: hasTierReward && basketTotal >= 60,
       reason: hasTierReward
         ? basketTotal >= 60 ? null : 'Basket must be at least SGD 60.'
-        : 'Member tier must be Silver or Gold.',
+        : 'Member tier must be F2 or F3.',
       requiresConfirmation: true,
     },
     {
@@ -571,16 +589,17 @@ function rewardsFor(member: FranCounterMember | null, basketTotal: number, curre
 function activePerksFor(member: FranCounterMember | null, currency = 'SGD'): FranActivePerk[] {
   if (!member || member.tourist) return []
 
+  const tierKey = String(member.tier || '').toUpperCase()
   const tierOffer =
-    member.tier === 'Gold'
+    tierKey === 'F3' || tierKey === 'GOLD'
       ? {
-          title: 'Gold tier offer',
+          title: 'Tier 3 exclusive',
           description: 'CRM perk: complimentary deluxe pouch with any basket today.',
           valueLabel: 'Deluxe pouch gift',
         }
-      : member.tier === 'Silver'
+      : tierKey === 'F2' || tierKey === 'SILVER'
         ? {
-            title: 'Silver tier offer',
+            title: 'Tier 2 exclusive',
             description: 'CRM perk: 10% off selected fragrance add-ons.',
             valueLabel: '10% fragrance offer',
           }
@@ -892,5 +911,31 @@ export async function mockSendEvent(input: FranCrmEventInput): Promise<FranCrmEv
   return {
     eventId: `evt_${input.idempotencyKey.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`,
     status: 'accepted',
+  }
+}
+
+/** L-pos: settle FWB earn/redeem after payment (CRM ledger SoR). */
+export async function mockCommitSale(
+  input: import('./types').FranLoyaltyCommitSaleInput,
+): Promise<import('./types').FranLoyaltyCommitSaleResult> {
+  const member = FRAN_MOCK_MEMBERS.find((item) => item.id === input.memberId)
+  const earned = Math.max(0, Math.floor(input.pointsEarned || 0))
+  const redeemed = Math.max(0, Math.floor(input.pointsRedeemed || 0))
+  const balanceBefore = member?.pointsBalance ?? 0
+  const pointsBalanceAfter = Math.max(0, balanceBefore - redeemed + earned)
+
+  return {
+    commitId: sessionId('fran_sale_commit'),
+    saleId: input.saleId,
+    status: 'committed',
+    pointsEarned: earned,
+    pointsRedeemed: redeemed,
+    pointsBalanceAfter: member ? pointsBalanceAfter : null,
+    tierAfter: member?.tier ?? null,
+    ledgerEntryIds: [
+      earned > 0 ? `led_earn_${input.idempotencyKey.slice(0, 12)}` : '',
+      redeemed > 0 ? `led_redeem_${input.idempotencyKey.slice(0, 12)}` : '',
+    ].filter(Boolean),
+    warnings: [],
   }
 }

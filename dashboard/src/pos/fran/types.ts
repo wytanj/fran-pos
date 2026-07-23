@@ -82,12 +82,19 @@ export interface FranLoyaltyPolicyBundle {
     maximumPointsPerBasket: number | null
     pointsToCurrencyRate: number
     requiresLiveQuote: boolean
+    /** FWB fixed dens (200→$6 … 2500→$175). When set, partial continuous redeem is disabled. */
+    fixedDenominations?: Array<{ points: number; discount: number }>
   }
   bonuses: {
+    /** Legacy 2× style; FWB evaluator treats birthday as +1.00 when active. */
     birthdayMultiplier: number
     checkInPoints: number
     categoryMultipliers: FranCategoryBonusRule[]
     campaignMultipliers: FranCampaignBonusRule[]
+    /** PDF: birthday presented as voucher to scan at POS (default true). */
+    birthdayRequiresVoucher?: boolean
+    /** PDF: category bonus as redeemable voucher at POS (default true). */
+    categoryRequiresVoucher?: boolean
   }
   expiry: {
     lookaheadDays: number
@@ -117,6 +124,9 @@ export interface FranCounterMember {
   tier: FranCounterTier
   tierLabel?: string | null
   pointsBalance: number
+  /** FWB PDF: calendar-year qualifying spend (preferred for tier progress). */
+  calendarYtdSpend?: number | null
+  /** Legacy field; evaluator falls back when calendarYtdSpend is absent. */
   trailingTwelveMonthSpend?: number | null
   memberSince: string | null
   birthday: string | null
@@ -126,6 +136,16 @@ export interface FranCounterMember {
   rewardCount: number
   tourist: boolean
   warnings: string[]
+}
+
+/** Scanned QR vouchers at POS (redeem / birthday / category bonus). */
+export type FranVoucherKind = 'points_redeem' | 'birthday' | 'category_bonus' | 'other'
+
+export interface FranVoucherScan {
+  kind: FranVoucherKind
+  code: string
+  label?: string | null
+  scannedAt?: string
 }
 
 export interface FranMemberResolution {
@@ -220,7 +240,8 @@ export interface FranTierProgress {
   currentTierLabel: string
   nextTier: FranMembershipTier | null
   nextTierLabel: string | null
-  measurementWindow: 'trailing_12_months'
+  /** FWB uses calendar_year; trailing_12_months kept for older CRM bundles. */
+  measurementWindow: 'calendar_year' | 'trailing_12_months'
   windowStart: string
   windowEnd: string
   currency: string
@@ -275,6 +296,41 @@ export interface FranPointsRedemptionOffer {
   currency: string
   eligible: boolean
   reason: string | null
+  /** FWB fixed dens the member can use right now. */
+  fixedDenominations?: Array<{ points: number; discount: number; conversionPerPoint: number }>
+}
+
+/** POST commit_sale — settle earn + redeem against CRM ledger after payment. */
+export interface FranLoyaltyCommitSaleInput {
+  saleId: string
+  receiptNo: string
+  idempotencyKey: string
+  session: FranCounterSession
+  memberId: string
+  policyVersionId?: string | null
+  assignmentId?: string | null
+  skumsQuoteId?: string | null
+  skumsReservationId?: string | null
+  pointsEarned: number
+  pointsRedeemed?: number
+  redeemDiscountAmount?: number
+  voucherCodes?: string[]
+  evaluationTrace?: FranEvaluationTrace | null
+  netSpend: number
+  currency: string
+  occurredAt: string
+}
+
+export interface FranLoyaltyCommitSaleResult {
+  commitId: string
+  saleId: string
+  status: 'committed' | 'queued' | 'duplicate'
+  pointsEarned: number
+  pointsRedeemed: number
+  pointsBalanceAfter: number | null
+  tierAfter: string | null
+  ledgerEntryIds: string[]
+  warnings: string[]
 }
 
 export interface FranEarnMultiplier {

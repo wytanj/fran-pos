@@ -80,6 +80,7 @@ test('Fran CRM client exposes the genesis decision methods with mock fallback', 
     'quoteRewardRedemption',
     'commitRewardRedemption',
     'reverseRewardRedemption',
+    'commitSale',
     'sendEvent',
   ]) {
     assert.match(franClient, new RegExp(`${method}\\(`))
@@ -162,9 +163,9 @@ test('Fran counter profile card shows the successful lookup projection', () => {
   assert.match(franTypes, /pointsExpiryAlert: FranPointsExpiryAlert \| null/)
   assert.match(franTypes, /memberSince: string \| null/)
   assert.match(franTypes, /pointsExpireAt: string \| null/)
-  assert.match(franMock, /tier: 'Base'/)
-  assert.match(franMock, /tier: 'Silver'/)
-  assert.match(franMock, /tier: 'Gold'/)
+  assert.match(franMock, /tier: 'F1'/)
+  assert.match(franMock, /tier: 'F2'/)
+  assert.match(franMock, /tier: 'F3'|annualSpend: 1250/)
   assert.match(franMock, /const pointsExpiryPolicy = \{[\s\S]*lookaheadDays: 30/)
   assert.match(franMock, /expiringPointLotsByMemberId/)
   assert.match(franMock, /function pointsExpiryAlertFor/)
@@ -189,9 +190,9 @@ test('Fran counter profile card shows the successful lookup projection', () => {
     'Tier gap',
     'Tier upgrade available',
     'Tier spend progress',
-    'Current T12 spend',
+    'Current YTD spend',
     'Gap after basket',
-    'Trailing 12-month window',
+    'Calendar-year window',
     'Use now: active perks',
   ]) {
     assert.match(franProfileCard, new RegExp(label))
@@ -231,7 +232,7 @@ test('Fran projected earn preview comes from a Fran SKUMS cart projection', () =
   assert.match(franContract, /`POST \/fran\/pos\/basket\/quote`/)
   assert.match(franContract, /Source system: `fran_skums`/)
   assert.match(franTypes, /export type FranEarnPolicyBasis = 'pre_discount' \| 'post_discount'/)
-  assert.match(franTypes, /export type FranEarnMultiplierKind = 'tier' \| 'birthday' \| 'campaign'/)
+  assert.match(franTypes, /export type FranEarnMultiplierKind = 'tier' \| 'birthday' \| 'campaign' \| 'category' \| 'check_in'/)
   assert.match(franTypes, /export interface FranSkumsCartInput/)
   assert.match(franTypes, /skumsProductId\?: string \| null/)
   assert.match(franTypes, /quoteLineId\?: string \| null/)
@@ -252,8 +253,9 @@ test('Fran projected earn preview comes from a Fran SKUMS cart projection', () =
   assert.match(franMock, /basis: 'post_discount'/)
   assert.match(franMock, /kind: 'tier'/)
   assert.match(franMock, /kind: 'birthday'/)
-  assert.match(franMock, /kind: 'campaign'/)
+  assert.match(franMock, /kind: 'category'|kind: 'campaign'/)
   assert.match(franMock, /projectedEarnPoints/)
+  assert.match(franMock, /tierRate \+ birthdayAdd \+ categoryAdd/)
   assert.match(franMemberStrip, /Loading earn from Fran CRM/)
   assert.match(franMemberStrip, /Customer will earn \{earnPoints\.toLocaleString\(\)\} points on this order\./)
   assert.match(franMemberStrip, /Loaded from Fran CRM\./)
@@ -294,11 +296,11 @@ test('Fran CRM outage queues loyalty earn without blocking checkout', () => {
   assert.match(outbox, /source: fran\.basketPreview \? 'fran_crm_preview' : 'pos_fallback'/)
 })
 
-test('Fran CRM tier preview uses trailing 12-month spend and pre-payment upgrade alerts', () => {
+test('Fran CRM tier preview uses FWB calendar-year spend and pre-payment upgrade alerts', () => {
   assert.match(franContract, /## Tier Progress Preview/)
-  assert.match(franContract, /trailing 12-month spend window/)
+  assert.match(franContract, /calendar-year/)
   assert.match(franContract, /displays the upgrade alert before payment/)
-  assert.match(franTypes, /measurementWindow: 'trailing_12_months'/)
+  assert.match(franTypes, /measurementWindow: 'calendar_year' \| 'trailing_12_months'/)
   assert.match(franTypes, /currentWindowSpend: number/)
   assert.match(franTypes, /transactionValue: number/)
   assert.match(franTypes, /projectedWindowSpend: number/)
@@ -308,31 +310,32 @@ test('Fran CRM tier preview uses trailing 12-month spend and pre-payment upgrade
   assert.match(franTypes, /crossesTierThreshold: boolean/)
   assert.match(franTypes, /currentTierLabel: string/)
   assert.match(franTypes, /nextTierLabel: string \| null/)
-  assert.match(franMock, /rollingSpendByMemberId/)
-  assert.match(franMock, /function trailingWindowDates/)
+  assert.match(franMock, /calendarYtdSpendByMemberId/)
+  assert.match(franMock, /function calendarYearWindowDates/)
   assert.match(franMock, /function currentWindowSpendFor/)
   assert.match(franMock, /crossesTierThreshold = currentWindowSpend < next\.annualSpend && projectedWindowSpend >= next\.annualSpend/)
-  assert.match(franMock, /This transaction brings \$\{member\.name\} to \$\{next\.tier\}/)
+  assert.match(franMock, /This transaction brings \$\{member\.name\} to \$\{next\.label\}/)
   assert.match(franProfileCard, /Tier upgrade available/)
   assert.match(franProfileCard, /Tier spend progress/)
-  assert.match(franProfileCard, /Current T12 spend/)
+  assert.match(franProfileCard, /Current YTD spend/)
   assert.match(franProfileCard, /Gap after basket/)
-  assert.match(franProfileCard, /Trailing 12-month window/)
+  assert.match(franProfileCard, /Calendar-year window/)
   assert.match(outbox, /tier_progress: fran\.basketPreview\.tierProgress/)
 })
 
-test('Fran points redemption is threshold-gated, partial, and payment-committed', () => {
+test('Fran points redemption is FWB dens-gated and payment-committed', () => {
   assert.match(franContract, /## Points Redemption Prompt/)
   assert.match(franContract, /Member has X pts available \(worth \$Y\)\. Apply redemption\?/)
-  assert.match(franContract, /Partial redemption is supported/)
+  assert.match(franContract, /FWB fixed dens|fixedDenominations|Partial redemption/)
   assert.match(franContract, /Points are deducted only when payment is confirmed/)
   assert.match(franTypes, /export interface FranPointsRedemptionOffer/)
   assert.match(franTypes, /pointsRedemption: FranPointsRedemptionOffer \| null/)
   assert.match(franTypes, /pointsToRedeem\?: number \| null/)
   assert.match(franTypes, /redemptionKind: FranRewardDecision\['kind'\]/)
+  assert.match(franTypes, /fixedDenominations/)
   assert.match(franMock, /const pointsRedemptionPolicy/)
-  assert.match(franMock, /minimumPoints: 500/)
-  assert.match(franMock, /pointsToCurrencyRate: 0\.01/)
+  assert.match(franMock, /minimumPoints: 200/)
+  assert.match(franMock, /fwbRedeemDens/)
   assert.match(franMock, /function buildPointsRedemptionOffer/)
   assert.match(franMock, /input\.preview\.pointsRedemption/)
   assert.match(franMock, /pointsToRedeem < offer\.minimumPoints/)

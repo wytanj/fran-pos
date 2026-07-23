@@ -1,5 +1,6 @@
 import {
   mockCommitRewardRedemption,
+  mockCommitSale,
   mockGetActivePolicy,
   mockGetCounterSession,
   mockPreviewBasket,
@@ -16,6 +17,8 @@ import type {
   FranCounterSessionInput,
   FranCrmEventAck,
   FranCrmEventInput,
+  FranLoyaltyCommitSaleInput,
+  FranLoyaltyCommitSaleResult,
   FranLoyaltyPolicyBundle,
   FranMemberResolution,
   FranMemberResolutionInput,
@@ -35,6 +38,8 @@ export interface FranCrmClient {
   quoteRewardRedemption(input: FranRewardQuoteInput): Promise<FranRewardQuote>
   commitRewardRedemption(input: FranRewardCommitInput): Promise<FranRewardCommit>
   reverseRewardRedemption(input: FranRewardReverseInput): Promise<FranRewardReverse>
+  /** L-pos: settle earn/redeem after payment (same sale_id as SKUMS sale). */
+  commitSale(input: FranLoyaltyCommitSaleInput): Promise<FranLoyaltyCommitSaleResult>
   sendEvent(input: FranCrmEventInput): Promise<FranCrmEventAck>
 }
 
@@ -213,6 +218,7 @@ export function createFranCrmClient(options: FranCrmClientOptions = {}): FranCrm
       quoteRewardRedemption: mockQuoteRewardRedemption,
       commitRewardRedemption: mockCommitRewardRedemption,
       reverseRewardRedemption: mockReverseRewardRedemption,
+      commitSale: mockCommitSale,
       sendEvent: mockSendEvent,
     }
   }
@@ -227,6 +233,7 @@ export function createFranCrmClient(options: FranCrmClientOptions = {}): FranCrm
     quoteRewardRedemption: (input) => postJson(endpointUrl, '/fran/pos/rewards/quote', input),
     commitRewardRedemption: (input) => postJson(endpointUrl, '/fran/pos/rewards/commit', input),
     reverseRewardRedemption: (input) => postJson(endpointUrl, '/fran/pos/rewards/reverse', input),
+    commitSale: (input) => postJson(endpointUrl, '/fran/pos/loyalty/commit-sale', input),
     sendEvent: (input) => postJson(endpointUrl, '/api/v1/events', input),
   }
 }

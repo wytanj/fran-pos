@@ -3,7 +3,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
-import type { FranAppliedReward, FranBasketPreview, FranCounterSession, FranCounterTier, FranLoyaltySyncState } from '../types'
+import { tierBadgeClass, tierLabel } from '../lib/tier-display'
+import type { FranAppliedReward, FranBasketPreview, FranCounterSession, FranLoyaltySyncState } from '../types'
 
 interface FranMemberStripProps {
   session: FranCounterSession | null
@@ -134,21 +135,4 @@ export function FranMemberStrip({
   )
 }
 
-function tierBadgeClass(tier: FranCounterTier) {
-  switch (tier) {
-    case 'Gold':
-      return 'border-amber-300 bg-amber-50 text-amber-800'
-    case 'Silver':
-      return 'border-slate-300 bg-slate-100 text-slate-800'
-    case 'Base':
-      return 'border-blue-200 bg-blue-50 text-blue-800'
-    case 'Tourist':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-800'
-    default:
-      return ''
-  }
-}
 
-function tierLabel(tier: FranCounterTier, label?: string | null) {
-  return label || tier
-}

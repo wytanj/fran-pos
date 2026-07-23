@@ -10,13 +10,23 @@ import type {
   FranRewardCatalogueItem,
   FranRewardDecision,
   FranTierProgress,
+  FranVoucherScan,
 } from '../types'
+import {
+  bestFwbRedeemDenom,
+  computeFwbEarnPoints,
+  fwbCalendarYearWindow,
+  fwbRedeemOptions,
+  fwbTierRateFromKey,
+} from './fwb-earn'
 
 interface FranPolicyEvaluationInput {
   policyBundle: FranLoyaltyPolicyBundle
   quote: SkumsPosBasketQuote
   session: FranCounterSession
   calculatedAt?: string
+  /** Scanned birthday / category / redeem vouchers at counter (PDF QR flow). */
+  voucherScans?: FranVoucherScan[]
 }
 
 function roundCurrency(value: number) {
@@ -77,21 +87,23 @@ function buildTierProgress(
   const { tier, sorted } = matchingTier(policy, member)
   if (!tier) return null
   const next = sorted.find((item) => item.annualSpendThreshold > tier.annualSpendThreshold) ?? null
-  const currentWindowSpend = roundCurrency(Math.max(0, member.trailingTwelveMonthSpend ?? 0))
+  // FWB PDF: calendar-year YTD spend (prefer calendarYtdSpend, fall back to trailing field)
+  const currentWindowSpend = roundCurrency(
+    Math.max(0, member.calendarYtdSpend ?? member.trailingTwelveMonthSpend ?? 0),
+  )
   const projectedWindowSpend = roundCurrency(currentWindowSpend + transactionValue)
-  const windowEnd = new Date(calculatedAt)
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const window = fwbCalendarYearWindow(new Date(calculatedAt))
 
   traceRules.push({
-    ruleId: 'tier.trailing_12_months',
+    ruleId: 'tier.calendar_year',
     type: 'tier',
-    label: 'Trailing 12-month tier progress',
+    label: 'FWB calendar-year tier progress',
     inputs: {
       memberTier: member.tier,
       currentWindowSpend,
       transactionValue,
       policyVersionId: policy.policyVersionId,
+      year: window.year,
     },
     output: {
       projectedWindowSpend,
@@ -105,9 +117,9 @@ function buildTierProgress(
       currentTierLabel: member.tierLabel ?? tier.label,
       nextTier: null,
       nextTierLabel: null,
-      measurementWindow: 'trailing_12_months',
-      windowStart: windowStart.toISOString(),
-      windowEnd: windowEnd.toISOString(),
+      measurementWindow: 'calendar_year',
+      windowStart: window.windowStart,
+      windowEnd: window.windowEnd,
       currency: policy.currency,
       currentWindowSpend,
       transactionValue,
@@ -134,9 +146,9 @@ function buildTierProgress(
     currentTierLabel: member.tierLabel ?? tier.label,
     nextTier: next.key,
     nextTierLabel: next.label,
-    measurementWindow: 'trailing_12_months',
-    windowStart: windowStart.toISOString(),
-    windowEnd: windowEnd.toISOString(),
+    measurementWindow: 'calendar_year',
+    windowStart: window.windowStart,
+    windowEnd: window.windowEnd,
     currency: policy.currency,
     currentWindowSpend,
     transactionValue,
@@ -148,7 +160,7 @@ function buildTierProgress(
     crossesTierThreshold,
     progressPercent,
     upgradeAlert: crossesTierThreshold
-      ? `This transaction brings ${member.name} to ${next.label} based on trailing 12-month spend.`
+      ? `This transaction brings ${member.name} to ${next.label} based on FWB calendar-year spend.`
       : null,
   }
 }
@@ -159,58 +171,94 @@ function categorySpend(lines: SkumsPosBasketQuoteLine[], category: string) {
     .reduce((sum, line) => sum + Math.max(0, line.line_total), 0))
 }
 
+function voucherKinds(scans: FranVoucherScan[] | undefined) {
+  const set = new Set((scans || []).map((v) => v.kind))
+  return {
+    birthdayVoucher: set.has('birthday'),
+    categoryVoucher: set.has('category_bonus'),
+    redeemVoucher: set.has('points_redeem'),
+  }
+}
+
+/**
+ * Build earn components for FWB additive stack (PDF §5).
+ * Multiplier field on each row is the **rate contribution** (tier rate or +1 add), not a product factor.
+ */
 function buildEarnMultipliers(
   policy: FranLoyaltyPolicyBundle,
   quote: SkumsPosBasketQuote,
   session: FranCounterSession,
   eligibleLines: SkumsPosBasketQuoteLine[],
-  traceRules: FranEvaluationTraceRule[]
+  traceRules: FranEvaluationTraceRule[],
+  voucherScans?: FranVoucherScan[],
 ) {
   const member = session.member
   if (!memberCanEarn(session) || !member) return []
   const { tier } = matchingTier(policy, member)
+  const tierRate = tier?.earnMultiplier ?? fwbTierRateFromKey(member.tier)
+  const vouchers = voucherKinds(voucherScans)
   const currentMonth = new Date().getMonth() + 1
-  const birthdayApplies = member.birthdayMonth === currentMonth
+  // Birthday: PDF requires voucher at POS; also allow month match when voucher scanned or policy allows auto.
+  const birthdayMonthMatch = member.birthdayMonth === currentMonth
+  const birthdayApplies =
+    vouchers.birthdayVoucher ||
+    (policy.bonuses.birthdayRequiresVoucher === false && birthdayMonthMatch)
+
   const multipliers: FranEarnMultiplier[] = [
     {
       kind: 'tier',
       code: `tier-${tier?.key ?? member.tier}`.toLowerCase(),
-      label: `${tier?.label ?? member.tier} tier`,
-      multiplier: tier?.earnMultiplier ?? 1,
+      label: `${tier?.label ?? member.tier} tier rate`,
+      multiplier: tierRate,
       applied: true,
       reason: null,
     },
     {
       kind: 'birthday',
       code: 'birthday-month',
-      label: 'Birthday month',
-      multiplier: birthdayApplies ? policy.bonuses.birthdayMultiplier : 1,
+      label: 'Birthday bonus (+1.00)',
+      // FWB: +1.00 additive contribution when active (display rate slice, not product factor)
+      multiplier: birthdayApplies ? 1 : 0,
       applied: birthdayApplies,
-      reason: birthdayApplies ? null : 'Not birthday month.',
+      reason: birthdayApplies
+        ? null
+        : vouchers.birthdayVoucher
+          ? null
+          : 'Scan birthday voucher (or set birthday month) to activate +1.00.',
     },
   ]
 
+  let anyCategoryApplied = false
   for (const rule of policy.bonuses.categoryMultipliers) {
     const spend = categorySpend(eligibleLines, rule.category)
-    const applied = spend >= rule.minimumSpend
+    const scopeOk = spend >= rule.minimumSpend
+    // Category bonus needs voucher scan per PDF, unless policy disables it
+    const voucherOk = vouchers.categoryVoucher || policy.bonuses.categoryRequiresVoucher === false
+    const applied = scopeOk && voucherOk
+    if (applied) anyCategoryApplied = true
     multipliers.push({
       kind: 'category',
       code: rule.ruleId,
-      label: rule.label,
-      multiplier: applied ? rule.multiplier : 1,
+      label: `${rule.label} (+1.00)`,
+      multiplier: applied ? 1 : 0,
       applied,
-      reason: applied ? null : `${rule.category} spend must be at least ${policy.currency} ${rule.minimumSpend.toFixed(2)}.`,
+      reason: applied
+        ? null
+        : !voucherOk
+          ? 'Scan category bonus voucher at checkout.'
+          : `${rule.category} spend must be at least ${policy.currency} ${rule.minimumSpend.toFixed(2)}.`,
     })
   }
 
+  // Campaign adds: treat applied campaign as +1 FWB-style (not product of 1.5×)
   for (const rule of policy.bonuses.campaignMultipliers) {
     const hasSku = eligibleLines.some((line) => rule.skuPrefixes.some((prefix) => line.sku.startsWith(prefix)))
     const applied = hasSku && quote.total >= rule.minimumSpend
     multipliers.push({
       kind: 'campaign',
       code: rule.code,
-      label: rule.label,
-      multiplier: applied ? rule.multiplier : 1,
+      label: `${rule.label} (+1.00)`,
+      multiplier: applied ? 1 : 0,
       applied,
       reason: applied
         ? null
@@ -224,8 +272,8 @@ function buildEarnMultipliers(
     multipliers.push({
       kind: 'check_in',
       code: 'counter-session-check-in',
-      label: 'Counter check-in',
-      multiplier: 1,
+      label: 'Counter check-in (flat pts, not in multiplier)',
+      multiplier: 0,
       applied: true,
       reason: null,
     })
@@ -237,8 +285,10 @@ function buildEarnMultipliers(
       type: 'bonus',
       label: multiplier.label,
       inputs: {
-        multiplier: multiplier.multiplier,
+        rateContribution: multiplier.multiplier,
         basketTotal: quote.total,
+        stackMode: 'fwb_additive',
+        anyCategoryApplied,
       },
       output: {
         applied: multiplier.applied,
@@ -259,36 +309,54 @@ function buildPointsRedemptionOffer(
   if (!member || member.tourist) return null
 
   const availablePoints = Math.max(0, member.pointsBalance)
-  const minimumPoints = policy.redemption.minimumPoints
+  const dens = policy.redemption.fixedDenominations?.length
+    ? policy.redemption.fixedDenominations
+    : fwbRedeemOptions(Number.MAX_SAFE_INTEGER).map((d) => ({
+        points: d.points,
+        discount: d.discount,
+      }))
+  const minDenom = dens.reduce((m, d) => Math.min(m, d.points), dens[0]?.points ?? policy.redemption.minimumPoints)
+  const minimumPoints = policy.redemption.minimumPoints || minDenom
   const livePolicyRequired = policy.redemption.requiresLiveQuote && policy.cache.status !== 'fresh'
-  const maximumPoints = Math.max(0, Math.min(
-    availablePoints,
-    policy.redemption.maximumPointsPerBasket ?? availablePoints
-  ))
-  const availableValue = roundCurrency(maximumPoints * policy.redemption.pointsToCurrencyRate)
-  const eligible = !livePolicyRequired && quote.total > 0 && maximumPoints >= minimumPoints
+  const best = dens
+    .filter((d) => availablePoints >= d.points)
+    .sort((a, b) => b.points - a.points)[0] ?? bestFwbRedeemDenom(availablePoints)
+  const maximumPoints = best?.points ?? 0
+  const availableValue = best ? roundCurrency(best.discount) : 0
+  const minRow = dens.find((d) => d.points === minimumPoints) ?? dens[0]
+  const eligible = !livePolicyRequired && quote.total > 0 && Boolean(best)
   const reason = eligible
     ? null
     : livePolicyRequired
       ? 'Live CRM policy is required for redemption.'
       : quote.total <= 0
         ? 'Add sale items before redeeming points.'
-        : `Member needs at least ${minimumPoints.toLocaleString()} points to redeem.`
+        : `Member needs at least ${minimumPoints.toLocaleString()} points (fixed FWB dens).`
+
+  const options = dens
+    .filter((d) => availablePoints >= d.points)
+    .map((d) => ({
+      points: d.points,
+      discount: d.discount,
+      conversionPerPoint: d.discount / d.points,
+    }))
 
   traceRules.push({
-    ruleId: 'redemption.points_threshold',
+    ruleId: 'redemption.fwb_fixed_denoms',
     type: 'redemption',
-    label: 'Points redemption threshold',
+    label: 'FWB fixed denomination redemption',
     inputs: {
       availablePoints,
       minimumPoints,
       maximumPoints,
       policyCacheStatus: policy.cache.status,
       quoteTotal: quote.total,
+      options,
     },
     output: {
       eligible,
       reason,
+      best,
     },
     blockedReason: eligible ? null : reason,
   })
@@ -297,12 +365,13 @@ function buildPointsRedemptionOffer(
     availablePoints,
     minimumPoints,
     maximumPoints,
-    pointsToCurrencyRate: policy.redemption.pointsToCurrencyRate,
+    pointsToCurrencyRate: best ? best.discount / best.points : policy.redemption.pointsToCurrencyRate,
     availableValue,
-    minimumValue: roundCurrency(minimumPoints * policy.redemption.pointsToCurrencyRate),
+    minimumValue: minRow ? roundCurrency(minRow.discount) : 0,
     currency: policy.currency,
     eligible,
     reason,
+    fixedDenominations: options,
   }
 }
 
@@ -404,6 +473,7 @@ export function evaluateFranPolicy(input: FranPolicyEvaluationInput): FranBasket
   const session = input.session
   const member = session.member
   const calculatedAt = input.calculatedAt ?? new Date().toISOString()
+  const voucherScans = input.voucherScans || []
   const traceRules: FranEvaluationTraceRule[] = []
   const blockedReasons: string[] = []
   const warnings = [...policy.warnings, ...quote.warnings]
@@ -413,8 +483,13 @@ export function evaluateFranPolicy(input: FranPolicyEvaluationInput): FranBasket
     warnings.push('Using cached loyalty policy because Fran CRM is offline.')
   }
   if (quote.stale) warnings.push('SKUMS basket quote is stale; refresh before final reward decisions.')
-  if (memberCanEarn(session) && member && member.trailingTwelveMonthSpend == null) {
-    warnings.push('CRM member snapshot did not include trailing 12-month spend; tier progress uses zero as the local fallback.')
+  if (
+    memberCanEarn(session) &&
+    member &&
+    member.calendarYtdSpend == null &&
+    member.trailingTwelveMonthSpend == null
+  ) {
+    warnings.push('CRM member snapshot did not include calendar YTD spend; tier progress uses zero as the local fallback.')
   }
 
   const canEarn = memberCanEarn(session)
@@ -446,27 +521,65 @@ export function evaluateFranPolicy(input: FranPolicyEvaluationInput): FranBasket
   const baseAmount = canEarn
     ? policy.earn.basis === 'pre_discount' ? subtotal : totalAfterDiscount
     : 0
-  const multipliers = buildEarnMultipliers(policy, quote, session, eligibleLines, traceRules)
-  const totalMultiplier = multipliers.reduce(
-    (product, multiplier) => product * (multiplier.applied ? multiplier.multiplier : 1),
-    1
+  const multipliers = buildEarnMultipliers(
+    policy,
+    quote,
+    session,
+    eligibleLines,
+    traceRules,
+    voucherScans,
   )
-  const calculatedEarn = baseAmount >= policy.earn.minimumEligibleAmount
-    ? baseAmount * policy.earn.pointsPerCurrencyUnit * totalMultiplier
-    : 0
+
+  // FWB additive stack (PDF §5) — not a product of multipliers
+  const tierRate =
+    multipliers.find((m) => m.kind === 'tier' && m.applied)?.multiplier ??
+    fwbTierRateFromKey(member?.tier)
+  const birthdayActive = Boolean(multipliers.find((m) => m.kind === 'birthday' && m.applied))
+  const categoryActive = Boolean(multipliers.find((m) => m.kind === 'category' && m.applied))
+  const campaignAdds = multipliers
+    .filter((m) => m.kind === 'campaign' && m.applied)
+    .map((m) => m.multiplier)
+
+  const fwb = canEarn && baseAmount >= policy.earn.minimumEligibleAmount
+    ? computeFwbEarnPoints({
+        spend: baseAmount * policy.earn.pointsPerCurrencyUnit,
+        tierRate,
+        birthdayActive,
+        categoryActive,
+        campaignAdds,
+      })
+    : {
+        tierRate,
+        birthdayAdd: 0,
+        categoryAdd: 0,
+        campaignAdd: 0,
+        totalMultiplier: 0,
+        points: 0,
+      }
+
+  const totalMultiplier = fwb.totalMultiplier
   const checkInPoints = canEarn ? policy.bonuses.checkInPoints : 0
-  const earnPoints = canEarn ? Math.max(0, roundedPoints(calculatedEarn, policy.earn.rounding) + checkInPoints) : 0
+  // FWB uses floor(); check-in flat pts are outside the spend multiplier (PDF §6)
+  const earnPoints = canEarn
+    ? Math.max(0, roundedPoints(fwb.points, policy.earn.rounding === 'floor' ? 'floor' : policy.earn.rounding) + checkInPoints)
+    : 0
 
   traceRules.push({
-    ruleId: 'earn.final',
+    ruleId: 'earn.final.fwb',
     type: 'earn',
-    label: 'Final earn calculation',
+    label: 'FWB final earn (additive stack)',
     inputs: {
       basis: policy.earn.basis,
       baseAmount,
       pointsPerCurrencyUnit: policy.earn.pointsPerCurrencyUnit,
+      tierRate: fwb.tierRate,
+      birthdayAdd: fwb.birthdayAdd,
+      categoryAdd: fwb.categoryAdd,
+      campaignAdd: fwb.campaignAdd,
       totalMultiplier,
       checkInPoints,
+      voucherScans: voucherScans.map((v) => v.kind),
+      formula: 'floor(spend × (tier + bday + cat + campaigns)) + check_in',
     },
     output: {
       earnPoints,

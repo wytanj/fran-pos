@@ -2,7 +2,8 @@ import { AlertTriangle, CalendarDays, Cake, Gift, Star, Trophy, UserRound } from
 import { Badge } from '@/components/ui/badge'
 import { cn, formatCurrency } from '@/lib/utils'
 import { STORE } from '@/pos/data/mock'
-import type { FranBasketPreview, FranCounterSession, FranCounterTier } from '../types'
+import { tierBadgeClass, tierLabel } from '../lib/tier-display'
+import type { FranBasketPreview, FranCounterSession } from '../types'
 
 interface FranCounterProfileCardProps {
   session: FranCounterSession
@@ -141,7 +142,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
           </div>
           <div className="mt-2 grid grid-cols-3 gap-1.5">
             <ProgressMetric
-              label="Current T12 spend"
+              label="Current YTD spend"
               value={formatCurrency(preview.tierProgress.currentWindowSpend, STORE.currency)}
             />
             <ProgressMetric
@@ -168,7 +169,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
                 : 'Tier maintained')}
           </p>
           <p className="mt-0.5 text-[11px] text-blue-700">
-            Trailing 12-month window: {formatMemberDate(preview.tierProgress.windowStart, 'Unknown')} -{' '}
+            Calendar-year window: {formatMemberDate(preview.tierProgress.windowStart, 'Unknown')} -{' '}
             {formatMemberDate(preview.tierProgress.windowEnd, 'Unknown')}
           </p>
         </div>
@@ -320,21 +321,4 @@ function factToneClass(tone: FactTone) {
   }
 }
 
-function tierBadgeClass(tier: FranCounterTier) {
-  switch (tier) {
-    case 'Gold':
-      return 'border-amber-300 bg-amber-50 text-amber-800'
-    case 'Silver':
-      return 'border-slate-300 bg-slate-100 text-slate-800'
-    case 'Base':
-      return 'border-blue-200 bg-blue-50 text-blue-800'
-    case 'Tourist':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-800'
-    default:
-      return ''
-  }
-}
 
-function tierLabel(tier: FranCounterTier, label?: string | null) {
-  return label || tier
-}

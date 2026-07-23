@@ -78,7 +78,7 @@ The card is a POS-safe projection from Fran CRM and should show:
 - Rewards available.
 - Spend towards next tier.
 - Pre-payment tier upgrade alert when the current basket crosses a threshold.
-- YTD spend progress using the same trailing 12-month window as the tier calculation.
+- YTD spend progress using the FWB **calendar-year** window as the tier calculation.
 
 ## Active Perks on Lookup
 
@@ -152,7 +152,7 @@ Rules:
 
 Tier progress is evaluated locally from the loaded CRM policy, the counter-safe CRM member snapshot, and the SKUMS quote. Fran POS does not author tier policy or mutate tier truth locally.
 
-The tier projection must use the same trailing 12-month spend window as the membership tier logic. When Fran CRM adds the current transaction value to the member's trailing 12-month spend, it returns whether the projected value crosses the next threshold.
+The tier projection must use the FWB **calendar-year** spend window as the membership tier logic (loyaltys.pdf). When Fran CRM adds the current transaction value to the member's calendar YTD spend, it returns whether the projected value crosses the next threshold ($500 → F2, $1,250 → F3).
 
 The returned tier projection includes:
 
@@ -162,16 +162,16 @@ The returned tier projection includes:
 - Next tier label.
 - Measurement window: `trailing_12_months`.
 - Window start and end timestamps.
-- Current trailing 12-month spend.
+- Current calendar-year YTD spend.
 - Current transaction value.
-- Projected trailing 12-month spend after this basket.
+- Projected calendar-year YTD spend after this basket.
 - Spend required for the next tier.
 - Gap before this transaction.
 - Gap remaining after this transaction.
 - Whether the current transaction crosses the next tier threshold.
 - Upgrade alert text when the threshold is crossed.
 
-Fran POS displays the upgrade alert before payment and shows the progress bar with current trailing 12-month spend, next-tier required spend, and remaining gap. The progress display updates live as items are added or removed because the preview request is re-run for every basket change.
+Fran POS displays the upgrade alert before payment and shows the progress bar with current calendar-year YTD spend, next-tier required spend, and remaining gap. The progress display updates live as items are added or removed because the preview request is re-run for every basket change.
 
 ## Points Redemption Prompt
 
@@ -196,7 +196,7 @@ Rules:
 - POS must not auto-apply points.
 - Cashier must actively enter or accept a points value and select redemption.
 - Customer confirmation is required before the redemption line is added.
-- Partial redemption is supported.
+- FWB fixed dens are preferred (200 / 500 / 1000 / 1500 / 2500 pts). Continuous partial redeem is only used when the policy bundle has no `fixedDenominations`.
 - The entered points value must be a whole number between the minimum threshold and the redeemable balance.
 - Dollar equivalent updates live as the cashier types.
 - Below-threshold redemption is blocked.

@@ -1377,9 +1377,37 @@ export default function SalePage() {
     const member = session?.member
     if (!preview || !session || !member || member.tourist) return
 
+    const pointsRedeemed = appliedReward?.quote.pointsCost ?? 0
+    const redeemDiscountAmount = appliedReward?.quote.value ?? 0
+    const idempotencyKey = `fran:${sale.receiptNo}:loyalty-execution:${preview.policyVersionId ?? preview.previewId}`
+
+    // L-pos: commit_sale to CRM ledger (earn + redeem) — non-blocking; outbox is replay-safe.
+    void franCrm
+      .commitSale({
+        saleId: sale.idempotencyKey,
+        receiptNo: sale.receiptNo,
+        idempotencyKey,
+        session,
+        memberId: member.id,
+        policyVersionId: preview.policyVersionId ?? null,
+        assignmentId: preview.assignmentId ?? null,
+        skumsQuoteId: preview.skumsQuoteId ?? null,
+        skumsReservationId: null,
+        pointsEarned: sale.pointsEarned,
+        pointsRedeemed,
+        redeemDiscountAmount,
+        evaluationTrace: preview.evaluationTrace ?? null,
+        netSpend: sale.total ?? preview.earnProjection?.totalAfterDiscount ?? 0,
+        currency: preview.earnProjection?.policy.currency ?? STORE.currency,
+        occurredAt: sale.completedAtIso,
+      })
+      .catch(() => {
+        // Queue path: sendEvent + outbox still record the execution fact.
+      })
+
     void franCrm.sendEvent({
       eventType: 'fran.loyalty_execution.committed',
-      idempotencyKey: `fran:${sale.receiptNo}:loyalty-execution:${preview.policyVersionId ?? preview.previewId}`,
+      idempotencyKey,
       occurredAt: sale.completedAtIso,
       payload: {
         policy_version_id: preview.policyVersionId ?? null,
@@ -1394,7 +1422,9 @@ export default function SalePage() {
         reward_commit_id: appliedReward?.commit?.commitId ?? null,
         reward_status: appliedReward?.status ?? null,
         points_earned: sale.pointsEarned,
+        points_redeemed: pointsRedeemed,
         evaluation_trace: preview.evaluationTrace ?? null,
+        commit_sale: true,
       },
     }).catch(() => {
       // The local POS outbox carries the replay-safe execution fact; checkout must not block here.

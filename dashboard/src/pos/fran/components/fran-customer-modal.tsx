@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Customer } from '@/pos/data/mock'
 import type { FranCrmClient } from '../lib/fran-crm-client'
+import { tierBadgeClass, tierLabel, tierSummaryLine } from '../lib/tier-display'
 import {
   customerFromFranMember,
   type FranCounterSession,
-  type FranCounterTier,
   type FranMemberLookupMethod,
   type FranMemberResolution,
 } from '../types'
@@ -57,7 +57,9 @@ function offlineMemberSession(raw: string, method: FranMemberLookupMethod): Fran
       name: 'Offline member',
       phone: method === 'mobile' ? trimmed : '',
       email: null,
-      tier: 'Base',
+      tier: 'F1',
+      tierLabel: 'Tier 1',
+      calendarYtdSpend: 0,
       pointsBalance: 0,
       memberSince: null,
       birthday: null,
@@ -295,6 +297,15 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
                   {member.tourist && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                  <Badge variant="outline" className="border-sky-300 bg-white text-sky-900">
+                    {tierSummaryLine({
+                      tier: member.tier,
+                      tierLabel: member.tierLabel,
+                      calendarYtdSpend: member.calendarYtdSpend,
+                      trailingTwelveMonthSpend: member.trailingTwelveMonthSpend,
+                      currency: 'SGD',
+                    })}
+                  </Badge>
                   <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-800">
                     Can spend {member.pointsBalance.toLocaleString()} pts
                   </Badge>
@@ -380,23 +391,4 @@ function formatLookupDate(value: string) {
     day: '2-digit',
     month: 'short',
   }).format(date)
-}
-
-function tierBadgeClass(tier: FranCounterTier) {
-  switch (tier) {
-    case 'Gold':
-      return 'border-amber-300 bg-amber-50 text-amber-800'
-    case 'Silver':
-      return 'border-slate-300 bg-slate-100 text-slate-800'
-    case 'Base':
-      return 'border-blue-200 bg-blue-50 text-blue-800'
-    case 'Tourist':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-800'
-    default:
-      return ''
-  }
-}
-
-function tierLabel(tier: FranCounterTier, label?: string | null) {
-  return label || tier
 }
