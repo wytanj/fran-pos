@@ -169,81 +169,11 @@ export default function IntegrationsPage() {
     <div className="space-y-5">
       <Card>
         <CardHeader>
-          <CardTitle>Loyalty (Fran CRM)</CardTitle>
-          <CardDescription>
-            Production path: connect <strong>SKUMS</strong> only — CRM is linked on the SKUMS workspace and proxied as{' '}
-            <code className="text-xs">/fran/pos/loyalty/*</code>. Direct CRM URL below is a legacy/dev shim.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm space-y-1">
-            <p className="font-medium">Preferred setup</p>
-            <ol className="list-decimal pl-5 text-muted-foreground space-y-1">
-              <li>Configure <strong>SKUMS connector</strong> (below) with workspace API key (<code className="text-xs">pos:read</code> / <code className="text-xs">pos:write</code>).</li>
-              <li>
-                On SKUMS: link CRM for the workspace (<code className="text-xs">workspace_crm_links</code> or env{' '}
-                <code className="text-xs">FRAN_CRM_BASE_URL</code>).
-              </li>
-              <li>
-                POS Sale uses SKUMS for catalog <em>and</em> loyalty automatically when SKUMS is enabled.
-              </li>
-            </ol>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div>
-              <Label>Offline/mock CRM mode (legacy direct CRM only)</Label>
-              <p className="text-sm text-muted-foreground">
-                Ignored when SKUMS connector is enabled. On = browser mock members if no SKUMS.
-              </p>
-            </div>
-            <Switch
-              checked={franForm.offline_mode}
-              onCheckedChange={(offline_mode) => setFranForm({ ...franForm, offline_mode })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Legacy Fran CRM API URL (optional)</Label>
-            <Input
-              value={franForm.endpoint_url}
-              onChange={(event) => setFranForm({ ...franForm, endpoint_url: event.target.value })}
-              placeholder="http://localhost:3000 — only if SKUMS not used"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Workspace ID (demo UUID for legacy path)</Label>
-            <Input
-              value={franForm.workspace_id}
-              onChange={(event) => setFranForm({ ...franForm, workspace_id: event.target.value })}
-              placeholder="11111111-1111-4111-8111-111111111111"
-            />
-          </div>
-
-          <div className="rounded-lg border p-3 text-sm text-muted-foreground space-y-1">
-            <p>
-              Demo member via facade: <code className="text-xs">FRAN-0001</code> · phone{' '}
-              <code className="text-xs">81234470</code> → F3.
-            </p>
-            <p>Do not put CRM service-role secrets in the browser.</p>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={handleTestFranCrm}>
-              Test legacy CRM
-            </Button>
-            <Button onClick={handleSaveFranCrm}>
-              <ShieldCheck className="h-4 w-4" /> Save legacy CRM
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>SKUMS Connector</CardTitle>
-          <CardDescription>Connect this POS company to a SKUMS account catalog.</CardDescription>
+          <CardDescription>
+            Required for live catalog, sales, and loyalty. POS holds only this workspace key — CRM is linked on SKUMS HQ
+            (Integrations → Fran CRM).
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
         <div className="flex items-center justify-between rounded-lg border p-3">
@@ -295,6 +225,73 @@ export default function IntegrationsPage() {
             <KeyRound className="h-4 w-4" /> {saveSkumsConnector.isPending ? 'Saving...' : 'Save Connector'}
           </Button>
         </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Loyalty (via SKUMS)</CardTitle>
+          <CardDescription>
+            Production registers do not store CRM secrets. Link CRM on{' '}
+            <strong>SKUMS → Integrations → Fran CRM (POS loyalty)</strong>, then Sale uses{' '}
+            <code className="text-xs">/fran/pos/loyalty/*</code> with the SKUMS key.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm text-muted-foreground space-y-1">
+            <p>
+              Demo member when CRM is linked: <code className="text-xs">FRAN-0001</code> · phone{' '}
+              <code className="text-xs">81234470</code> → F3.
+            </p>
+            <p>If SKUMS is not configured, Sale falls back to in-browser mock members (Mei Lin).</p>
+          </div>
+
+          <details className="rounded-lg border p-3">
+            <summary className="cursor-pointer text-sm font-medium">
+              Advanced / dev: direct CRM URL (not for production)
+            </summary>
+            <div className="mt-4 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Only use when debugging CRM without SKUMS. Production path is SKUMS-only.
+              </p>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label>Offline/mock CRM mode</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Ignored when SKUMS connector is enabled.
+                  </p>
+                </div>
+                <Switch
+                  checked={franForm.offline_mode}
+                  onCheckedChange={(offline_mode) => setFranForm({ ...franForm, offline_mode })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Legacy Fran CRM API URL</Label>
+                <Input
+                  value={franForm.endpoint_url}
+                  onChange={(event) => setFranForm({ ...franForm, endpoint_url: event.target.value })}
+                  placeholder="http://localhost:3000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Legacy workspace ID</Label>
+                <Input
+                  value={franForm.workspace_id}
+                  onChange={(event) => setFranForm({ ...franForm, workspace_id: event.target.value })}
+                  placeholder="11111111-1111-4111-8111-111111111111"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={handleTestFranCrm}>
+                  Test legacy CRM
+                </Button>
+                <Button onClick={handleSaveFranCrm}>
+                  <ShieldCheck className="h-4 w-4" /> Save advanced CRM
+                </Button>
+              </div>
+            </div>
+          </details>
         </CardContent>
       </Card>
 

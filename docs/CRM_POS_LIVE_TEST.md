@@ -72,8 +72,9 @@ curl -s "$SKUMS/fran/pos/capabilities" -H "Authorization: Bearer sk_live_…"
 
 1. `cd fran-pos && npm run dev`
 2. **Settings → Integrations → SKUMS connector**: API URL + account key (`pos:read` + `pos:write`)
-3. Leave legacy CRM offline or empty — Sale prefers SKUMS when connector enabled
-4. Hard-refresh **Sale**
+3. On **SKUMS HQ → Integrations**: set **Fran CRM (POS loyalty)** base URL (e.g. `https://fran-crm-eight.vercel.app`) and Test policy
+4. Leave POS “Advanced / dev: direct CRM” collapsed unused
+5. Hard-refresh **Sale** — banner should show loyalty linked
 
 ---
 
