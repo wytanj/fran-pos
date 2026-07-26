@@ -939,3 +939,189 @@ export async function mockCommitSale(
     warnings: [],
   }
 }
+
+const FWB_DENS = [
+  { points: 200, discount: 6 },
+  { points: 500, discount: 20 },
+  { points: 1000, discount: 50 },
+  { points: 1500, discount: 90 },
+  { points: 2500, discount: 175 },
+] as const
+
+function densDiscount(points: number) {
+  return FWB_DENS.find((d) => d.points === points)?.discount ?? null
+}
+
+export async function mockQuoteRedeemDens(
+  input: import('./types').FranQuoteRedeemDensInput,
+): Promise<import('./types').FranQuoteRedeemDensResult> {
+  const points = Math.floor(input.points)
+  const discount = densDiscount(points)
+  if (discount == null) throw new Error('Points must be a fixed FWB dens (200/500/1000/1500/2500)')
+  if (input.availablePoints < points) {
+    throw new Error(`Member has ${input.availablePoints} pts; need ${points}`)
+  }
+  const code = `FWB-RDM-${points}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+  const currency = input.currency || 'SGD'
+  const voucher = {
+    code,
+    kind: 'points_redeem' as const,
+    memberId: input.memberId,
+    pointsCost: points,
+    discount,
+    currency,
+    issuedAt: nowIso(),
+    expiresAt: addDaysIso(30),
+    status: 'issued',
+    label: `Redeem ${points} pts → ${currency} ${discount.toFixed(2)} off`,
+  }
+  return {
+    ok: true,
+    voucher,
+    dens: { points, discount },
+    confirmationText: `Show this code at checkout: ${code}. Valid 1 month.`,
+  }
+}
+
+export async function mockAuthorizeVoucher(
+  input: import('./types').FranAuthorizeVoucherInput,
+): Promise<import('./types').FranAuthorizeVoucherResult> {
+  const code = String(input.code || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+  if (!code) {
+    return {
+      ok: false,
+      valid: false,
+      code,
+      kind: null,
+      memberId: null,
+      pointsCost: 0,
+      discount: 0,
+      currency: 'SGD',
+      birthdayActive: false,
+      categoryActive: false,
+      label: null,
+      expiresAt: null,
+      reason: 'Empty voucher code',
+    }
+  }
+
+  const rdm = code.match(/^FWB-RDM-(\d+)-([A-Z0-9]+)$/)
+  if (rdm) {
+    const points = Number(rdm[1])
+    const discount = densDiscount(points)
+    if (discount == null) {
+      return {
+        ok: false,
+        valid: false,
+        code,
+        kind: null,
+        memberId: null,
+        pointsCost: 0,
+        discount: 0,
+        currency: 'SGD',
+        birthdayActive: false,
+        categoryActive: false,
+        label: null,
+        expiresAt: null,
+        reason: 'Invalid dens',
+      }
+    }
+    return {
+      ok: true,
+      valid: true,
+      code,
+      kind: 'points_redeem',
+      memberId: input.memberId || null,
+      pointsCost: points,
+      discount,
+      currency: 'SGD',
+      birthdayActive: false,
+      categoryActive: false,
+      label: `Redeem ${points} pts → SGD ${discount.toFixed(2)} off`,
+      expiresAt: addDaysIso(30),
+      reason: null,
+    }
+  }
+
+  if (/^FWB-BDAY(-|$)/.test(code) || code === 'BDAY' || code === 'BIRTHDAY') {
+    return {
+      ok: true,
+      valid: true,
+      code,
+      kind: 'birthday',
+      memberId: input.memberId || null,
+      pointsCost: 0,
+      discount: 0,
+      currency: 'SGD',
+      birthdayActive: true,
+      categoryActive: false,
+      label: 'Birthday month bonus (+1.00 earn)',
+      expiresAt: addDaysIso(30),
+      reason: null,
+    }
+  }
+
+  if (/^FWB-CAT(-|$)/.test(code) || code === 'CAT' || code === 'CATEGORY') {
+    return {
+      ok: true,
+      valid: true,
+      code,
+      kind: 'category_bonus',
+      memberId: input.memberId || null,
+      pointsCost: 0,
+      discount: 0,
+      currency: 'SGD',
+      birthdayActive: false,
+      categoryActive: true,
+      label: 'Category bonus (+1.00 earn)',
+      expiresAt: addDaysIso(30),
+      reason: null,
+    }
+  }
+
+  return {
+    ok: false,
+    valid: false,
+    code,
+    kind: null,
+    memberId: null,
+    pointsCost: 0,
+    discount: 0,
+    currency: 'SGD',
+    birthdayActive: false,
+    categoryActive: false,
+    label: null,
+    expiresAt: null,
+    reason: 'Unknown voucher code',
+  }
+}
+
+export async function mockIssueEarnVoucher(input: {
+  memberId: string
+  kind: 'birthday' | 'category_bonus'
+  currency?: string
+}): Promise<{ ok: true; voucher: import('./types').FranIssuedVoucher }> {
+  const prefix = input.kind === 'birthday' ? 'FWB-BDAY' : 'FWB-CAT'
+  const code = `${prefix}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+  return {
+    ok: true,
+    voucher: {
+      code,
+      kind: input.kind,
+      memberId: input.memberId,
+      pointsCost: 0,
+      discount: 0,
+      currency: input.currency || 'SGD',
+      issuedAt: nowIso(),
+      expiresAt: addDaysIso(30),
+      status: 'issued',
+      label:
+        input.kind === 'birthday'
+          ? 'Birthday month bonus (+1.00 earn rate)'
+          : 'Category bonus (+1.00 earn rate)',
+    },
+  }
+}

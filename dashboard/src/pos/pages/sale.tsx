@@ -46,7 +46,12 @@ import { FranCounterProfileCard } from '@/pos/fran/components/fran-counter-profi
 import { FranCustomerModal } from '@/pos/fran/components/fran-customer-modal'
 import { FranMemberStrip } from '@/pos/fran/components/fran-member-strip'
 import { FranRewardRedemptionPanel } from '@/pos/fran/components/fran-reward-redemption-panel'
-import { createFranCrmClient } from '@/pos/fran/lib/fran-crm-client'
+import { FranVoucherScanPanel } from '@/pos/fran/components/fran-voucher-scan'
+import {
+  createFranCrmClient,
+  fetchPosCapabilities,
+  isFranCrmLiveConfigured,
+} from '@/pos/fran/lib/fran-crm-client'
 import { mockPreviewBasket } from '@/pos/fran/mock-crm'
 import { evaluateFranPolicy } from '@/pos/fran/lib/fran-policy-evaluator'
 import type {
@@ -57,6 +62,7 @@ import type {
   FranLoyaltySyncState,
   FranRewardDecision,
   FranRewardQuote,
+  FranVoucherScan,
   FranSaleContext,
 } from '@/pos/fran/types'
 import { listSkumsPosCatalog, quoteSkumsPosBasket, resolveSkumsPosScan } from '@/pos/lib/skums-client'
@@ -382,11 +388,70 @@ export default function SalePage() {
     completeSale,
     updateLastSale,
   } = pos
-  // Demo register always uses mock Fran CRM so earn/rewards preview works without a live CRM URL.
-  const franCrm = useMemo(
-    () => createFranCrmClient(mode === 'demo' ? { mode: 'mock' } : undefined),
-    [mode]
-  )
+  // Target: loyalty via SKUMS workspace key (POS → SKUMS → CRM).
+  // Fallback: legacy direct CRM URL. Else mock.
+  const franCrm = useMemo(() => {
+    if (skumsConnector) {
+      return createFranCrmClient({ mode: 'skums', skums: skumsConnector })
+    }
+    if (isFranCrmLiveConfigured()) return createFranCrmClient({ mode: 'live' })
+    if (mode === 'demo') return createFranCrmClient({ mode: 'mock' })
+    return createFranCrmClient()
+  }, [mode, skumsConnector?.apiKey, skumsConnector?.apiUrl])
+
+  /** M3: SKUMS + loyalty readiness when using workspace key */
+  const [posCapabilities, setPosCapabilities] = useState<{
+    ready_for_member_loyalty: boolean
+    loyalty: { ok: boolean; status: string; message: string }
+    skums: { ok: boolean }
+  } | null>(null)
+  const [posCapabilitiesError, setPosCapabilitiesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!skumsConnector) {
+      setPosCapabilities(null)
+      setPosCapabilitiesError(null)
+      return
+    }
+    let cancelled = false
+    void fetchPosCapabilities(skumsConnector)
+      .then((caps) => {
+        if (cancelled) return
+        setPosCapabilities({
+          ready_for_member_loyalty: Boolean(caps.ready_for_member_loyalty),
+          loyalty: caps.loyalty,
+          skums: caps.skums,
+        })
+        setPosCapabilitiesError(null)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setPosCapabilities(null)
+        setPosCapabilitiesError(err instanceof Error ? err.message : 'Capabilities check failed')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [skumsConnector?.apiKey, skumsConnector?.apiUrl])
+
+  const openMemberLookup = () => {
+    if (skumsConnector) {
+      if (posCapabilitiesError) {
+        setBasketNotice(
+          `SKUMS not ready for loyalty: ${posCapabilitiesError}. Fix connector or use non-member/tourist.`,
+        )
+        return
+      }
+      if (posCapabilities && !posCapabilities.ready_for_member_loyalty) {
+        setBasketNotice(
+          posCapabilities.loyalty?.message ||
+            'Loyalty not linked on this SKUMS workspace. HQ must set workspace_crm_links / FRAN_CRM_BASE_URL. Non-member and tourist still work.',
+        )
+        return
+      }
+    }
+    setFranCustomerOpen(true)
+  }
 
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
@@ -401,6 +466,7 @@ export default function SalePage() {
   const [franAppliedReward, setFranAppliedReward] = useState<FranAppliedReward | null>(null)
   const [franQuoteLoading, setFranQuoteLoading] = useState(false)
   const [franRewardBasketKey, setFranRewardBasketKey] = useState<string | null>(null)
+  const [franVoucherScans, setFranVoucherScans] = useState<FranVoucherScan[]>([])
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [cartOverrideOpen, setCartOverrideOpen] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
@@ -568,6 +634,7 @@ export default function SalePage() {
             quote: quoteResponse.data,
             session: activeFranSession,
             calculatedAt: quotedAt,
+            voucherScans: franVoucherScans,
           })
         } catch {
           // Fall through to Fran basket preview (mock or live CRM).
@@ -658,6 +725,7 @@ export default function SalePage() {
     franBasketTotals.total,
     franCrm,
     franSession,
+    franVoucherScans,
     mode,
     pos.user?.sessionId,
     provisionalFranEarnPoints,
@@ -1250,6 +1318,7 @@ export default function SalePage() {
 
   const clearFranSession = () => {
     clearFranReward()
+    setFranVoucherScans([])
     setFranSession(null)
     setFranPreview(null)
     setFranPreviewError(null)
@@ -1301,6 +1370,43 @@ export default function SalePage() {
     } finally {
       setFranQuoteLoading(false)
     }
+  }
+
+  const authorizeFranVoucher = async (code: string) => {
+    const memberId = franSession?.member?.id || null
+    const res = await franCrm.authorizeVoucher({
+      code,
+      memberId,
+    })
+    if (res.valid) {
+      setFranVoucherScans((prev) => {
+        const next = prev.filter((s) => s.code !== res.code)
+        next.push({
+          kind: res.kind || 'other',
+          code: res.code,
+          label: res.label,
+          scannedAt: new Date().toISOString(),
+        })
+        return next
+      })
+      // Dens redeem → open points reward quote for cashier confirm
+      if (res.kind === 'points_redeem' && res.pointsCost > 0 && franPreview) {
+        const densReward: FranRewardDecision = {
+          id: 'fran-points-redemption',
+          title: res.label || `Redeem ${res.pointsCost} pts`,
+          description: 'FWB fixed dens redemption from scanned voucher.',
+          kind: 'points_redemption',
+          value: res.discount,
+          pointsCost: res.pointsCost,
+          expiresAt: res.expiresAt,
+          eligible: true,
+          reason: null,
+          requiresConfirmation: true,
+        }
+        void quoteFranReward(densReward, res.pointsCost)
+      }
+    }
+    return res
   }
 
   const confirmFranRewardQuote = () => {
@@ -1682,6 +1788,26 @@ export default function SalePage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {skumsConnector && (
+        <div
+          className={cn(
+            'shrink-0 border-b px-3 py-1.5 text-xs',
+            posCapabilitiesError
+              ? 'bg-amber-500/10 text-amber-900 dark:text-amber-100'
+              : posCapabilities?.ready_for_member_loyalty
+                ? 'bg-emerald-500/10 text-emerald-900 dark:text-emerald-100'
+                : 'bg-sky-500/10 text-sky-900 dark:text-sky-100',
+          )}
+        >
+          {posCapabilitiesError
+            ? `SKUMS capabilities: ${posCapabilitiesError}`
+            : posCapabilities
+              ? posCapabilities.ready_for_member_loyalty
+                ? `Live · SKUMS + loyalty linked (${posCapabilities.loyalty.status}) — member FWB via workspace key`
+                : `Live · SKUMS OK · loyalty ${posCapabilities.loyalty.status}: ${posCapabilities.loyalty.message}`
+              : 'Checking SKUMS + loyalty capabilities…'}
+        </div>
+      )}
       <form
         className="flex shrink-0 flex-col gap-2 border-b bg-card p-3 md:flex-row md:items-center"
         onSubmit={(event) => {
@@ -1815,7 +1941,7 @@ export default function SalePage() {
         previewLoading={franPreviewLoading}
         previewError={franPreviewError}
         loyaltySync={franLoyaltySync}
-        onFindMember={() => setFranCustomerOpen(true)}
+        onFindMember={openMemberLookup}
         onOpenDetails={() => setFranMemberDialogOpen(true)}
         onClearSession={clearFranSession}
       />
@@ -2057,21 +2183,58 @@ export default function SalePage() {
           </DialogHeader>
           <div className="min-h-0 overflow-y-auto p-3 sm:p-4">
             {franSession ? (
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-                <FranCounterProfileCard session={franSession} preview={franPreview} />
-                <FranRewardRedemptionPanel
-                  preview={franPreview}
-                  quote={franQuote}
-                  appliedReward={franAppliedReward}
-                  quoteLoading={franQuoteLoading}
-                  previewLoading={franPreviewLoading}
-                  previewError={franPreviewError}
-                  hasSession={Boolean(franSession)}
-                  hasSaleItems={franBasketLines.length > 0}
-                  onQuote={(reward, pointsToRedeem) => { void quoteFranReward(reward, pointsToRedeem) }}
-                  onConfirmQuote={confirmFranRewardQuote}
-                  onClearReward={clearFranReward}
-                />
+              <div className="grid gap-3">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                  <FranCounterProfileCard session={franSession} preview={franPreview} />
+                  <FranRewardRedemptionPanel
+                    preview={franPreview}
+                    quote={franQuote}
+                    appliedReward={franAppliedReward}
+                    quoteLoading={franQuoteLoading}
+                    previewLoading={franPreviewLoading}
+                    previewError={franPreviewError}
+                    hasSession={Boolean(franSession)}
+                    hasSaleItems={franBasketLines.length > 0}
+                    onQuote={(reward, pointsToRedeem) => { void quoteFranReward(reward, pointsToRedeem) }}
+                    onConfirmQuote={confirmFranRewardQuote}
+                    onClearReward={clearFranReward}
+                  />
+                </div>
+                {franSession.member && !franSession.member.tourist && (
+                  <FranVoucherScanPanel
+                    memberId={franSession.member.id}
+                    scans={franVoucherScans}
+                    densOptions={
+                      franPreview?.pointsRedemption?.fixedDenominations?.map((d) => ({
+                        points: d.points,
+                        discount: d.discount,
+                      })) || [
+                        { points: 200, discount: 6 },
+                        { points: 500, discount: 20 },
+                        { points: 1000, discount: 50 },
+                        { points: 1500, discount: 90 },
+                        { points: 2500, discount: 175 },
+                      ]
+                    }
+                    onAuthorize={authorizeFranVoucher}
+                    onRemove={(code) =>
+                      setFranVoucherScans((prev) => prev.filter((s) => s.code !== code))
+                    }
+                    onQuoteDens={async (points) => {
+                      const member = franSession.member
+                      if (!member) return null
+                      const available =
+                        franPreview?.pointsRedemption?.availablePoints ?? member.pointsBalance
+                      const q = await franCrm.quoteRedeemDens({
+                        memberId: member.id,
+                        points,
+                        availablePoints: available,
+                        currency: STORE.currency,
+                      })
+                      return { code: q.voucher.code, label: q.voucher.label }
+                    }}
+                  />
+                )}
               </div>
             ) : (
               <div className="rounded-lg border border-dashed p-4 text-center">
@@ -2079,7 +2242,7 @@ export default function SalePage() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Scan a member QR/barcode, type a mobile number, or choose non-member/tourist before payment.
                 </p>
-                <Button className="mt-3" onClick={() => setFranCustomerOpen(true)}>
+                <Button className="mt-3" onClick={openMemberLookup}>
                   Find member
                 </Button>
               </div>

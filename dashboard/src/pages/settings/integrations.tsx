@@ -46,11 +46,18 @@ export default function IntegrationsPage() {
   })
   const [franForm, setFranForm] = useState(() => {
     if (typeof window === 'undefined') {
-      return { endpoint_url: '', offline_mode: true }
+      return {
+        endpoint_url: '',
+        offline_mode: true,
+        workspace_id: '11111111-1111-4111-8111-111111111111',
+      }
     }
     return {
       endpoint_url: localStorage.getItem('fran_crm_endpoint_url') || '',
       offline_mode: localStorage.getItem('fran_crm_offline_mode') !== 'false',
+      workspace_id:
+        localStorage.getItem('fran_crm_workspace_id') ||
+        '11111111-1111-4111-8111-111111111111',
     }
   })
 
@@ -124,21 +131,71 @@ export default function IntegrationsPage() {
   const handleSaveFranCrm = () => {
     localStorage.setItem('fran_crm_endpoint_url', franForm.endpoint_url.trim())
     localStorage.setItem('fran_crm_offline_mode', String(franForm.offline_mode))
-    toast.success('Fran CRM settings saved for this register')
+    localStorage.setItem(
+      'fran_crm_workspace_id',
+      franForm.workspace_id.trim() || '11111111-1111-4111-8111-111111111111',
+    )
+    toast.success(
+      franForm.offline_mode || !franForm.endpoint_url.trim()
+        ? 'Fran CRM settings saved (mock/offline)'
+        : 'Fran CRM live endpoint saved — reload Sale to use CRM policy/members',
+    )
+  }
+
+  const handleTestFranCrm = async () => {
+    const base = franForm.endpoint_url.trim().replace(/\/+$/, '')
+    if (!base) {
+      toast.error('Enter Fran CRM API URL first')
+      return
+    }
+    try {
+      const ws = franForm.workspace_id.trim() || '11111111-1111-4111-8111-111111111111'
+      const res = await fetch(
+        `${base}/api/fran/loyalty/policy-versions/active?workspaceId=${encodeURIComponent(ws)}&programKey=fran-v2&format=pos`,
+        { headers: { 'x-pos-client': 'fran-pos' } },
+      )
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const body = await res.json()
+      if (!body?.policyVersionId && !body?.posPolicyBundle?.policyVersionId) {
+        throw new Error('Response missing policyVersionId')
+      }
+      toast.success('Fran CRM policy endpoint OK (format=pos)')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Fran CRM policy test failed')
+    }
   }
 
   return (
     <div className="space-y-5">
       <Card>
         <CardHeader>
-          <CardTitle>Fran CRM</CardTitle>
-          <CardDescription>Configure the POS-side CRM decision endpoint once the Fran CRM fork is live.</CardDescription>
+          <CardTitle>Loyalty (Fran CRM)</CardTitle>
+          <CardDescription>
+            Production path: connect <strong>SKUMS</strong> only — CRM is linked on the SKUMS workspace and proxied as{' '}
+            <code className="text-xs">/fran/pos/loyalty/*</code>. Direct CRM URL below is a legacy/dev shim.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm space-y-1">
+            <p className="font-medium">Preferred setup</p>
+            <ol className="list-decimal pl-5 text-muted-foreground space-y-1">
+              <li>Configure <strong>SKUMS connector</strong> (below) with workspace API key (<code className="text-xs">pos:read</code> / <code className="text-xs">pos:write</code>).</li>
+              <li>
+                On SKUMS: link CRM for the workspace (<code className="text-xs">workspace_crm_links</code> or env{' '}
+                <code className="text-xs">FRAN_CRM_BASE_URL</code>).
+              </li>
+              <li>
+                POS Sale uses SKUMS for catalog <em>and</em> loyalty automatically when SKUMS is enabled.
+              </li>
+            </ol>
+          </div>
+
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
-              <Label>Offline/mock CRM mode</Label>
-              <p className="text-sm text-muted-foreground">Use mocked member, preview, and reward decisions for cashier workflow design.</p>
+              <Label>Offline/mock CRM mode (legacy direct CRM only)</Label>
+              <p className="text-sm text-muted-foreground">
+                Ignored when SKUMS connector is enabled. On = browser mock members if no SKUMS.
+              </p>
             </div>
             <Switch
               checked={franForm.offline_mode}
@@ -147,21 +204,37 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Fran CRM API URL</Label>
+            <Label>Legacy Fran CRM API URL (optional)</Label>
             <Input
               value={franForm.endpoint_url}
               onChange={(event) => setFranForm({ ...franForm, endpoint_url: event.target.value })}
-              placeholder="https://fran-crm.example.com"
+              placeholder="http://localhost:3000 — only if SKUMS not used"
             />
           </div>
 
-          <div className="rounded-lg border p-3 text-sm text-muted-foreground">
-            Browser code should call a POS-safe CRM endpoint or proxy. Do not place CRM, loyalty, SKUMS, or service-role secrets in VITE_ variables.
+          <div className="space-y-2">
+            <Label>Workspace ID (demo UUID for legacy path)</Label>
+            <Input
+              value={franForm.workspace_id}
+              onChange={(event) => setFranForm({ ...franForm, workspace_id: event.target.value })}
+              placeholder="11111111-1111-4111-8111-111111111111"
+            />
           </div>
 
-          <div className="flex justify-end">
+          <div className="rounded-lg border p-3 text-sm text-muted-foreground space-y-1">
+            <p>
+              Demo member via facade: <code className="text-xs">FRAN-0001</code> · phone{' '}
+              <code className="text-xs">81234470</code> → F3.
+            </p>
+            <p>Do not put CRM service-role secrets in the browser.</p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={handleTestFranCrm}>
+              Test legacy CRM
+            </Button>
             <Button onClick={handleSaveFranCrm}>
-              <ShieldCheck className="h-4 w-4" /> Save Fran CRM
+              <ShieldCheck className="h-4 w-4" /> Save legacy CRM
             </Button>
           </div>
         </CardContent>

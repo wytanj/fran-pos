@@ -333,6 +333,58 @@ export interface FranLoyaltyCommitSaleResult {
   warnings: string[]
 }
 
+/** Quote FWB fixed dens redeem (in-app → QR). */
+export interface FranQuoteRedeemDensInput {
+  memberId: string
+  points: number
+  availablePoints: number
+  currency?: string
+  workspaceId?: string
+}
+
+export interface FranIssuedVoucher {
+  code: string
+  kind: FranVoucherKind
+  memberId: string
+  pointsCost: number
+  discount: number
+  currency: string
+  issuedAt: string
+  expiresAt: string
+  status: string
+  label: string
+}
+
+export interface FranQuoteRedeemDensResult {
+  ok: true
+  voucher: FranIssuedVoucher
+  dens: { points: number; discount: number }
+  confirmationText: string
+}
+
+export interface FranAuthorizeVoucherInput {
+  code: string
+  memberId?: string | null
+  saleId?: string | null
+  workspaceId?: string
+}
+
+export interface FranAuthorizeVoucherResult {
+  ok: boolean
+  valid: boolean
+  code: string
+  kind: FranVoucherKind | null
+  memberId: string | null
+  pointsCost: number
+  discount: number
+  currency: string
+  birthdayActive: boolean
+  categoryActive: boolean
+  label: string | null
+  expiresAt: string | null
+  reason: string | null
+}
+
 export interface FranEarnMultiplier {
   kind: FranEarnMultiplierKind
   code: string
