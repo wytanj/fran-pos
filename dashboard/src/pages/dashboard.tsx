@@ -404,9 +404,9 @@ function IntegrationsTab() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <ActionPanel
-            icon={CloudDownload}
+            icon={RefreshCw}
             title="SKUMS Connector"
-            body="Import POS-ready catalog data and resolve scans without making POS the product master."
+            body="Sync POS-ready catalog data and resolve scans without making POS the product master."
             to="/settings/integrations"
             action="Open integrations"
           />
