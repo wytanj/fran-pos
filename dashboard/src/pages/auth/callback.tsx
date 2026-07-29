@@ -16,7 +16,10 @@ export default function AuthCallbackPage() {
   )
   const authError = searchParams.get('error_description') || searchParams.get('error')
   const canOpenPosWithoutCompany =
-    redirectPath === '/pos' || redirectPath.startsWith('/pos/') || redirectPath.startsWith('/pos?')
+    redirectPath === '/pos' ||
+    redirectPath.startsWith('/pos/') ||
+    redirectPath.startsWith('/pos?') ||
+    redirectPath.startsWith('/invite/')
 
   useEffect(() => {
     if (loading || authError) return

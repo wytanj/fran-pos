@@ -3,9 +3,10 @@ import { cn } from '@/lib/utils'
 
 const tabs = [
   { to: '/settings', label: 'Company', end: true },
+  { to: '/settings/team', label: 'Team', end: false },
   { to: '/settings/tax', label: 'Tax Rates', end: false },
   { to: '/settings/payments', label: 'Payment Methods', end: false },
-  { to: '/settings/staff', label: 'Staff', end: false },
+  { to: '/settings/staff', label: 'Staff PIN', end: false },
   { to: '/settings/integrations', label: 'Integrations', end: false },
   { to: '/settings/customization', label: 'Customization', end: false },
 ]

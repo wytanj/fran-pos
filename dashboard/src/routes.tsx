@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route'
 import AuthCallbackPage from '@/pages/auth/callback'
 import LoginPage from '@/pages/auth/login'
 import OnboardingPage from '@/pages/auth/onboarding'
+import CompanyInvitePage from '@/pages/auth/invite'
 import RegisterPage from '@/pages/auth/register'
 import DashboardPage from '@/pages/dashboard'
 import ProductsPage from '@/pages/products'
@@ -15,6 +16,7 @@ import CompanySettingsPage from '@/pages/settings/company'
 import TaxSettingsPage from '@/pages/settings/tax'
 import PaymentMethodsPage from '@/pages/settings/payments'
 import StaffSettingsPage from '@/pages/settings/staff'
+import TeamSettingsPage from '@/pages/settings/team'
 import IntegrationsPage from '@/pages/settings/integrations'
 import CustomizationPage from '@/pages/settings/customization'
 import { PosProvider } from '@/pos/lib/pos-context'
@@ -33,6 +35,8 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/auth/callback', element: <AuthCallbackPage /> },
+  // Public: invite preview + Google accept (membership via RPC after login)
+  { path: '/invite/:token', element: <CompanyInvitePage /> },
   {
     path: '/onboarding',
     element: (
@@ -87,6 +91,7 @@ export const router = createBrowserRouter([
           { path: 'tax', element: <TaxSettingsPage /> },
           { path: 'payments', element: <PaymentMethodsPage /> },
           { path: 'staff', element: <StaffSettingsPage /> },
+          { path: 'team', element: <TeamSettingsPage /> },
           { path: 'integrations', element: <IntegrationsPage /> },
           { path: 'customization', element: <CustomizationPage /> },
         ],
