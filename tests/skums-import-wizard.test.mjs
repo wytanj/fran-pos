@@ -34,6 +34,7 @@ test('products page opens a wizard and starts SKUMS sync from preflight state', 
   assert.match(productsPage, /importWizardOpen/)
   assert.match(productsPage, /prepareImport\(\)/)
   assert.match(productsPage, /startImport\(\)/)
+  assert.match(productsPage, /await skumsImport\.startImport\(\)/)
   assert.match(productsPage, /SkumsImportWizardContent/)
   assert.match(productsPage, /Sync from SKUMS/)
   assert.match(productsPage, /Start Sync/)

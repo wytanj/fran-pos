@@ -118,11 +118,22 @@ export default function ProductsPage() {
   const openSkumsImportWizard = async () => {
     setImportWizardOpen(true)
     try {
-      if (!['ready', 'syncing', 'completed'].includes(skumsImport.job.status)) {
-        await skumsImport.prepareImport()
+      // Don't leave users on "ready" without applying — prepare then auto-start.
+      if (skumsImport.job.status === 'syncing') return
+      if (skumsImport.job.status === 'completed' || skumsImport.job.status === 'failed' || skumsImport.job.status === 'ready') {
+        skumsImport.resetImport()
       }
+      const summary = await skumsImport.prepareImport()
+      const work = (summary.toCreate || 0) + (summary.toUpdate || 0)
+      if (work === 0) {
+        toast.message('SKUMS catalog already in sync', {
+          description: 'No new or changed POS-enabled products to apply.',
+        })
+        return
+      }
+      await skumsImport.startImport()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to prepare SKUMS sync'
+      const message = err instanceof Error ? err.message : 'Failed to sync from SKUMS'
       if (message === SKUMS_CONNECTOR_MISSING_MESSAGE) {
         setImportWizardOpen(false)
         setPendingImportAfterSave(true)
@@ -617,10 +628,19 @@ function SkumsImportWizardContent({
 
   return (
     <div className="mt-5 space-y-5">
+      {job.status === 'ready' ? (
+        <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-900 dark:text-sky-100">
+          Preflight only — products are not in POS yet. Click <strong>Start Sync</strong> (or use the toolbar button, which auto-starts).
+        </div>
+      ) : null}
+
       {job.status === 'completed' ? (
         <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700">
           <CheckCircle2 className="h-4 w-4" />
-          <span>{job.created.toLocaleString()} new, {job.updated.toLocaleString()} updated.</span>
+          <span>
+            Applied to POS products: {job.created.toLocaleString()} new, {job.updated.toLocaleString()} updated.
+            Open Products (clear source filters) to see them.
+          </span>
         </div>
       ) : null}
 

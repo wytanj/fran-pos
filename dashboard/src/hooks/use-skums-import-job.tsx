@@ -365,12 +365,15 @@ export function SkumsImportProvider({ children }: { children: ReactNode }) {
         updated,
         processed,
       }))
-      queryClient.invalidateQueries({ queryKey: ['products', companyId] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats', companyId] })
+      await queryClient.invalidateQueries({ queryKey: ['products', companyId] })
+      await queryClient.refetchQueries({ queryKey: ['products', companyId] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats', companyId] })
       notifyCatalogUpdated()
-      toast.success(
-        `Synced SKUMS catalog: ${created} new, ${updated} updated`
-      )
+      if (created === 0 && updated === 0) {
+        toast.message('SKUMS sync finished with no changes applied')
+      } else {
+        toast.success(`Synced SKUMS catalog: ${created} new, ${updated} updated`)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sync from SKUMS'
       setJob((prev) => ({
