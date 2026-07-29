@@ -14,9 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, ChevronLeft, ChevronRight, CloudDownload, KeyRound, PackagePlus, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, KeyRound, PackagePlus, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
 import { SKUMS_CONNECTOR_MISSING_MESSAGE } from '@/pos/lib/skums-connector'
 import type { Product } from '@pos/shared'
 
@@ -118,11 +118,11 @@ export default function ProductsPage() {
   const openSkumsImportWizard = async () => {
     setImportWizardOpen(true)
     try {
-      if (!['ready', 'importing', 'completed'].includes(skumsImport.job.status)) {
+      if (!['ready', 'syncing', 'completed'].includes(skumsImport.job.status)) {
         await skumsImport.prepareImport()
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to import from SKUMS'
+      const message = err instanceof Error ? err.message : 'Failed to prepare SKUMS sync'
       if (message === SKUMS_CONNECTOR_MISSING_MESSAGE) {
         setImportWizardOpen(false)
         setPendingImportAfterSave(true)
@@ -141,7 +141,7 @@ export default function ProductsPage() {
     try {
       await skumsImport.startImport()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to import from SKUMS'
+      const message = err instanceof Error ? err.message : 'Failed to sync from SKUMS'
       if (message === SKUMS_CONNECTOR_MISSING_MESSAGE) {
         setImportWizardOpen(false)
         setPendingImportAfterSave(true)
@@ -269,9 +269,14 @@ export default function ProductsPage() {
           <Button
             variant="outline"
             onClick={handleImportSkums}
-            disabled={skumsImport.job.status === 'estimating'}
+            disabled={skumsImport.job.status === 'estimating' || skumsImport.job.status === 'syncing'}
           >
-            <CloudDownload className="h-4 w-4" /> {skumsImport.job.status === 'estimating' ? 'Checking...' : 'Import from SKUMS'}
+            <RefreshCw className={cn('h-4 w-4', (skumsImport.job.status === 'estimating' || skumsImport.job.status === 'syncing') && 'animate-spin')} />
+            {skumsImport.job.status === 'estimating'
+              ? 'Checking…'
+              : skumsImport.job.status === 'syncing'
+                ? 'Syncing…'
+                : 'Sync from SKUMS'}
           </Button>
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" /> Add Product
@@ -354,10 +359,10 @@ export default function ProductsPage() {
                   disabled={skumsImport.job.status === 'estimating'}
                   className="rounded-lg border p-5 text-left transition-colors hover:bg-accent disabled:opacity-60"
                 >
-                  <CloudDownload className="mb-3 h-6 w-6 text-primary" />
-                  <h3 className="font-semibold">Import from SKUMS</h3>
+                  <RefreshCw className="mb-3 h-6 w-6 text-primary" />
+                  <h3 className="font-semibold">Sync from SKUMS</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Pull POS-enabled SKUMS catalog items into the live POS product table.
+                    Create or update POS products from POS-enabled SKUMS catalog items (by SKUMS id / SKU / barcode).
                   </p>
                 </button>
               </div>
@@ -541,7 +546,7 @@ export default function ProductsPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={saveSkumsConnector.isPending}>
-                {saveSkumsConnector.isPending ? 'Saving...' : pendingImportAfterSave ? 'Save and Import' : 'Save Connector'}
+                {saveSkumsConnector.isPending ? 'Saving...' : pendingImportAfterSave ? 'Save and Sync' : 'Save Connector'}
               </Button>
             </div>
           </form>
@@ -551,7 +556,7 @@ export default function ProductsPage() {
       <Dialog open={importWizardOpen} onOpenChange={setImportWizardOpen}>
         <DialogContent onClose={() => setImportWizardOpen(false)} className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Import from SKUMS</DialogTitle>
+            <DialogTitle>Sync from SKUMS</DialogTitle>
           </DialogHeader>
           <SkumsImportWizardContent
             job={skumsImport.job}
@@ -578,6 +583,7 @@ function SkumsImportWizardContent({
 }) {
   const percent = job.total > 0 ? Math.min(100, Math.round((job.processed / job.total) * 100)) : 8
   const topCategories = job.summary?.categories.slice(0, 6) || []
+  const syncTotal = (job.summary?.toCreate || 0) + (job.summary?.toUpdate || 0)
 
   if (job.status === 'estimating') {
     return (
@@ -599,7 +605,7 @@ function SkumsImportWizardContent({
     return (
       <div className="mt-5 space-y-4">
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          {job.error || 'SKUMS import failed'}
+          {job.error || 'SKUMS sync failed'}
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onReset}>Reset</Button>
@@ -614,21 +620,21 @@ function SkumsImportWizardContent({
       {job.status === 'completed' ? (
         <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700">
           <CheckCircle2 className="h-4 w-4" />
-          <span>{job.imported.toLocaleString()} imported, {job.skipped.toLocaleString()} skipped.</span>
+          <span>{job.created.toLocaleString()} new, {job.updated.toLocaleString()} updated.</span>
         </div>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="SKUMS catalog" value={(job.summary?.catalogTotal || 0).toLocaleString()} />
+        <Metric label="SKUMS POS catalog" value={(job.summary?.catalogTotal || 0).toLocaleString()} />
         <Metric label="POS-enabled" value={(job.summary?.posEligible || 0).toLocaleString()} />
-        <Metric label="Ready" value={(job.summary?.importable || 0).toLocaleString()} />
-        <Metric label="Already in POS" value={(job.summary?.skippedExisting || 0).toLocaleString()} />
+        <Metric label="New" value={(job.summary?.toCreate || 0).toLocaleString()} />
+        <Metric label="Update" value={(job.summary?.toUpdate || 0).toLocaleString()} />
       </div>
 
-      {job.status === 'importing' && (
+      {job.status === 'syncing' && (
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span>{job.imported.toLocaleString()} imported</span>
+            <span>{job.created.toLocaleString()} new · {job.updated.toLocaleString()} updated</span>
             <span>{percent}%</span>
           </div>
           <ProgressBar value={percent} />
@@ -639,15 +645,15 @@ function SkumsImportWizardContent({
         <div className="grid grid-cols-[1fr_6rem_6rem_6rem] bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground">
           <span>Category</span>
           <span className="text-right">Total</span>
-          <span className="text-right">Ready</span>
-          <span className="text-right">In POS</span>
+          <span className="text-right">New</span>
+          <span className="text-right">Update</span>
         </div>
         {topCategories.length > 0 ? topCategories.map((category) => (
           <div key={category.name} className="grid grid-cols-[1fr_6rem_6rem_6rem] border-t px-3 py-2 text-sm">
             <span className="truncate">{category.name}</span>
             <span className="text-right">{category.total.toLocaleString()}</span>
-            <span className="text-right">{category.importable.toLocaleString()}</span>
-            <span className="text-right">{category.skipped.toLocaleString()}</span>
+            <span className="text-right">{category.toCreate.toLocaleString()}</span>
+            <span className="text-right">{category.toUpdate.toLocaleString()}</span>
           </div>
         )) : (
           <div className="px-3 py-5 text-center text-sm text-muted-foreground">No POS-enabled SKUMS products found.</div>
@@ -658,12 +664,12 @@ function SkumsImportWizardContent({
         {job.status === 'ready' && (
           <>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="button" onClick={onStart} disabled={!job.summary?.importable}>
-              <CloudDownload className="h-4 w-4" /> Start Import
+            <Button type="button" onClick={onStart} disabled={syncTotal === 0}>
+              <RefreshCw className="h-4 w-4" /> Start Sync
             </Button>
           </>
         )}
-        {job.status === 'importing' && (
+        {job.status === 'syncing' && (
           <Button type="button" variant="outline" onClick={onClose}>Run in background</Button>
         )}
         {job.status === 'completed' && (

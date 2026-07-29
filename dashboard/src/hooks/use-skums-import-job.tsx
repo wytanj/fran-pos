@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ChevronUp, CloudDownload, X } from 'lucide-react'
+import { CheckCircle2, ChevronUp, RefreshCw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -24,52 +24,59 @@ import {
 } from '@/hooks/use-products'
 import type { SkumsPosCatalogItem } from '@pos/shared'
 
-type ImportStatus = 'idle' | 'estimating' | 'ready' | 'importing' | 'completed' | 'failed'
+type SyncStatus = 'idle' | 'estimating' | 'ready' | 'syncing' | 'completed' | 'failed'
 
-export interface SkumsImportCategorySummary {
+export interface SkumsSyncCategorySummary {
   name: string
   total: number
-  importable: number
-  skipped: number
+  toCreate: number
+  toUpdate: number
 }
 
-export interface SkumsImportSummary {
+export interface SkumsSyncSummary {
   catalogTotal: number
   posEligible: number
-  importable: number
-  skippedExisting: number
-  categories: SkumsImportCategorySummary[]
+  toCreate: number
+  toUpdate: number
+  categories: SkumsSyncCategorySummary[]
 }
 
-interface SkumsImportJobState {
-  status: ImportStatus
-  summary: SkumsImportSummary | null
-  imported: number
-  skipped: number
+interface SkumsSyncJobState {
+  status: SyncStatus
+  summary: SkumsSyncSummary | null
+  created: number
+  updated: number
   processed: number
   total: number
   error: string | null
 }
 
-interface PreparedSkumsImport {
+interface ExistingProductRow {
+  id: string
+  sku: string | null
+  barcode: string | null
+  metadata: Record<string, any> | null
+}
+
+interface PreparedSkumsSync {
   connector: SkumsConnectorConfig
   items: SkumsPosCatalogItem[]
-  existingKeys: Set<string>
-  summary: SkumsImportSummary
+  existingByKey: Map<string, ExistingProductRow>
+  summary: SkumsSyncSummary
 }
 
 interface SkumsImportJobContextValue {
-  job: SkumsImportJobState
-  prepareImport: () => Promise<SkumsImportSummary>
+  job: SkumsSyncJobState
+  prepareImport: () => Promise<SkumsSyncSummary>
   startImport: () => Promise<void>
   resetImport: () => void
 }
 
-const initialJob: SkumsImportJobState = {
+const initialJob: SkumsSyncJobState = {
   status: 'idle',
   summary: null,
-  imported: 0,
-  skipped: 0,
+  created: 0,
+  updated: 0,
   processed: 0,
   total: 0,
   error: null,
@@ -79,10 +86,21 @@ const SkumsImportJobContext = createContext<SkumsImportJobContextValue | null>(n
 
 function itemKeys(item: SkumsPosCatalogItem) {
   return [
-    item.sku,
-    item.identifiers.ean,
-    item.identifiers.upc,
-    item.identifiers.gtin,
+    item.product_id ? `skums:${item.product_id}` : null,
+    item.id ? `skums:${item.id}` : null,
+    item.sku ? `sku:${item.sku}` : null,
+    item.identifiers.ean ? `bc:${item.identifiers.ean}` : null,
+    item.identifiers.upc ? `bc:${item.identifiers.upc}` : null,
+    item.identifiers.gtin ? `bc:${item.identifiers.gtin}` : null,
+  ].filter(Boolean) as string[]
+}
+
+function existingKeys(row: ExistingProductRow) {
+  const skumsId = row.metadata?.skums?.product_id || row.metadata?.skums?.id
+  return [
+    skumsId ? `skums:${skumsId}` : null,
+    row.sku ? `sku:${row.sku}` : null,
+    row.barcode ? `bc:${row.barcode}` : null,
   ].filter(Boolean) as string[]
 }
 
@@ -94,17 +112,29 @@ function categoryName(item: SkumsPosCatalogItem) {
   return item.category_name || 'Uncategorized'
 }
 
-async function loadExistingProductKeys(companyId: string) {
+function findExisting(item: SkumsPosCatalogItem, map: Map<string, ExistingProductRow>) {
+  for (const key of itemKeys(item)) {
+    const hit = map.get(key)
+    if (hit) return hit
+  }
+  return null
+}
+
+async function loadExistingProducts(companyId: string) {
   const { data, error } = await supabase
     .from('products')
-    .select('sku, barcode')
+    .select('id, sku, barcode, metadata')
     .eq('company_id', companyId)
 
   if (error) throw error
 
-  return new Set(
-    (data || []).flatMap((product) => [product.sku, product.barcode].filter(Boolean) as string[])
-  )
+  const map = new Map<string, ExistingProductRow>()
+  for (const row of (data || []) as ExistingProductRow[]) {
+    for (const key of existingKeys(row)) {
+      if (!map.has(key)) map.set(key, row)
+    }
+  }
+  return map
 }
 
 async function loadCatalog(
@@ -121,7 +151,7 @@ async function loadCatalog(
     const response = await listSkumsPosCatalog({ limit: pageSize, offset }, connector)
     catalogTotal = response.total
     items.push(...response.data)
-    onProgress(items.length, catalogTotal)
+    onProgress(items.length, Math.max(catalogTotal, items.length))
 
     const nextOffset = typeof response.next_offset === 'number' ? response.next_offset : offset + response.data.length
     hasMore = response.has_more ?? (nextOffset > offset && nextOffset < response.total)
@@ -129,32 +159,30 @@ async function loadCatalog(
     offset = nextOffset
   }
 
-  return { items, catalogTotal }
+  return { items, catalogTotal: Math.max(catalogTotal, items.length) }
 }
 
 function summarizeCatalog(
   items: SkumsPosCatalogItem[],
-  existingKeys: Set<string>,
+  existingByKey: Map<string, ExistingProductRow>,
   catalogTotal: number
-): SkumsImportSummary {
-  const categories = new Map<string, SkumsImportCategorySummary>()
+): SkumsSyncSummary {
+  const categories = new Map<string, SkumsSyncCategorySummary>()
   let posEligible = 0
-  let importable = 0
-  let skippedExisting = 0
+  let toCreate = 0
+  let toUpdate = 0
 
   for (const item of items.filter(isImportableItem)) {
     posEligible += 1
     const name = categoryName(item)
-    const current = categories.get(name) || { name, total: 0, importable: 0, skipped: 0 }
-    const exists = itemKeys(item).some((key) => existingKeys.has(key))
-
+    const current = categories.get(name) || { name, total: 0, toCreate: 0, toUpdate: 0 }
     current.total += 1
-    if (exists) {
-      current.skipped += 1
-      skippedExisting += 1
+    if (findExisting(item, existingByKey)) {
+      current.toUpdate += 1
+      toUpdate += 1
     } else {
-      current.importable += 1
-      importable += 1
+      current.toCreate += 1
+      toCreate += 1
     }
     categories.set(name, current)
   }
@@ -162,8 +190,8 @@ function summarizeCatalog(
   return {
     catalogTotal,
     posEligible,
-    importable,
-    skippedExisting,
+    toCreate,
+    toUpdate,
     categories: Array.from(categories.values()).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)),
   }
 }
@@ -178,14 +206,14 @@ function notifyCatalogUpdated() {
 export function SkumsImportProvider({ children }: { children: ReactNode }) {
   const { company } = useAuth()
   const queryClient = useQueryClient()
-  const [job, setJob] = useState<SkumsImportJobState>(initialJob)
-  const preparedRef = useRef<PreparedSkumsImport | null>(null)
+  const [job, setJob] = useState<SkumsSyncJobState>(initialJob)
+  const preparedRef = useRef<PreparedSkumsSync | null>(null)
 
   const prepareImport = useCallback(async () => {
     if (!company) throw new Error('No company selected')
-    if (job.status === 'importing') {
+    if (job.status === 'syncing') {
       if (job.summary) return job.summary
-      throw new Error('SKUMS import already running')
+      throw new Error('SKUMS sync already running')
     }
 
     preparedRef.current = null
@@ -198,7 +226,7 @@ export function SkumsImportProvider({ children }: { children: ReactNode }) {
       const connector = await loadSkumsConnectorForCompany(company.id)
       if (!connector) throw new Error(SKUMS_CONNECTOR_MISSING_MESSAGE)
 
-      const existingKeys = await loadExistingProductKeys(company.id)
+      const existingByKey = await loadExistingProducts(company.id)
       const { items, catalogTotal } = await loadCatalog(connector, (processed, total) => {
         setJob((prev) => ({
           ...prev,
@@ -207,23 +235,23 @@ export function SkumsImportProvider({ children }: { children: ReactNode }) {
           total,
         }))
       })
-      const summary = summarizeCatalog(items, existingKeys, catalogTotal)
+      const summary = summarizeCatalog(items, existingByKey, catalogTotal)
 
       preparedRef.current = {
         connector,
         items,
-        existingKeys,
+        existingByKey,
         summary,
       }
       setJob({
         ...initialJob,
         status: 'ready',
         summary,
-        total: summary.importable,
+        total: summary.toCreate + summary.toUpdate,
       })
       return summary
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to prepare SKUMS import'
+      const message = err instanceof Error ? err.message : 'Failed to prepare SKUMS sync'
       setJob((prev) => ({
         ...prev,
         status: 'failed',
@@ -238,75 +266,118 @@ export function SkumsImportProvider({ children }: { children: ReactNode }) {
     const companyId = company.id
 
     const prepared = preparedRef.current || await prepareImport().then(() => preparedRef.current)
-    if (!prepared) throw new Error('SKUMS import was not prepared')
+    if (!prepared) throw new Error('SKUMS sync was not prepared')
 
+    const workItems = prepared.items.filter(isImportableItem)
     setJob((prev) => ({
       ...prev,
-      status: 'importing',
-      imported: 0,
-      skipped: 0,
+      status: 'syncing',
+      created: 0,
+      updated: 0,
       processed: 0,
-      total: prepared.summary.importable,
+      total: workItems.length,
       error: null,
     }))
 
-    const existingKeys = new Set(prepared.existingKeys)
-    const insertBatchSize = 100
-    const rows: ProductInput[] = []
-    let imported = 0
-    let skipped = 0
+    const existingByKey = new Map(prepared.existingByKey)
+    let created = 0
+    let updated = 0
     let processed = 0
+    const insertBatch: ProductInput[] = []
+    const insertBatchSize = 50
 
-    async function insertRows(batch: ProductInput[]) {
-      if (batch.length === 0) return
-      const { error } = await supabase
+    async function flushInserts() {
+      if (insertBatch.length === 0) return
+      const batch = insertBatch.splice(0, insertBatch.length)
+      const { data, error } = await supabase
         .from('products')
         .insert(batch.map((row) => ({ ...row, company_id: companyId })))
+        .select('id, sku, barcode, metadata')
       if (error) throw error
-      imported += batch.length
+      created += batch.length
+      for (const row of (data || []) as ExistingProductRow[]) {
+        for (const key of existingKeys(row)) existingByKey.set(key, row)
+      }
     }
 
     try {
-      for (const item of prepared.items.filter(isImportableItem)) {
-        const keys = itemKeys(item)
-        if (keys.some((key) => existingKeys.has(key))) {
-          skipped += 1
-          continue
+      for (const item of workItems) {
+        const input = skumsCatalogItemToProductInput(item)
+        const existing = findExisting(item, existingByKey)
+
+        if (existing) {
+          const { error } = await supabase
+            .from('products')
+            .update({
+              name: input.name,
+              description: input.description,
+              sku: input.sku ?? existing.sku,
+              barcode: input.barcode ?? existing.barcode,
+              price: input.price,
+              track_inventory: input.track_inventory,
+              inventory_count: input.inventory_count,
+              is_active: input.is_active,
+              metadata: {
+                ...(existing.metadata || {}),
+                ...input.metadata,
+                synced_at: new Date().toISOString(),
+              },
+            })
+            .eq('id', existing.id)
+            .eq('company_id', companyId)
+          if (error) throw error
+          updated += 1
+          // refresh map keys after identity fields change
+          const refreshed: ExistingProductRow = {
+            id: existing.id,
+            sku: input.sku ?? existing.sku,
+            barcode: input.barcode ?? existing.barcode,
+            metadata: {
+              ...(existing.metadata || {}),
+              ...input.metadata,
+            },
+          }
+          for (const key of existingKeys(refreshed)) existingByKey.set(key, refreshed)
+        } else {
+          insertBatch.push(input)
+          if (insertBatch.length >= insertBatchSize) {
+            await flushInserts()
+          }
         }
 
-        rows.push(skumsCatalogItemToProductInput(item))
-        for (const key of keys) existingKeys.add(key)
-
-        if (rows.length >= insertBatchSize) {
-          await insertRows(rows.splice(0, rows.length))
-          processed = imported
-          setJob((prev) => ({ ...prev, imported, skipped, processed }))
+        processed += 1
+        if (processed % 10 === 0 || processed === workItems.length) {
+          setJob((prev) => ({
+            ...prev,
+            created,
+            updated,
+            processed,
+          }))
         }
       }
 
-      if (rows.length > 0) {
-        await insertRows(rows)
-      }
+      await flushInserts()
 
-      processed = imported
       setJob((prev) => ({
         ...prev,
         status: 'completed',
-        imported,
-        skipped,
+        created,
+        updated,
         processed,
       }))
       queryClient.invalidateQueries({ queryKey: ['products', companyId] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats', companyId] })
       notifyCatalogUpdated()
-      toast.success(`Imported ${imported} SKUMS product${imported === 1 ? '' : 's'}`)
+      toast.success(
+        `Synced SKUMS catalog: ${created} new, ${updated} updated`
+      )
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to import from SKUMS'
+      const message = err instanceof Error ? err.message : 'Failed to sync from SKUMS'
       setJob((prev) => ({
         ...prev,
         status: 'failed',
-        imported,
-        skipped,
+        created,
+        updated,
         processed,
         error: message,
       }))
@@ -339,9 +410,9 @@ export function useSkumsImportJob() {
   return context
 }
 
-function progressPercent(job: SkumsImportJobState) {
+function progressPercent(job: SkumsSyncJobState) {
   if (job.status === 'completed') return 100
-  if (job.total <= 0) return job.status === 'estimating' || job.status === 'importing' ? 8 : 0
+  if (job.total <= 0) return job.status === 'estimating' || job.status === 'syncing' ? 8 : 0
   return Math.max(8, Math.min(99, Math.round((job.processed / job.total) * 100)))
 }
 
@@ -353,14 +424,14 @@ export function SkumsImportProgressPanel() {
 
   const percent = progressPercent(job)
   const label = job.status === 'estimating'
-    ? 'Estimating SKUMS catalog'
+    ? 'Checking SKUMS catalog'
     : job.status === 'ready'
-      ? 'SKUMS import ready'
-      : job.status === 'importing'
-        ? 'Importing SKUMS catalog'
+      ? 'SKUMS sync ready'
+      : job.status === 'syncing'
+        ? 'Syncing SKUMS catalog'
         : job.status === 'completed'
-          ? 'SKUMS import complete'
-          : 'SKUMS import failed'
+          ? 'SKUMS sync complete'
+          : 'SKUMS sync failed'
 
   if (!expanded) {
     return (
@@ -369,9 +440,9 @@ export function SkumsImportProgressPanel() {
         onClick={() => setExpanded(true)}
         className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium shadow-lg"
       >
-        <CloudDownload className="h-4 w-4" />
+        <RefreshCw className="h-4 w-4" />
         <span>{label}</span>
-        {(job.status === 'estimating' || job.status === 'importing') && <span>{percent}%</span>}
+        {(job.status === 'estimating' || job.status === 'syncing') && <span>{percent}%</span>}
         <ChevronUp className="h-4 w-4" />
       </button>
     )
@@ -385,15 +456,15 @@ export function SkumsImportProgressPanel() {
             {job.status === 'completed' ? (
               <CheckCircle2 className="h-4 w-4 text-green-600" />
             ) : (
-              <CloudDownload className="h-4 w-4 text-primary" />
+              <RefreshCw className={cn('h-4 w-4 text-primary', job.status === 'syncing' && 'animate-spin')} />
             )}
             <p className="truncate text-sm font-semibold">{label}</p>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {job.status === 'ready' && job.summary
-              ? `${job.summary.importable.toLocaleString()} ready, ${job.summary.skippedExisting.toLocaleString()} already in POS`
+              ? `${job.summary.toCreate.toLocaleString()} new, ${job.summary.toUpdate.toLocaleString()} to update`
               : job.status === 'completed'
-                ? `${job.imported.toLocaleString()} imported, ${job.skipped.toLocaleString()} skipped`
+                ? `${job.created.toLocaleString()} new, ${job.updated.toLocaleString()} updated`
                 : job.error || `${job.processed.toLocaleString()} of ${job.total.toLocaleString()} processed`}
           </p>
         </div>
@@ -401,23 +472,27 @@ export function SkumsImportProgressPanel() {
           type="button"
           onClick={() => (job.status === 'completed' || job.status === 'failed' ? resetImport() : setExpanded(false))}
           className="rounded-sm p-1 text-muted-foreground hover:text-foreground"
-          aria-label={job.status === 'completed' || job.status === 'failed' ? 'Dismiss import status' : 'Collapse import status'}
+          aria-label={job.status === 'completed' || job.status === 'failed' ? 'Dismiss sync status' : 'Collapse sync status'}
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {(job.status === 'estimating' || job.status === 'importing' || job.status === 'completed') && (
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
-          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
+      {(job.status === 'estimating' || job.status === 'syncing') && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
+          <div className="h-full bg-primary transition-all" style={{ width: `${percent}%` }} />
         </div>
       )}
 
-      <div className="mt-3 flex justify-end">
-        <Link to="/products" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+      {job.status === 'completed' && (
+        <Link
+          to="/products"
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-3 w-full')}
+          onClick={() => resetImport()}
+        >
           View Products
         </Link>
-      </div>
+      )}
     </div>
   )
 }

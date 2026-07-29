@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   ArrowRight,
   BarChart3,
-  CloudDownload,
+  RefreshCw,
   DollarSign,
   HeartHandshake,
   Package,
@@ -220,13 +220,13 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <div className="rounded-lg border p-4">
-                <CloudDownload className="mb-3 h-6 w-6 text-primary" />
-                <h2 className="font-semibold">Import from SKUMS</h2>
+                <RefreshCw className="mb-3 h-6 w-6 text-primary" />
+                <h2 className="font-semibold">Sync from SKUMS</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Pull POS-enabled products from the SKUMS connector into this live catalog.
+                  Create or update POS products from POS-enabled SKUMS catalog items.
                 </p>
                 <Link to="/products?import=skums">
-                  <Button variant="outline" className="mt-4 w-full">Import from SKUMS</Button>
+                  <Button variant="outline" className="mt-4 w-full">Sync from SKUMS</Button>
                 </Link>
               </div>
             </div>
