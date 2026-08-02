@@ -30,6 +30,7 @@ import TransactionsPage from '@/pos/pages/transactions'
 import ReportsPage from '@/pos/pages/reports'
 import RequestStockPage from '@/pos/pages/request-stock'
 import ReceiveDeliveryPage from '@/pos/pages/receive-delivery'
+import RosterPage from '@/pos/pages/roster'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
           { path: 'stock', element: <StockPage /> },
           { path: 'request-stock', element: <RequestStockPage /> },
           { path: 'receive', element: <ReceiveDeliveryPage /> },
+          { path: 'roster', element: <RosterPage /> },
           { path: 'transactions', element: <TransactionsPage /> },
           { path: 'reports', element: <ReportsPage /> },
         ],

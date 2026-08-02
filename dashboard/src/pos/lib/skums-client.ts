@@ -92,6 +92,62 @@ export interface SkumsRosterAssignment {
   note?: string
 }
 
+export interface SkumsRosterBoardShift {
+  id: string
+  employee_id: string
+  employee_name: string | null
+  starts_at: string
+  ends_at: string
+  status: string
+  notes: string | null
+}
+
+export interface SkumsRosterBoardZone {
+  zone: { id: string; code: string; name: string }
+  shifts: SkumsRosterBoardShift[]
+}
+
+export interface SkumsRosterBoard {
+  date: string
+  timezone: string
+  window: { from: string; to: string }
+  zone_count: number
+  shift_count: number
+  zones: SkumsRosterBoardZone[]
+}
+
+/** Day board: everyone rostered by zone (SKUMS). */
+export async function fetchSkumsRosterBoard(
+  params: { date?: string; timezone?: string } = {},
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  const qs = new URLSearchParams()
+  if (params.date) qs.set('date', params.date)
+  if (params.timezone) qs.set('timezone', params.timezone)
+  const query = qs.toString()
+  const paths = [
+    `/fran/pos/roster/board${query ? `?${query}` : ''}`,
+    `/api/v1/pos/roster/board${query ? `?${query}` : ''}`,
+    `/api/v1/roster/board${query ? `?${query}` : ''}`,
+  ]
+  let lastErr: Error | null = null
+  for (const path of paths) {
+    try {
+      const res = await fetch(`${config.apiUrl}${path}`, { headers: headers(config) })
+      if (!res.ok) {
+        lastErr = await skumsError(res)
+        continue
+      }
+      const body = (await res.json()) as { board: SkumsRosterBoard }
+      return body.board
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+    }
+  }
+  throw lastErr || new Error('Failed to load roster board')
+}
+
 /** Current floor zone for a logged-in POS staff member (SKUMS roster). */
 export async function fetchSkumsRosterAssignment(
   params: {

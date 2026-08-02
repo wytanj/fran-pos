@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   MapPin,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePos } from '@/pos/lib/pos-context'
@@ -32,6 +33,7 @@ const navItems = [
   { to: '/pos/stock', icon: Boxes, label: 'Stock' },
   { to: '/pos/request-stock', icon: ClipboardList, label: 'Request stock' },
   { to: '/pos/receive', icon: PackageCheck, label: 'Receive' },
+  { to: '/pos/roster', icon: Users, label: 'Roster' },
   { to: '/pos/transactions', icon: Receipt, label: 'Transactions' },
   { to: '/pos/reports', icon: BarChart3, label: 'Reports & Closing' },
 ]
