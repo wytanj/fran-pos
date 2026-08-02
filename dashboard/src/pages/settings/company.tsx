@@ -9,10 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { toast } from 'sonner'
 
 const currencies = ['USD', 'EUR', 'GBP', 'PHP', 'SGD', 'AUD', 'CAD', 'JPY', 'KRW', 'MYR']
-const timezones = [
-  'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-  'Europe/London', 'Europe/Paris', 'Asia/Singapore', 'Asia/Manila', 'Asia/Tokyo', 'Australia/Sydney',
-]
 
 export default function CompanySettingsPage() {
   const { company } = useAuth()
@@ -22,7 +18,8 @@ export default function CompanySettingsPage() {
 
   const [companyName, setCompanyName] = useState('')
   const [currency, setCurrency] = useState('USD')
-  const [timezone, setTimezone] = useState('UTC')
+  // Free-form string (e.g. UTC+8) — stored as text, not validated as IANA
+  const [timezone, setTimezone] = useState('UTC+0')
 
   useEffect(() => {
     if (company) setCompanyName(company.name)
@@ -36,7 +33,7 @@ export default function CompanySettingsPage() {
     try {
       await Promise.all([
         updateCompany.mutateAsync({ name: companyName }),
-        updateSettings.mutateAsync({ currency, timezone }),
+        updateSettings.mutateAsync({ currency, timezone: timezone.trim() }),
       ])
       toast.success('Settings saved')
     } catch (err) {
@@ -66,11 +63,12 @@ export default function CompanySettingsPage() {
           </div>
           <div className="space-y-2">
             <Label>Timezone</Label>
-            <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-              {timezones.map((tz) => (
-                <option key={tz} value={tz}>{tz}</option>
-              ))}
-            </Select>
+            <Input
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              placeholder="UTC+8"
+            />
+            <p className="text-xs text-muted-foreground">Free-form string, e.g. UTC+8 or UTC+0</p>
           </div>
         </div>
         <div className="flex justify-end">
