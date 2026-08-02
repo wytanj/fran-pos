@@ -15,11 +15,15 @@ import {
   Clock,
   Menu,
   X,
+  MapPin,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePos } from '@/pos/lib/pos-context'
 import { getActiveStore } from '@/pos/lib/pos-store-config'
 import { useAuth } from '@/providers/auth-provider'
+import { fetchSkumsRosterAssignment } from '@/pos/lib/skums-client'
+import { toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
+import { useCompanySettings } from '@/hooks/use-settings'
 
 const navItems = [
   { to: '/pos/sale', icon: ShoppingBag, label: 'Sale' },
@@ -35,14 +39,57 @@ const navItems = [
 export function PosShell() {
   const { user: posUser, setUser, clearSale, mode } = usePos()
   const { user: accountUser, company } = useAuth()
+  const { data: settings } = useCompanySettings()
   const navigate = useNavigate()
   const [now, setNow] = useState(new Date())
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [rosterZoneLabel, setRosterZoneLabel] = useState<string | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000 * 30)
     return () => clearInterval(t)
   }, [])
+
+  // Load current floor zone from SKUMS roster for the logged-in staff member
+  useEffect(() => {
+    let cancelled = false
+    async function loadZone() {
+      if (!posUser) {
+        setRosterZoneLabel(null)
+        return
+      }
+      // Demo users: map to sample seed refs when available
+      const staffRef =
+        posUser.staffMemberId ||
+        (posUser.id === 'u-cashier'
+          ? 'demo-staff-aisyah'
+          : posUser.id === 'u-manager'
+            ? 'demo-staff-daniel'
+            : null)
+
+      if (!staffRef) return
+
+      try {
+        const connector = toSkumsConnectorConfig(settings ?? null)
+        if (!connector) return
+        const assignment = await fetchSkumsRosterAssignment(
+          { pos_staff_ref: staffRef },
+          connector,
+        )
+        if (cancelled) return
+        setRosterZoneLabel(assignment?.zone?.name || null)
+      } catch {
+        // Soft-fail: POS still works without roster
+        if (!cancelled) setRosterZoneLabel(null)
+      }
+    }
+    void loadZone()
+    const refresh = setInterval(() => void loadZone(), 5 * 60 * 1000)
+    return () => {
+      cancelled = true
+      clearInterval(refresh)
+    }
+  }, [posUser?.id, posUser?.staffMemberId, mode, settings])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -99,10 +146,23 @@ export function PosShell() {
             <Clock className="h-4 w-4" />
             {now.toLocaleString('en-SG', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
           </span>
+          {rosterZoneLabel && (
+            <span className="hidden items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium sm:flex">
+              <MapPin className="h-3.5 w-3.5 text-primary" />
+              {rosterZoneLabel}
+            </span>
+          )}
           <div className="flex items-center gap-2 border-l pl-2 sm:pl-4">
             <div className="hidden text-right leading-tight min-[380px]:block">
               <p className="text-sm font-medium">{posUser.name}</p>
-              <p className="text-xs capitalize text-muted-foreground">{posUser.role}</p>
+              <p className="text-xs capitalize text-muted-foreground">
+                {posUser.role}
+                {rosterZoneLabel && (
+                  <span className="ml-1 font-medium normal-case text-primary sm:hidden">
+                    · {rosterZoneLabel}
+                  </span>
+                )}
+              </p>
             </div>
             <button
               onClick={lockTerminal}

@@ -67,6 +67,70 @@ export async function resolveSkumsPosScan(
   return (await res.json()) as { data: SkumsPosScanResolution }
 }
 
+export interface SkumsRosterAssignment {
+  at: string
+  employee: {
+    id: string
+    display_name: string
+    role_label: string
+    pos_staff_ref: string | null
+    source_provider: string
+  } | null
+  shift: {
+    id: string
+    starts_at: string
+    ends_at: string
+    status: string
+    notes: string | null
+  } | null
+  zone: {
+    id: string
+    code: string
+    name: string
+    source: 'shift' | 'default' | string
+  } | null
+  note?: string
+}
+
+/** Current floor zone for a logged-in POS staff member (SKUMS roster). */
+export async function fetchSkumsRosterAssignment(
+  params: {
+    pos_staff_ref?: string
+    staff_ref?: string
+    employee_id?: string
+    at?: string
+  } = {},
+  connector?: SkumsConnectorConfig,
+) {
+  const config = configOrThrow(connector)
+  const qs = new URLSearchParams()
+  if (params.pos_staff_ref) qs.set('pos_staff_ref', params.pos_staff_ref)
+  if (params.staff_ref) qs.set('staff_ref', params.staff_ref)
+  if (params.employee_id) qs.set('employee_id', params.employee_id)
+  if (params.at) qs.set('at', params.at)
+  const query = qs.toString()
+  // Prefer Fran POS facade; fall back to v1 pos path
+  const paths = [
+    `/fran/pos/roster/me${query ? `?${query}` : ''}`,
+    `/api/v1/pos/roster/me${query ? `?${query}` : ''}`,
+  ]
+  let lastErr: Error | null = null
+  for (const path of paths) {
+    try {
+      const res = await fetch(`${config.apiUrl}${path}`, { headers: headers(config) })
+      if (!res.ok) {
+        lastErr = await skumsError(res)
+        continue
+      }
+      const body = (await res.json()) as { assignment: SkumsRosterAssignment }
+      return body.assignment
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+    }
+  }
+  throw lastErr || new Error('Failed to load roster assignment')
+}
+
 export async function listSkumsPosCatalog(params: {
   search?: string;
   limit?: number;

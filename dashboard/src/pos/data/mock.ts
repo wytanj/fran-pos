@@ -60,6 +60,8 @@ export interface PosUser {
   sourceProvider?: string
   employmentType?: string | null
   isEor?: boolean
+  /** Current SKUMS roster zone (floor assignment) */
+  rosterZone?: { code: string; name: string; source?: string } | null
 }
 
 export const USERS: PosUser[] = [
