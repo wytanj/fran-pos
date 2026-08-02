@@ -112,6 +112,16 @@ function withWorkspaceId<T extends Record<string, unknown>>(input: T, workspaceI
   }
 }
 
+/**
+ * When calling CRM via SKUMS, do not send POS-local CRM workspace ids.
+ * SKUMS injects the linked crm_workspace_id from workspace_crm_links
+ * (e.g. e4324d8c-b88e-4535-a19f-2debef9feac9 for Fran Demo).
+ */
+function forSkumsLoyaltyBody<T extends Record<string, unknown>>(input: T): Omit<T, 'workspaceId'> {
+  const { workspaceId: _ignored, ...rest } = input as T & { workspaceId?: string }
+  return rest as Omit<T, 'workspaceId'>
+}
+
 function normalizeEndpoint(value: string | undefined) {
   const trimmed = value?.trim() ?? ''
   if (!trimmed) return ''
@@ -343,13 +353,14 @@ export function createFranCrmClient(options: FranCrmClientOptions = {}): FranCrm
     const auth = { apiKey: skums.apiKey.trim() }
     return {
       resolveMember: (input) =>
-        postJson(base, '/fran/pos/loyalty/member/resolve', withWorkspaceId(input as any, workspaceId), auth),
+        postJson(base, '/fran/pos/loyalty/member/resolve', forSkumsLoyaltyBody(input as any), auth),
       getCounterSession: (input) =>
-        postJson(base, '/fran/pos/loyalty/counter-session', withWorkspaceId(input as any, workspaceId), auth),
+        postJson(base, '/fran/pos/loyalty/counter-session', forSkumsLoyaltyBody(input as any), auth),
       getActivePolicy: (input) =>
         getActivePolicy(
           base,
-          { ...input, workspaceId: input.workspaceId || workspaceId },
+          // Policy still needs a workspace key for cache index; SKUMS uses its own workspace from the API key.
+          { ...input, workspaceId: input.workspaceId || workspaceId || 'skums' },
           { viaSkums: true, apiKey: auth.apiKey },
         ),
       // Basket preview / reward catalogue may still be local mock if CRM has no route
@@ -361,13 +372,10 @@ export function createFranCrmClient(options: FranCrmClientOptions = {}): FranCrm
         const raw = await postJson(
           base,
           '/fran/pos/loyalty/commit-sale',
-          withWorkspaceId(
-            {
-              ...input,
-              tierKey: input.session?.member?.tier || undefined,
-            } as any,
-            workspaceId,
-          ),
+          forSkumsLoyaltyBody({
+            ...input,
+            tierKey: input.session?.member?.tier || undefined,
+          } as any),
           auth,
         )
         return mapCommitSaleResult(raw)
@@ -376,21 +384,21 @@ export function createFranCrmClient(options: FranCrmClientOptions = {}): FranCrm
         postJson(
           base,
           '/fran/pos/loyalty/vouchers/quote-redeem',
-          withWorkspaceId(input as any, workspaceId),
+          forSkumsLoyaltyBody(input as any),
           auth,
         ),
       authorizeVoucher: (input) =>
         postJson(
           base,
           '/fran/pos/loyalty/vouchers/authorize',
-          withWorkspaceId(input as any, workspaceId),
+          forSkumsLoyaltyBody(input as any),
           auth,
         ),
       issueEarnVoucher: (input) =>
         postJson(
           base,
           '/fran/pos/loyalty/vouchers/issue',
-          withWorkspaceId(input as any, workspaceId),
+          forSkumsLoyaltyBody(input as any),
           auth,
         ),
       sendEvent: mockSendEvent,

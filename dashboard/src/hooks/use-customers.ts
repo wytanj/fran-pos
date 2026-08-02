@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/providers/auth-provider'
+import { useSkumsConnector } from '@/hooks/use-skums-connector'
+import { createFranCrmClient } from '@/pos/fran/lib/fran-crm-client'
 import type {
   Customer,
   PosCustomerExternalLink,
@@ -331,17 +333,72 @@ export type CustomerIdentifierKind = PosCustomerIdentifierType
 export function useCreateCustomer() {
   const queryClient = useQueryClient()
   const { company } = useAuth()
+  const { connector: skumsConnector } = useSkumsConnector()
+
   return useMutation({
     mutationFn: async (input: CustomerInput) => {
       if (!company) throw new Error('No company selected')
+
+      // 1) Always create local POS customer (register-side copy)
       const { data, error } = await supabase
         .from('customers')
         .insert({ ...input, company_id: company.id })
         .select()
         .single()
       if (error) throw error
-      await syncCustomerIdentityLinks(data as Customer)
-      return data
+      let customer = data as Customer
+      await syncCustomerIdentityLinks(customer)
+
+      // 2) Also create Fran CRM member when SKUMS connector is live
+      //    (CRM workspace comes from SKUMS workspace_crm_links, e.g. e4324d8c-…)
+      if (skumsConnector?.apiUrl && skumsConnector?.apiKey && input.phone?.trim()) {
+        try {
+          const franCrm = createFranCrmClient({
+            mode: 'skums',
+            skums: {
+              apiUrl: skumsConnector.apiUrl,
+              apiKey: skumsConnector.apiKey,
+            },
+          })
+          const fullName = [input.first_name, input.last_name].filter(Boolean).join(' ').trim() || 'Customer'
+          const session = await franCrm.getCounterSession({
+            mode: 'member',
+            registration: {
+              fullName,
+              phone: input.phone.trim(),
+              birthday: input.birthday || null,
+            },
+          } as any)
+
+          const memberNo = session?.member?.memberNo || session?.member?.id
+          const personId = session?.member?.id || (session as any)?.personId
+          if (memberNo || personId) {
+            const patch: Record<string, unknown> = {
+              updated_at: new Date().toISOString(),
+              source: 'fran-crm',
+            }
+            if (memberNo) patch.external_id = String(memberNo)
+            if (!customer.notes && personId) {
+              patch.notes = `CRM person ${personId}`
+            }
+            const { data: updated, error: upErr } = await supabase
+              .from('customers')
+              .update(patch)
+              .eq('id', customer.id)
+              .select()
+              .single()
+            if (!upErr && updated) {
+              customer = updated as Customer
+              await syncCustomerIdentityLinks(customer)
+            }
+          }
+        } catch (crmErr) {
+          // Local customer still succeeds; CRM sync is best-effort with a clear warning path
+          console.warn('[customers] Fran CRM register failed', crmErr)
+        }
+      }
+
+      return customer
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers', company?.id] })
