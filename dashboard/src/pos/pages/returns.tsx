@@ -353,7 +353,7 @@ export default function ReturnsPage() {
       tax: net - net / 1.09,
       total: net,
       pointsEarned: 0,
-      cashier: 'Aisyah Rahman',
+      cashier: 'Tiffany',
       timestamp: completedAt.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }),
       completedAtIso,
       voidedAtIso: null,

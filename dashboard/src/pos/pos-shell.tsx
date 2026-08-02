@@ -62,9 +62,9 @@ export function PosShell() {
       const staffRef =
         posUser.staffMemberId ||
         (posUser.id === 'u-cashier'
-          ? 'demo-staff-aisyah'
+          ? 'demo-staff-tiffany'
           : posUser.id === 'u-manager'
-            ? 'demo-staff-daniel'
+            ? 'demo-staff-jarrell'
             : null)
 
       if (!staffRef) return

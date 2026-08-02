@@ -65,8 +65,8 @@ export interface PosUser {
 }
 
 export const USERS: PosUser[] = [
-  { id: 'u-cashier', name: 'Aisyah Rahman', pin: '1111', role: 'cashier' },
-  { id: 'u-manager', name: 'Daniel Wong', pin: '9999', role: 'manager' },
+  { id: 'u-cashier', name: 'Tiffany', pin: '1111', role: 'cashier' },
+  { id: 'u-manager', name: 'Jarrell', pin: '9999', role: 'manager' },
 ]
 
 export interface Product {
@@ -227,7 +227,7 @@ export const PAST_TRANSACTIONS: PastTransaction[] = [
   {
     receiptNo: 'FRAN01-000482',
     date: '2026-05-21 11:42',
-    cashier: 'Aisyah Rahman',
+    cashier: 'Tiffany',
     customer: 'Wei Ling Tan',
     type: 'Sale',
     total: 138.0,
@@ -241,7 +241,7 @@ export const PAST_TRANSACTIONS: PastTransaction[] = [
   {
     receiptNo: 'FRAN01-000481',
     date: '2026-05-21 10:18',
-    cashier: 'Aisyah Rahman',
+    cashier: 'Tiffany',
     type: 'Sale',
     total: 24.0,
     payment: 'Cash',
@@ -265,7 +265,7 @@ export const PAST_TRANSACTIONS: PastTransaction[] = [
   {
     receiptNo: 'FRAN01-000478',
     date: '2026-05-20 14:09',
-    cashier: 'Aisyah Rahman',
+    cashier: 'Tiffany',
     type: 'Refund',
     total: -42.0,
     payment: 'Cash refund',
