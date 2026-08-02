@@ -103,12 +103,19 @@ export default function CustomersPage() {
       if (editing) {
         await updateCustomer.mutateAsync({ id: editing.id, ...input })
         toast.success('Customer updated')
+        setDialogOpen(false)
       } else {
+        // Close dialog immediately after local save so CRM sync cannot freeze the page
         const created = await createCustomer.mutateAsync(input)
-        toast.success('Customer created')
+        setDialogOpen(false)
+        setEditing(null)
+        toast.success(
+          input.phone
+            ? 'Customer created — syncing to Fran CRM in the background'
+            : 'Customer created',
+        )
         setSelectedCustomer(created as Customer)
       }
-      setDialogOpen(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save customer')
     }

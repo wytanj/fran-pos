@@ -330,6 +330,44 @@ interface CustomerInput {
 export type CustomerIdentifierInput = CustomerInput
 export type CustomerIdentifierKind = PosCustomerIdentifierType
 
+/** Best-effort Fran CRM register — never blocks POS UI longer than timeoutMs. */
+async function registerCustomerInFranCrm(
+  skums: { apiUrl: string; apiKey: string },
+  customer: Customer,
+  input: CustomerInput,
+  timeoutMs = 6000,
+): Promise<{ memberNo?: string; personId?: string } | null> {
+  if (!input.phone?.trim()) return null
+
+  const franCrm = createFranCrmClient({
+    mode: 'skums',
+    skums: { apiUrl: skums.apiUrl, apiKey: skums.apiKey },
+  })
+  const fullName =
+    [input.first_name, input.last_name].filter(Boolean).join(' ').trim()
+    || [customer.first_name, customer.last_name].filter(Boolean).join(' ').trim()
+    || 'Customer'
+
+  const session = await Promise.race([
+    franCrm.getCounterSession({
+      mode: 'member',
+      registration: {
+        fullName,
+        phone: input.phone.trim(),
+        birthday: input.birthday || null,
+      },
+    } as any),
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error('Fran CRM register timed out')), timeoutMs)
+    }),
+  ])
+
+  return {
+    memberNo: session?.member?.memberNo || session?.member?.id || undefined,
+    personId: session?.member?.id || (session as any)?.personId || undefined,
+  }
+}
+
 export function useCreateCustomer() {
   const queryClient = useQueryClient()
   const { company } = useAuth()
@@ -339,70 +377,71 @@ export function useCreateCustomer() {
     mutationFn: async (input: CustomerInput) => {
       if (!company) throw new Error('No company selected')
 
-      // 1) Always create local POS customer (register-side copy)
+      // 1) Local POS customer first — return immediately so the UI unblocks
       const { data, error } = await supabase
         .from('customers')
         .insert({ ...input, company_id: company.id })
         .select()
         .single()
       if (error) throw error
-      let customer = data as Customer
-      await syncCustomerIdentityLinks(customer)
+      const customer = data as Customer
 
-      // 2) Also create Fran CRM member when SKUMS connector is live
-      //    (CRM workspace comes from SKUMS workspace_crm_links, e.g. e4324d8c-…)
+      // Identity links: non-fatal
+      try {
+        await syncCustomerIdentityLinks(customer)
+      } catch (linkErr) {
+        console.warn('[customers] identity link sync failed', linkErr)
+      }
+
+      // 2) Fran CRM member (SKUMS → linked CRM workspace) in background — do not await in UI path
       if (skumsConnector?.apiUrl && skumsConnector?.apiKey && input.phone?.trim()) {
-        try {
-          const franCrm = createFranCrmClient({
-            mode: 'skums',
-            skums: {
-              apiUrl: skumsConnector.apiUrl,
-              apiKey: skumsConnector.apiKey,
-            },
-          })
-          const fullName = [input.first_name, input.last_name].filter(Boolean).join(' ').trim() || 'Customer'
-          const session = await franCrm.getCounterSession({
-            mode: 'member',
-            registration: {
-              fullName,
-              phone: input.phone.trim(),
-              birthday: input.birthday || null,
-            },
-          } as any)
+        const companyId = company.id
+        const customerId = customer.id
+        const skums = { apiUrl: skumsConnector.apiUrl, apiKey: skumsConnector.apiKey }
+        void (async () => {
+          try {
+            const crm = await registerCustomerInFranCrm(skums, customer, input)
+            if (!crm?.memberNo && !crm?.personId) return
 
-          const memberNo = session?.member?.memberNo || session?.member?.id
-          const personId = session?.member?.id || (session as any)?.personId
-          if (memberNo || personId) {
             const patch: Record<string, unknown> = {
               updated_at: new Date().toISOString(),
               source: 'fran-crm',
             }
-            if (memberNo) patch.external_id = String(memberNo)
-            if (!customer.notes && personId) {
-              patch.notes = `CRM person ${personId}`
+            if (crm.memberNo) patch.external_id = String(crm.memberNo)
+            if (crm.personId) {
+              patch.notes = customer.notes?.trim()
+                ? customer.notes
+                : `CRM person ${crm.personId}`
             }
+
             const { data: updated, error: upErr } = await supabase
               .from('customers')
               .update(patch)
-              .eq('id', customer.id)
+              .eq('id', customerId)
               .select()
               .single()
+
             if (!upErr && updated) {
-              customer = updated as Customer
-              await syncCustomerIdentityLinks(customer)
+              try {
+                await syncCustomerIdentityLinks(updated as Customer)
+              } catch {
+                /* ignore */
+              }
+              void queryClient.invalidateQueries({ queryKey: ['customers', companyId] })
+              void queryClient.invalidateQueries({ queryKey: ['customer', customerId] })
+              void queryClient.invalidateQueries({ queryKey: ['customer-resolution', companyId] })
             }
+          } catch (crmErr) {
+            console.warn('[customers] Fran CRM register failed (non-blocking)', crmErr)
           }
-        } catch (crmErr) {
-          // Local customer still succeeds; CRM sync is best-effort with a clear warning path
-          console.warn('[customers] Fran CRM register failed', crmErr)
-        }
+        })()
       }
 
       return customer
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers', company?.id] })
-      queryClient.invalidateQueries({ queryKey: ['customer-resolution', company?.id] })
+      void queryClient.invalidateQueries({ queryKey: ['customers', company?.id] })
+      void queryClient.invalidateQueries({ queryKey: ['customer-resolution', company?.id] })
     },
   })
 }

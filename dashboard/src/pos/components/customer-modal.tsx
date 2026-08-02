@@ -137,9 +137,10 @@ export function CustomerModal({ open, mode, onClose, onSelect }: CustomerModalPr
         birthday: birthday || undefined,
         source: 'manual',
       })
+      // Unblock UI before any background CRM work finishes
+      setAdding(false)
       toast.success('Customer added')
       onSelect(toPosCustomer(created as DbCustomer))
-      setAdding(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add customer')
     }
