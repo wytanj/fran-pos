@@ -95,13 +95,14 @@ curl -s "$SKUMS/fran/pos/capabilities" -H "Authorization: Bearer sk_live_…"
 
 ## 4. What is still demo vs durable
 
-| Layer | With CRM URL + offline off | Durable Supabase |
-|-------|----------------------------|------------------|
-| Policy | CRM demo FWB bundle (no Bearer) | Active policy row + assignment + user JWT |
-| Member resolve | CRM `demoCrmGraph` | Real people (not wired yet in resolve) |
-| commit_sale | In-memory demo engine if no workspace DB | `persistCommitSale` when service role + workspace |
+| Layer | POS → SKUMS → CRM (linked workspace) | Notes |
+|-------|--------------------------------------|--------|
+| Policy | CRM FWB bundle for POS format | Demo policy still OK without JWT |
+| **Member register** | **Durable** `crm_entities` person + profile when CRM has `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_DB_URL` | SKUMS injects `crm_workspace_id` (e.g. `e4324d8c-…`) |
+| **Member resolve** | Durable first (phone / FRAN-####), then demo graph aliases (`FRAN-0001`) | Shows on CRM **Customers** after register |
+| commit_sale | Demo engine or `persistCommitSale` when service role + workspace | Check response `mode` |
 
-To force **Supabase ledger**: CRM env `SUPABASE_*` + real workspace membership + Bearer (future POS proxy). Today unauthenticated POS intentionally gets **demo** policy so you can still test the wire.
+**Register smoke:** POS Sale → Register name+phone → session warning `member_persisted` / `mode:supabase` → CRM HQ **Customers** lists the person.
 
 ---
 
