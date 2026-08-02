@@ -15,11 +15,11 @@ export interface StoreDestination {
 }
 
 export const STORE: StoreDestination = {
-  id: 'fran-store-orchard',
-  name: 'Fran Beauty Orchard',
+  id: 'fran-store-bugis-plus',
+  name: 'Fran Beauty Bugis+',
   code: 'FRAN01',
-  inventoryLocationId: 'fran-inv-orchard',
-  address: '391 Orchard Road, #01-12 Ngee Ann City, Singapore 238872',
+  inventoryLocationId: 'fran-inv-bugis-plus',
+  address: '201 Victoria Street, #01-01 Bugis+, Singapore 188067',
   phone: '+65 6733 1188',
   gst: 'GST Reg No. 201912345A',
   currency: 'SGD',
@@ -295,7 +295,7 @@ export const TRANSFERS: Transfer[] = [
     fromStoreCode: 'WH01',
     toStoreCode: STORE.code,
     from: 'Central Fulfilment (WH01)',
-    to: 'Fran Beauty Orchard (FRAN01)',
+    to: 'Fran Beauty Bugis+ (FRAN01)',
     status: 'Pending Receipt',
     created: '2026-05-20',
     lines: [
@@ -311,7 +311,7 @@ export const TRANSFERS: Transfer[] = [
     fromStoreCode: 'FRAN02',
     toStoreCode: STORE.code,
     from: 'Fran Beauty Vivocity (FRAN02)',
-    to: 'Fran Beauty Orchard (FRAN01)',
+    to: 'Fran Beauty Bugis+ (FRAN01)',
     status: 'In Transit',
     created: '2026-05-19',
     lines: [{ sku: 'TOL-5001', name: 'Facial Cleansing Brush', qty: 8 }],
@@ -322,7 +322,7 @@ export const TRANSFERS: Transfer[] = [
     ref: 'ITR-OUT-30221',
     fromStoreCode: STORE.code,
     toStoreCode: 'WH01',
-    from: 'Fran Beauty Orchard (FRAN01)',
+    from: 'Fran Beauty Bugis+ (FRAN01)',
     to: 'Central Fulfilment (WH01)',
     status: 'Sent',
     created: '2026-05-18',

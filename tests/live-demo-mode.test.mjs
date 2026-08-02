@@ -185,7 +185,7 @@ test('Returns flow supports partial receipt returns instead of returning the ful
 
 test('POS store destinations and shelf locations use canonical codes', () => {
   assert.match(posMockData, /export interface StoreDestination/)
-  assert.match(posMockData, /inventoryLocationId: 'fran-inv-orchard'/)
+  assert.match(posMockData, /inventoryLocationId: 'fran-inv-bugis-plus'/)
   assert.match(posMockData, /STORE_STORAGE_LOCATION_PATTERN/)
   assert.match(posMockData, /'SKN-1001': 'A01'/)
   assert.match(posMockData, /'TOL-5001': 'AA03'/)

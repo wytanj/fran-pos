@@ -224,7 +224,7 @@ export function mockActivePolicyBundle(input: { workspaceId?: string; programKey
   const workspaceId = input.workspaceId || 'demo'
   const programKey = input.programKey || 'fran-v2'
   const policyVersionId = 'fran-v2.1-demo'
-  const assignmentId = 'fran-orchard-demo-assignment'
+  const assignmentId = 'fran-bugis-plus-demo-assignment'
   const cachedAt = nowIso()
 
   return {
@@ -763,7 +763,7 @@ export async function mockPreviewBasket(input: FranBasketPreviewInput): Promise<
     projectedPointsBalance,
     earnProjection,
     policyVersionId: 'fran-v2.1-demo',
-    assignmentId: 'fran-orchard-demo-assignment',
+    assignmentId: 'fran-bugis-plus-demo-assignment',
     skumsQuoteId: null,
     skumsQuote: null,
     policyCacheStatus: 'fresh',
