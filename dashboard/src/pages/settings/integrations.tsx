@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { CloudDownload, KeyRound, Mail, ShieldCheck, UsersRound } from 'lucide-react'
+import { CloudDownload, CreditCard, KeyRound, Mail, ShieldCheck, UsersRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,13 @@ import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useSaveCustomerEmailConnector } from '@/hooks/use-customer-email-connector'
 import { useSaveSkumsConnector, useSkumsConnector } from '@/hooks/use-skums-connector'
+import { useSaveStripeConnector, useStripeConnector } from '@/hooks/use-stripe-connector'
+import {
+  createStripeLocation,
+  listStripeLocations,
+  registerStripeReader,
+  stripeTerminalHealth,
+} from '@/pos/lib/stripe-terminal-api'
 import { maskCustomerEmailToken } from '@/pos/lib/customer-email-connector'
 import { listSkumsPosCatalog } from '@/pos/lib/skums-client'
 import { buildSkumsConnectorSettings, maskSkumsApiKey, toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
@@ -24,6 +31,8 @@ export default function IntegrationsPage() {
   const { data: settings, connector } = useSkumsConnector()
   const saveSkumsConnector = useSaveSkumsConnector()
   const saveCustomerEmailConnector = useSaveCustomerEmailConnector()
+  const { connector: stripe } = useStripeConnector()
+  const saveStripeConnector = useSaveStripeConnector()
   const [testing, setTesting] = useState(false)
   const [skumsHealth, setSkumsHealth] = useState<'unchecked' | 'healthy' | 'failed'>('unchecked')
   const [lastSkumsCheck, setLastSkumsCheck] = useState<string | null>(() => {
@@ -44,6 +53,16 @@ export default function IntegrationsPage() {
     from_email: '',
     reply_to_email: '',
   })
+  const [stripeForm, setStripeForm] = useState({
+    enabled: false,
+    simulated: true,
+    location_id: '',
+    s700_reader_id: '',
+    merchant_display_name: 'Fran Beauty',
+    default_reader: 's700' as 's700' | 'tap_to_pay' | 'auto',
+    registration_code: '',
+  })
+  const [stripeHealth, setStripeHealth] = useState('')
   const [franForm, setFranForm] = useState(() => {
     if (typeof window === 'undefined') {
       return {
@@ -69,6 +88,20 @@ export default function IntegrationsPage() {
       api_url: saved.api_url || 'https://skums.vercel.app',
       api_key: saved.api_key || '',
     })
+  }, [settings])
+
+  useEffect(() => {
+    const saved = settings?.pos_config?.stripe_terminal
+    if (!saved) return
+    setStripeForm((current) => ({
+      ...current,
+      enabled: saved.enabled,
+      simulated: saved.simulated,
+      location_id: saved.location_id || '',
+      s700_reader_id: saved.s700_reader_id || '',
+      merchant_display_name: saved.merchant_display_name || 'Fran Beauty',
+      default_reader: saved.default_reader || 's700',
+    }))
   }, [settings])
 
   useEffect(() => {
@@ -116,6 +149,63 @@ export default function IntegrationsPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to connect to SKUMS')
     } finally {
       setTesting(false)
+    }
+  }
+
+  const handleSaveStripe = async () => {
+    try {
+      await saveStripeConnector.mutateAsync(stripeForm)
+      toast.success('Stripe Terminal settings saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save Stripe Terminal')
+    }
+  }
+
+  const handleStripeHealth = async () => {
+    try {
+      const result = await stripeTerminalHealth()
+      setStripeHealth(result.simulated_ready ? 'Test-mode secret is ready' : 'Live-mode secret is ready')
+      toast.success(result.ok ? 'Stripe backend is reachable' : 'Stripe backend responded unexpectedly')
+    } catch (err) {
+      setStripeHealth('')
+      toast.error(err instanceof Error ? err.message : 'Stripe health check failed')
+    }
+  }
+
+  const handleCreateLocation = async () => {
+    try {
+      const { location } = await createStripeLocation({ display_name: stripeForm.merchant_display_name || 'Fran store' })
+      setStripeForm((current) => ({ ...current, location_id: location.id }))
+      toast.success(`Created location ${location.id}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create location')
+    }
+  }
+
+  const handleListLocations = async () => {
+    try {
+      const { locations } = await listStripeLocations()
+      if (locations[0] && !stripeForm.location_id) {
+        setStripeForm((current) => ({ ...current, location_id: locations[0].id }))
+      }
+      toast.success(locations.length ? `${locations.length} Terminal location(s)` : 'No locations yet')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not list locations')
+    }
+  }
+
+  const handleRegisterReader = async () => {
+    try {
+      if (!stripeForm.location_id) throw new Error('Create or paste a location first')
+      const { reader } = await registerStripeReader({
+        registration_code: stripeForm.registration_code,
+        location_id: stripeForm.location_id,
+        label: stripeForm.merchant_display_name || 'Fran S700',
+      })
+      setStripeForm((current) => ({ ...current, s700_reader_id: reader.id, registration_code: '' }))
+      toast.success(`Registered reader ${reader.id}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not register reader')
     }
   }
 
@@ -225,6 +315,108 @@ export default function IntegrationsPage() {
             <KeyRound className="h-4 w-4" /> {saveSkumsConnector.isPending ? 'Saving...' : 'Save Connector'}
           </Button>
         </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Stripe Terminal</CardTitle>
+          <CardDescription>
+            Store kit: Galaxy Tab runs Fran POS. The Stripe S700 takes the customer card. Tap on tablet is backup only.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-start gap-3 rounded-lg border p-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-yellow-soft text-brown">
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 text-sm text-muted-foreground">
+              Pair one S700 to this store location. Cashiers stay on the Galaxy Tab; the customer taps, inserts, or swipes on the S700. Set <code>STRIPE_SECRET_KEY</code> on Vercel.
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label>Enable Stripe Terminal</Label>
+              <p className="text-sm text-muted-foreground">Opens Pay on the S700 from the Galaxy Tab register.</p>
+            </div>
+            <Switch checked={stripeForm.enabled} onCheckedChange={(enabled) => setStripeForm({ ...stripeForm, enabled })} />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label>Simulated / test mode</Label>
+              <p className="text-sm text-muted-foreground">Uses Stripe test helpers so reviewers can complete a sale without a physical card.</p>
+            </div>
+            <Switch checked={stripeForm.simulated} onCheckedChange={(simulated) => setStripeForm({ ...stripeForm, simulated })} />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Merchant display name</Label>
+              <Input
+                value={stripeForm.merchant_display_name}
+                onChange={(e) => setStripeForm({ ...stripeForm, merchant_display_name: e.target.value })}
+                placeholder="Fran Beauty"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Default reader</Label>
+              <Select
+                value={stripeForm.default_reader}
+                onChange={(e) => setStripeForm({ ...stripeForm, default_reader: e.target.value as typeof stripeForm.default_reader })}
+              >
+                <option value="s700">S700 (Galaxy Tab + reader)</option>
+                <option value="tap_to_pay">Tap on tablet (backup)</option>
+                <option value="auto">Auto</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Location ID</Label>
+              <Input
+                value={stripeForm.location_id}
+                onChange={(e) => setStripeForm({ ...stripeForm, location_id: e.target.value })}
+                placeholder="tml_..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>S700 reader ID</Label>
+              <Input
+                value={stripeForm.s700_reader_id}
+                onChange={(e) => setStripeForm({ ...stripeForm, s700_reader_id: e.target.value })}
+                placeholder="tmr_..."
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Register S700 pairing code</Label>
+              <Input
+                value={stripeForm.registration_code}
+                onChange={(e) => setStripeForm({ ...stripeForm, registration_code: e.target.value })}
+                placeholder="Three-word code from the reader, or simulated-wpe for test"
+              />
+            </div>
+          </div>
+
+          {stripe && (
+            <div className="rounded-lg bg-secondary p-3 text-sm">
+              <p className="font-medium">Stripe Terminal configured</p>
+              <p className="mt-1 text-muted-foreground">
+                Location {stripe.location_id || 'not set'} · Reader {stripe.s700_reader_id || 'not set'}
+                {stripe.simulated ? ' · Simulated' : ' · Live hardware'}
+              </p>
+              {stripeHealth && <p className="mt-1 text-xs text-muted-foreground">{stripeHealth}</p>}
+            </div>
+          )}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => void handleStripeHealth()}>Check Stripe backend</Button>
+            <Button variant="outline" onClick={() => void handleListLocations()}>Load locations</Button>
+            <Button variant="outline" onClick={() => void handleCreateLocation()}>Create location</Button>
+            <Button variant="outline" onClick={() => void handleRegisterReader()}>Register reader</Button>
+            <Button onClick={() => void handleSaveStripe()} disabled={saveStripeConnector.isPending}>
+              {saveStripeConnector.isPending ? 'Saving...' : 'Save Stripe Terminal'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

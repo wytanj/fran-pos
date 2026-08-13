@@ -9,6 +9,8 @@ Fran POS ships the **same Vite web app** as both:
 
 Capacitor wraps `dashboard/dist` in a native WebView shell (`com.fran.pos`). There is no React Native / Ionic rewrite.
 
+Stripe **Tap to Pay** uses the native Terminal Android SDK through `@capgo/capacitor-stripe-terminal`. After `npm install`, run `npx cap sync android` so the plugin is on the APK. See `docs/stripe-terminal-acceptance.md`.
+
 ## Folder layout
 
 ```text

@@ -90,7 +90,7 @@ test('Fran CRM client exposes the genesis decision methods with mock fallback', 
   assert.match(franClient, /\/api\/fran\/loyalty\/policy-versions\/active/)
   assert.match(franClient, /fran_loyalty_policy_cache:v1/)
   assert.match(franClient, /AbortController/)
-  assert.match(franClient, /Fran CRM unreachable\. Continue checkout offline\./)
+  assert.match(franClient, /Loyalty service unreachable\. Continue checkout offline\./)
   assert.match(franClient, /mockResolveMember/)
   assert.match(franMock, /FRAN_MOCK_MEMBERS/)
   assert.match(franMock, /mockPreviewBasket/)

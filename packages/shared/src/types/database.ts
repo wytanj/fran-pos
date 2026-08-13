@@ -466,6 +466,23 @@ export interface PosConfig {
   skums_connector?: SkumsConnectorSettings | null;
   customer_email_connector?: CustomerEmailConnectorSettings | null;
   crmos_return_eligibility?: CrmosReturnEligibilitySettings | null;
+  stripe_terminal?: StripeTerminalSettings | null;
+}
+
+export type StripeTerminalReaderKind = 's700' | 'tap_to_pay' | 'auto'
+
+export interface StripeTerminalSettings {
+  enabled: boolean
+  /** Stripe test mode — uses test keys and simulated present_payment_method. */
+  simulated: boolean
+  location_id: string
+  /** Registered S700/S710 reader id (tmr_...). Required for server-driven S700. */
+  s700_reader_id: string
+  /** Display name shown on the reader and Tap to Pay sheet. */
+  merchant_display_name: string
+  /** Store kit default is S700 (Galaxy Tab is the cashier screen). */
+  default_reader: StripeTerminalReaderKind
+  updated_at?: string
 }
 
 export type CrmosReturnFallbackBehavior = 'block' | 'manager_review' | 'store_credit_only';

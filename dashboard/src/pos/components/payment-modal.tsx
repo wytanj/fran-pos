@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Banknote,
   CreditCard,
@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   Trash2,
   AlertTriangle,
+  Nfc,
+  SmartphoneNfc,
 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -18,9 +20,15 @@ import { formatCurrency, cn } from '@/lib/utils'
 import { Numpad } from '@/pos/components/numpad'
 import { CARD_TYPES, PAYMENT_MODES, STORE, type PaymentModeId } from '@/pos/data/mock'
 import { usePos } from '@/pos/lib/pos-context'
+import { useStripeConnector } from '@/hooks/use-stripe-connector'
+import { stripeS700Ready } from '@/pos/lib/stripe-connector'
+import { cancelStripeCollection, collectStripeInPerson } from '@/pos/lib/stripe-collect'
+import { tapToPaySupported } from '@/pos/lib/stripe-tap-to-pay'
 
 const ICONS: Record<string, typeof Banknote> = {
   cash: Banknote,
+  stripe_s700: Nfc,
+  stripe_tap: SmartphoneNfc,
   card: CreditCard,
   square_pos: CreditCard,
   paynow: QrCode,
@@ -40,14 +48,48 @@ interface PaymentModalProps {
 
 export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: PaymentModalProps) {
   const { totals, payments, addPayment, removePayment, customer } = usePos()
+  const { connector: stripe } = useStripeConnector()
   const [mode, setMode] = useState<PaymentModeId | null>(null)
   const [amount, setAmount] = useState('')
   const [cardType, setCardType] = useState<string>(CARD_TYPES[0])
   const [terminalState, setTerminalState] = useState<'idle' | 'waiting' | 'approved'>('idle')
+  const [terminalMessage, setTerminalMessage] = useState('')
+  const [terminalError, setTerminalError] = useState('')
   const terminalTimers = useRef<number[]>([])
+  const stripeBusy = useRef(false)
+
+  const visibleModes = useMemo(() => {
+    const modes = PAYMENT_MODES.filter((item) => {
+      if (item.id === 'stripe_s700') return Boolean(stripe?.enabled && stripeS700Ready(stripe))
+      if (item.id === 'stripe_tap') return Boolean(stripe?.enabled && tapToPaySupported())
+      if (item.id === 'card') return !stripe?.enabled
+      return true
+    })
+    const preferS700 = !stripe || stripe.default_reader !== 'tap_to_pay'
+    return [...modes].sort((a, b) => {
+      if (a.id === 'stripe_s700' && preferS700) return -1
+      if (b.id === 'stripe_s700' && preferS700) return 1
+      return 0
+    })
+  }, [stripe])
 
   const remaining = totals.balance
   const amountNum = parseFloat(amount) || 0
+
+  useEffect(() => {
+    if (!open) return
+    if (mode || payments.length > 0) return
+    const preferTap = stripe?.default_reader === 'tap_to_pay' && tapToPaySupported()
+    if (preferTap) {
+      setMode('stripe_tap')
+      setAmount(Math.max(remaining, 0).toFixed(2))
+      return
+    }
+    if (stripeS700Ready(stripe)) {
+      setMode('stripe_s700')
+      setAmount(Math.max(remaining, 0).toFixed(2))
+    }
+  }, [open, mode, payments.length, remaining, stripe])
   const fullyPaid = remaining <= 0.001
   const paymentLimitReached = payments.length >= MAX_TENDERS_PER_PAYMENT
   const storeCreditAvail = customer?.storeCredit ?? 0
@@ -59,6 +101,9 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     setMode(null)
     setAmount('')
     setTerminalState('idle')
+    setTerminalMessage('')
+    setTerminalError('')
+    stripeBusy.current = false
   }
 
   const closeAndReset = () => {
@@ -120,9 +165,51 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     reset()
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!mode) return
     const modeMeta = PAYMENT_MODES.find((m) => m.id === mode)!
+
+    if (mode === 'stripe_s700' || mode === 'stripe_tap') {
+      if (!stripe || stripeBusy.current) return
+      stripeBusy.current = true
+      setTerminalError('')
+      setTerminalState('waiting')
+      setTerminalMessage(mode === 'stripe_s700' ? 'Preparing the S700…' : 'Preparing Tap to Pay…')
+      try {
+        const result = await collectStripeInPerson({
+          kind: mode === 'stripe_s700' ? 's700' : 'tap_to_pay',
+          config: stripe,
+          amount: amountNum || remaining,
+          currency: STORE.currency,
+          description: `Fran POS ${STORE.code}`,
+          metadata: {
+            store_code: STORE.code,
+            register: '01',
+          },
+          onStatus: setTerminalMessage,
+        })
+        setTerminalState('approved')
+        setTerminalMessage('Payment approved')
+        commit(mode === 'stripe_s700' ? 'Stripe S700' : 'Tap to Pay', result.amount, result.paymentIntent.id, {
+          provider: 'stripe',
+          providerRef: result.paymentIntent.id,
+          status: 'captured',
+          providerMetadata: {
+            adapter: mode,
+            payment_intent_id: result.paymentIntent.id,
+            charge_id: result.paymentIntent.latest_charge || null,
+            simulated: stripe.simulated,
+          },
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Stripe payment failed'
+        setTerminalState('idle')
+        setTerminalError(message)
+        stripeBusy.current = false
+        onPaymentFailed?.(`${mode} payment_failed: ${message}`)
+      }
+      return
+    }
 
     if (mode === 'cash') {
       // Cash can be tendered above the balance — change is computed on the summary.
@@ -179,6 +266,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
 
   const failPayment = () => {
     if (!mode) return
+    void cancelStripeCollection(stripe)
     const modeMeta = PAYMENT_MODES.find((m) => m.id === mode)
     const label = mode === 'card' ? cardType : modeMeta?.label ?? 'Payment'
     onPaymentFailed?.(`${label} payment_failed`)
@@ -270,7 +358,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                  {PAYMENT_MODES.map((m) => {
+                  {visibleModes.map((m) => {
                     const Icon = ICONS[m.id]
                     return (
                       <button
@@ -281,6 +369,12 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                       >
                         <Icon className="h-6 w-6" />
                         {m.label}
+                        {m.id === 'stripe_s700' && (
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Customer reader</span>
+                        )}
+                        {m.id === 'stripe_tap' && (
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Backup on this tab</span>
+                        )}
                       </button>
                     )
                   })}
@@ -336,26 +430,40 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                   </div>
                 )}
 
-                {(mode === 'card' || mode === 'square_pos') && terminalState !== 'idle' ? (
+                {(mode === 'card' || mode === 'square_pos' || mode === 'stripe_s700' || mode === 'stripe_tap') && terminalState !== 'idle' ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border bg-muted/40 py-10 text-center">
                     {terminalState === 'waiting' ? (
                       <>
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        <p className="mt-3 text-sm font-medium">Connecting to terminal…</p>
-                        <p className="text-xs text-muted-foreground">
-                          {mode === 'square_pos' ? 'Opening Square POS handoff' : `Tap, insert or swipe ${cardType}`}
+                        <p className="mt-3 text-sm font-medium">
+                          {mode === 'stripe_s700'
+                            ? 'S700 collecting'
+                            : mode === 'stripe_tap'
+                              ? 'Tap to Pay'
+                              : 'Connecting to terminal…'}
                         </p>
-                        {onPaymentFailed && (
-                          <Button variant="outline" className="mt-4" onClick={failPayment}>
-                            <AlertTriangle className="h-4 w-4" /> Mark payment failed
-                          </Button>
-                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {mode === 'square_pos'
+                            ? 'Opening Square POS handoff'
+                            : mode === 'stripe_s700' || mode === 'stripe_tap'
+                              ? terminalMessage
+                              : `Tap, insert or swipe ${cardType}`}
+                        </p>
+                        <Button variant="outline" className="mt-4" onClick={failPayment}>
+                          <AlertTriangle className="h-4 w-4" /> Cancel / mark failed
+                        </Button>
                       </>
                     ) : (
                       <>
                         <CheckCircle2 className="h-8 w-8 text-success" />
                         <p className="mt-3 text-sm font-medium">
-                          {mode === 'square_pos' ? 'Square POS reference captured' : `${cardType} approved`}
+                          {mode === 'square_pos'
+                            ? 'Square POS reference captured'
+                            : mode === 'stripe_s700'
+                              ? 'S700 approved'
+                              : mode === 'stripe_tap'
+                                ? 'Tap to Pay approved'
+                                : `${cardType} approved`}
                         </p>
                       </>
                     )}
@@ -392,11 +500,21 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                   </>
                 )}
 
-                {!((mode === 'card' || mode === 'square_pos') && terminalState !== 'idle') && (
+                {!((mode === 'card' || mode === 'square_pos' || mode === 'stripe_s700' || mode === 'stripe_tap') && terminalState !== 'idle') && (
                   <>
+                    {terminalError && (
+                      <p className="mb-2 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        {terminalError}
+                      </p>
+                    )}
+                    {(mode === 'stripe_s700' || mode === 'stripe_tap') && stripe?.simulated && (
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        Simulated Stripe reader is on. Use this path for Stripe acceptance test cards.
+                      </p>
+                    )}
                     <Button
                       className="mt-3 h-11 w-full text-base"
-                      onClick={handleConfirm}
+                      onClick={() => void handleConfirm()}
                       disabled={
                         (mode === 'store-credit' && storeCreditAvail <= 0) ||
                         (mode === 'gift-card' && giftAvail <= 0) ||
@@ -404,10 +522,18 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                         (mode === 'cash' ? amountNum <= 0 : amountNum < 0)
                       }
                     >
-                      {mode === 'card' ? `Charge ${cardType}` : mode === 'square_pos' ? 'Open Square POS' : 'Add tender'}{' '}
+                      {mode === 'card'
+                        ? `Charge ${cardType}`
+                        : mode === 'square_pos'
+                          ? 'Open Square POS'
+                          : mode === 'stripe_s700'
+                            ? 'Charge on S700'
+                            : mode === 'stripe_tap'
+                              ? 'Charge with Tap to Pay'
+                              : 'Add tender'}{' '}
                       {amountNum > 0 && `· ${formatCurrency(amountNum, STORE.currency)}`}
                     </Button>
-                    {(mode === 'card' || mode === 'square_pos') && onPaymentFailed && (
+                    {(mode === 'card' || mode === 'square_pos' || mode === 'stripe_s700' || mode === 'stripe_tap') && (
                       <Button variant="outline" className="mt-2 w-full" onClick={failPayment}>
                         <AlertTriangle className="h-4 w-4" /> Mark payment failed
                       </Button>

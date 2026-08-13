@@ -17,6 +17,7 @@ import {
   X,
   MapPin,
   Users,
+  Nfc,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePos } from '@/pos/lib/pos-context'
@@ -26,6 +27,8 @@ import { fetchSkumsRosterAssignment } from '@/pos/lib/skums-client'
 import { toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
 import { useCompanySettings } from '@/hooks/use-settings'
 import { BrandMark } from '@/components/brand-mark'
+import { useStripeConnector } from '@/hooks/use-stripe-connector'
+import { useS700Status } from '@/hooks/use-s700-status'
 
 const navItems = [
   { to: '/pos/sale', icon: ShoppingBag, label: 'Sale' },
@@ -43,6 +46,8 @@ export function PosShell() {
   const { user: posUser, setUser, clearSale, mode } = usePos()
   const { user: accountUser, company } = useAuth()
   const { data: settings } = useCompanySettings()
+  const { connector: stripe } = useStripeConnector()
+  const s700Status = useS700Status(stripe)
   const navigate = useNavigate()
   const [now, setNow] = useState(new Date())
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -140,6 +145,18 @@ export function PosShell() {
           <span className="hidden items-center gap-1.5 text-success sm:flex">
             <Wifi className="h-4 w-4" /> Online
           </span>
+          {s700Status !== 'idle' && (
+            <span
+              className={cn(
+                'hidden items-center gap-1.5 md:flex',
+                s700Status === 'online' ? 'text-success' : s700Status === 'checking' ? 'text-muted-foreground' : 'text-warning',
+              )}
+              title="Galaxy Tab talks to this S700 over Stripe. Cards are taken on the reader, not on the tablet."
+            >
+              <Nfc className="h-4 w-4" />
+              {s700Status === 'online' ? 'S700 ready' : s700Status === 'checking' ? 'S700…' : 'S700 offline'}
+            </span>
+          )}
           <span className="hidden items-center gap-1.5 text-muted-foreground md:flex">
             <CheckCircle2 className="h-4 w-4 text-success" /> Cloud synced
           </span>

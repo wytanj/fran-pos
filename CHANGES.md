@@ -1,3 +1,39 @@
+# Changes
+
+## 2026-08-14 Update
+
+### Summary
+
+Wired Fran POS for Stripe in-person acceptance on the store kit: Samsung Galaxy Tab as the cashier register, Stripe S700 as the customer card reader, and Tap to Pay on tablet as backup only.
+
+### What Changed Today
+
+- Added server-side Stripe Terminal routes at `/api/stripe-terminal` and `/api/stripe-webhook`. Connection tokens, PaymentIntents, S700 `process_payment_intent`, reader register/status, and cancel stay on the server. The Stripe secret key is never sent to the tablet.
+- Added Settings → Integrations → Stripe Terminal so a store can enable Terminal, set a location, register an S700 pairing code, and health-check the backend.
+- Pay on the register now offers **S700 reader** first. The Galaxy Tab stays on the cashier UI while the customer taps, inserts, or swipes on the S700.
+- Added **Tap on tablet** as a backup path through the native Android Terminal SDK (`@capgo/capacitor-stripe-terminal`). It only appears inside the Fran POS APK on a Stripe-attested device.
+- Simulated mode uses Stripe test helpers so Stripe review can finish a sale without hardware.
+- POS header shows **S700 ready / offline** so cashiers see the reader before they charge.
+- Galaxy Tab APK keeps the screen awake on the counter, allows large/xlarge screens, and includes NFC plus Bluetooth permissions for Terminal.
+- Documented the store kit and Stripe checklist in `docs/stripe-terminal-acceptance.md`.
+
+### Why
+
+Stores will run Fran POS on Galaxy Tabs next to an S700. Cards should be taken on the reader, not on the tablet screen. Stripe acceptance also needs a real connection-token and PaymentIntent path, a simulated reader, cancel/retry, and field registration.
+
+### Verification
+
+- Dashboard production build passed locally.
+- Stripe unit tests passed: 6/6 (`tests/stripe-terminal.test.mjs`).
+- Capacitor Android sync picked up `@capgo/capacitor-stripe-terminal@8.0.3`.
+
+### Deployment
+
+- Production app: `https://fran-pos.vercel.app`
+- After deploy, set `STRIPE_SECRET_KEY` (`sk_test_…` for review) and optionally `STRIPE_WEBHOOK_SECRET` on Vercel. Pair the store S700 in Settings → Integrations.
+
+---
+
 # Changes - Week Ending 2026-05-28
 
 ## 2026-05-28 Update

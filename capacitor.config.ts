@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: false,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#FFFEF5',
     buildOptions: {
       // Produce a distributable APK (not AAB) from `cap build android`.
       // For signed release, set CAPACITOR_ANDROID_KEYSTORE_PATH and related

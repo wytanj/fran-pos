@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.4.1",
+    "@capgo/capacitor-stripe-terminal": "^8.0.3",
     "@hookform/resolvers": "^5.2.2",
     "@pos/shared": "^0.0.1",
     "@supabase/supabase-js": "^2.99.1",

@@ -11,4 +11,12 @@ export default defineConfig({
     },
   },
   envDir: path.resolve(__dirname, '..'),
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_STRIPE_API_BASE || 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+    },
+  },
 })
