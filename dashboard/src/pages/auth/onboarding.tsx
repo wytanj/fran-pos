@@ -10,6 +10,7 @@ import {
   listMyPendingCompanyInvites,
   type PendingCompanyInvite,
 } from '@/hooks/use-company-invites'
+import { AuthBrand } from '@/components/brand-mark'
 
 export default function OnboardingPage() {
   const { user, company, createCompanyProfile, loading, switchCompany } = useAuth()
@@ -86,8 +87,10 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
+      <div className="w-full max-w-md">
+        <AuthBrand subtitle="Create or join a company workspace" />
+      <Card className="w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">
             {pendingInvites.length > 0 ? 'Join your team' : 'Finish POS Setup'}
@@ -175,6 +178,7 @@ export default function OnboardingPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

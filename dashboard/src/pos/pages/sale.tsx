@@ -1725,7 +1725,7 @@ export default function SalePage() {
         aria-pressed={catalogView === 'grid'}
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
-          catalogView === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+          catalogView === 'grid' ? 'bg-brown text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
         )}
       >
         <Grid2X2 className="h-4 w-4" />
@@ -1738,7 +1738,7 @@ export default function SalePage() {
         aria-pressed={catalogView === 'list'}
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
-          catalogView === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+          catalogView === 'list' ? 'bg-brown text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
         )}
       >
         <List className="h-4 w-4" />
@@ -1755,7 +1755,7 @@ export default function SalePage() {
           onClick={() => setCategory(c)}
           className={cn(
             'whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer',
-            category === c ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-accent'
+            category === c ? 'bg-yellow font-semibold text-brown' : 'bg-surface-sunken hover:bg-yellow-soft'
           )}
         >
           {c}
@@ -1793,10 +1793,10 @@ export default function SalePage() {
           className={cn(
             'shrink-0 border-b px-3 py-1.5 text-xs',
             posCapabilitiesError
-              ? 'bg-amber-500/10 text-amber-900 dark:text-amber-100'
+              ? 'bg-warning-soft text-warning'
               : posCapabilities?.ready_for_member_loyalty
-                ? 'bg-emerald-500/10 text-emerald-900 dark:text-emerald-100'
-                : 'bg-sky-500/10 text-sky-900 dark:text-sky-100',
+                ? 'bg-success-soft text-success'
+                : 'bg-yellow-soft text-brown',
           )}
         >
           {posCapabilitiesError
@@ -1923,9 +1923,9 @@ export default function SalePage() {
           <div
             className={cn(
               'flex items-start gap-2 rounded-md border px-3 py-2 text-sm',
-              scanMessage.tone === 'success' && 'border-green-200 bg-green-50 text-green-800',
-              scanMessage.tone === 'info' && 'border-blue-200 bg-blue-50 text-blue-800',
-              scanMessage.tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-800',
+              scanMessage.tone === 'success' && 'border-transparent bg-success-soft text-success',
+              scanMessage.tone === 'info' && 'border-line bg-yellow-soft text-brown',
+              scanMessage.tone === 'warning' && 'border-warning/30 bg-warning-soft text-warning',
               scanMessage.tone === 'error' && 'border-destructive/30 bg-destructive/10 text-destructive'
             )}
           >
@@ -2077,7 +2077,7 @@ export default function SalePage() {
               />
             )}
             <Row label="GST 9% (incl.)" value={formatCurrency(totals.taxIncluded, STORE.currency)} muted />
-            <div className="flex items-center justify-between pt-1 text-2xl font-bold">
+            <div className="flex items-center justify-between pt-1 font-display text-[28px] font-bold tracking-tight">
               <span>Total</span>
               <span className="tabular-nums">{formatCurrency(totals.total, STORE.currency)}</span>
             </div>
@@ -2475,7 +2475,7 @@ function CartRow({
       className={cn(
         'rounded-lg border p-2.5',
         isReturn && 'border-destructive/40 bg-destructive/5',
-        isFranLine && 'border-green-200 bg-green-50'
+        isFranLine && 'border-transparent bg-success-soft'
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -2483,21 +2483,21 @@ function CartRow({
           <p className="truncate text-sm font-medium">{line.name}</p>
           <p className="text-xs text-muted-foreground">
             {line.sku} · {formatCurrency(line.unitPrice, STORE.currency)}
-            {line.isMarkdown && <span className="ml-1 text-amber-600">MD</span>}
-            {line.overridden && <span className="ml-1 text-blue-600">overridden</span>}
-            {isFranLine && <span className="ml-1 text-green-700">Fran CRM</span>}
+            {line.isMarkdown && <span className="ml-1 text-warning">MD</span>}
+            {line.overridden && <span className="ml-1 text-brown">overridden</span>}
+            {isFranLine && <span className="ml-1 text-success">Fran CRM</span>}
             {line.storeLocationCode && <span className="ml-1 text-primary">Loc {line.storeLocationCode}</span>}
           </p>
           {line.lineDiscount > 0 && (
-            <p className="text-xs text-green-700">
+            <p className="text-xs text-success">
               {line.discountLabel}: -{formatCurrency(line.lineDiscount, STORE.currency)}
             </p>
           )}
           {line.overridden && line.overrideReason && (
-            <p className="text-xs text-blue-700">Price override: {line.overrideReason}</p>
+            <p className="text-xs text-brown">Price override: {line.overrideReason}</p>
           )}
           {line.franDecisionRef && (
-            <p className="text-xs text-green-700">Decision {line.franDecisionRef}</p>
+            <p className="text-xs text-success">Decision {line.franDecisionRef}</p>
           )}
         </div>
         <span className={cn('shrink-0 text-sm font-semibold tabular-nums', isReturn && 'text-destructive')}>
@@ -2506,7 +2506,7 @@ function CartRow({
       </div>
       <div className="mt-2 flex items-center justify-between">
         {readOnly ? (
-          <span className="rounded-md bg-white/70 px-2 py-1 text-xs font-medium text-green-800">
+          <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-medium text-success">
             CRM quoted line
           </span>
         ) : (
@@ -2590,7 +2590,7 @@ function CartOverrideModal({
             <span className="font-medium tabular-nums">{formatCurrency(currentTotal, STORE.currency)}</span>
           </div>
           {existingOverride && (
-            <div className="mt-1 flex justify-between text-blue-700">
+            <div className="mt-1 flex justify-between text-brown">
               <span>Active override</span>
               <span className="font-medium tabular-nums">{formatCurrency(existingOverride.targetTotal, STORE.currency)}</span>
             </div>

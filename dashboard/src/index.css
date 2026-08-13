@@ -1,43 +1,185 @@
 @import "tailwindcss";
 
+/*
+  Fran POS visual system — same cream / brown / yellow tokens as
+  fran-hrm, fran-skums, and fran-crm. POS keeps more white surfaces
+  and brown/black contrast for register glanceability.
+*/
+
 @theme {
+  /* Semantic (existing class names keep working) */
   --color-background: #ffffff;
-  --color-foreground: #09090b;
+  --color-foreground: #3a2415;
   --color-card: #ffffff;
-  --color-card-foreground: #09090b;
+  --color-card-foreground: #3a2415;
   --color-popover: #ffffff;
-  --color-popover-foreground: #09090b;
-  --color-primary: #18181b;
-  --color-primary-foreground: #fafafa;
-  --color-secondary: #f4f4f5;
-  --color-secondary-foreground: #18181b;
-  --color-muted: #f4f4f5;
-  --color-muted-foreground: #71717a;
-  --color-accent: #f4f4f5;
-  --color-accent-foreground: #18181b;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #fafafa;
-  --color-border: #e4e4e7;
-  --color-input: #e4e4e7;
-  --color-ring: #18181b;
-  --color-sidebar-background: #fafafa;
-  --color-sidebar-foreground: #3f3f46;
-  --color-sidebar-primary: #18181b;
-  --color-sidebar-primary-foreground: #fafafa;
-  --color-sidebar-accent: #f4f4f5;
-  --color-sidebar-accent-foreground: #18181b;
-  --color-sidebar-border: #e4e4e7;
-  --color-sidebar-ring: #18181b;
-  --radius: 0.5rem;
+  --color-popover-foreground: #3a2415;
+  --color-primary: #3a2415;
+  --color-primary-foreground: #fffef5;
+  --color-secondary: #fbf7ee;
+  --color-secondary-foreground: #3a2415;
+  --color-muted: #fbf7ee;
+  --color-muted-foreground: #8b7355;
+  --color-accent: #fff4a8;
+  --color-accent-foreground: #3a2415;
+  --color-destructive: #c43a3a;
+  --color-destructive-foreground: #fffef5;
+  --color-border: #ede4d4;
+  --color-input: #ede4d4;
+  --color-ring: #3a2415;
+  --color-sidebar-background: #ffffff;
+  --color-sidebar-foreground: #5c4030;
+  --color-sidebar-primary: #ffe14d;
+  --color-sidebar-primary-foreground: #3a2415;
+  --color-sidebar-accent: #fff4a8;
+  --color-sidebar-accent-foreground: #3a2415;
+  --color-sidebar-border: #ede4d4;
+  --color-sidebar-ring: #3a2415;
+
+  /* Brand extras */
+  --color-yellow: #ffe14d;
+  --color-yellow-soft: #fff4a8;
+  --color-yellow-deep: #f0c820;
+  --color-brown: #3a2415;
+  --color-brown-soft: #5c4030;
+  --color-ink: #3a2415;
+  --color-ink-soft: #5c4030;
+  --color-cream: #fffef5;
+  --color-tan: #c4a070;
+  --color-peach: #f2d2ae;
+  --color-peach-soft: #fae8d4;
+  --color-line: #ede4d4;
+  --color-line-soft: #f4eddf;
+  --color-line-strong: #d9cdb8;
+  --color-surface-sunken: #fbf7ee;
+  --color-success: #2d8a5e;
+  --color-success-soft: #e6f5ee;
+  --color-warning: #c47a1a;
+  --color-warning-soft: #fff4e5;
+  --color-danger: #c43a3a;
+  --color-danger-soft: #fdecec;
+
+  /* Type */
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Radii — generous, matching fran-mobile / sibling apps */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius: 14px;
+
+  /* Warm brown elevation */
+  --shadow-warm-xs: 0 1px 3px rgba(58, 36, 21, 0.04);
+  --shadow-warm-sm: 0 1px 3px rgba(58, 36, 21, 0.04), 0 2px 10px rgba(58, 36, 21, 0.06);
+  --shadow-warm-md: 0 6px 20px rgba(58, 36, 21, 0.09);
+  --shadow-warm-lg: 0 14px 34px rgba(58, 36, 21, 0.13);
+  --shadow-glow: 0 5px 14px rgba(240, 200, 32, 0.34);
+  --shadow-nav: 0 5px 18px rgba(58, 36, 21, 0.16);
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
-    font-family: system-ui, -apple-system, sans-serif;
+    @apply bg-cream text-ink antialiased;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    line-height: 1.5;
     margin: 0;
+    min-width: 320px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brown);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    margin: 0 0 4px;
+    color: var(--color-muted-foreground);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+  }
+
+  .h1-display {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 2rem;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+  }
+
+  .press {
+    transition: transform 100ms ease;
+  }
+
+  .press:active {
+    transform: scale(0.975);
+  }
+
+  .press-lg {
+    transition: transform 100ms ease;
+  }
+
+  .press-lg:active {
+    transform: scale(0.99);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .press,
+  .press-lg {
+    transition: none;
+  }
+
+  .press:active,
+  .press-lg:active {
+    transform: none;
   }
 }

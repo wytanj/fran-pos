@@ -54,12 +54,12 @@ export function FranVoucherScanPanel({
   }
 
   return (
-    <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+    <div className="rounded-md border border-line bg-yellow-soft/50 p-3">
       <div className="mb-2 flex items-center gap-2">
-        <ScanLine className="h-4 w-4 text-violet-700" />
-        <p className="text-sm font-semibold text-violet-950">Scan FWB voucher</p>
+        <ScanLine className="h-4 w-4 text-brown" />
+        <p className="text-sm font-semibold text-brown">Scan FWB voucher</p>
       </div>
-      <p className="mb-2 text-xs text-violet-800">
+      <p className="mb-2 text-xs text-ink-soft">
         Birthday / category earn bonus, or points dens QR (200 / 500 / 1k / 1.5k / 2.5k). Demo codes:{' '}
         <code className="rounded bg-white px-1">BDAY</code>,{' '}
         <code className="rounded bg-white px-1">CAT</code>,{' '}
@@ -68,7 +68,7 @@ export function FranVoucherScanPanel({
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1 space-y-1">
-          <Label className="text-xs text-violet-900">Voucher code / QR payload</Label>
+          <Label className="text-xs text-brown">Voucher code / QR payload</Label>
           <Input
             value={code}
             disabled={disabled || !memberId || loading}
@@ -86,7 +86,6 @@ export function FranVoucherScanPanel({
           type="button"
           disabled={disabled || !memberId || loading || !code.trim()}
           onClick={() => void submit(code)}
-          className="bg-violet-700 hover:bg-violet-800"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
           Authorize
@@ -95,7 +94,7 @@ export function FranVoucherScanPanel({
 
       {densOptions.length > 0 && onQuoteDens && memberId && (
         <div className="mt-3">
-          <p className="mb-1 text-xs font-medium text-violet-900">Issue dens QR (demo / app redeem)</p>
+          <p className="mb-1 text-xs font-medium text-brown">Issue dens QR (demo / app redeem)</p>
           <div className="flex flex-wrap gap-1.5">
             {densOptions.map((d) => (
               <Button
@@ -103,7 +102,7 @@ export function FranVoucherScanPanel({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="border-violet-300 bg-white text-xs text-violet-900"
+                className="border-brown bg-white text-xs text-brown"
                 disabled={disabled || loading}
                 onClick={() => {
                   void (async () => {
@@ -131,7 +130,7 @@ export function FranVoucherScanPanel({
       )}
 
       {error && <p className="mt-2 text-xs font-medium text-red-700">{error}</p>}
-      {lastOk && !error && <p className="mt-2 text-xs font-medium text-emerald-800">Authorized: {lastOk}</p>}
+      {lastOk && !error && <p className="mt-2 text-xs font-medium text-success">Authorized: {lastOk}</p>}
 
       {scans.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -139,12 +138,12 @@ export function FranVoucherScanPanel({
             <Badge
               key={s.code}
               variant="outline"
-              className="gap-1 border-violet-300 bg-white text-violet-950"
+              className="gap-1 border-line bg-white text-brown"
             >
               {s.kind}: {s.code}
               <button
                 type="button"
-                className="ml-0.5 rounded p-0.5 hover:bg-violet-100"
+                className="ml-0.5 rounded p-0.5 hover:bg-yellow-soft"
                 onClick={() => onRemove(s.code)}
                 aria-label={`Remove ${s.code}`}
               >

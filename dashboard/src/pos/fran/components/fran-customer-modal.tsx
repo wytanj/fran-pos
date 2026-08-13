@@ -255,19 +255,19 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
         </div>
 
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <Button variant="outline" className="border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100" onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}>
+          <Button variant="outline" className="border-line bg-yellow-soft text-brown hover:bg-yellow" onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}>
             <QrCode className="h-4 w-4" /> QR demo
           </Button>
           <Button variant="outline" className="border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100" onClick={() => void chooseException('non_member')}>
             <UsersRound className="h-4 w-4" /> Non-member
           </Button>
-          <Button variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100" onClick={() => void chooseException('tourist')}>
+          <Button variant="outline" className="border-line bg-white text-ink hover:bg-surface-sunken" onClick={() => void chooseException('tourist')}>
             <UsersRound className="h-4 w-4" /> Tourist
           </Button>
         </div>
 
         {error && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="mt-3 rounded-sm border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
             <p>{error}</p>
             <p className="mt-1 text-xs text-amber-800">
               Sale can continue offline. Loyalty earn will queue locally and sync on reconnect.
@@ -286,7 +286,7 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
               key={member.id}
               type="button"
               onClick={() => void selectMember(member.id)}
-              className="flex w-full items-start justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50 p-3 text-left text-teal-950 transition-colors hover:bg-teal-100"
+              className="flex w-full items-start justify-between gap-3 rounded-md border border-line bg-yellow-soft p-3 text-left text-brown transition-colors hover:bg-yellow"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -294,10 +294,10 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
                   <Badge variant="outline" className={tierBadgeClass(member.tier)}>
                     {tierLabel(member.tier, member.tierLabel)}
                   </Badge>
-                  {member.tourist && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
+                  {member.tourist && <Badge variant="outline" className="border-line-strong bg-white text-ink-soft">Tourist</Badge>}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                  <Badge variant="outline" className="border-sky-300 bg-white text-sky-900">
+                  <Badge variant="outline" className="border-line bg-white text-brown">
                     {tierSummaryLine({
                       tier: member.tier,
                       tierLabel: member.tierLabel,
@@ -306,7 +306,7 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
                       currency: 'SGD',
                     })}
                   </Badge>
-                  <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-800">
+                  <Badge variant="outline" className="border-transparent bg-success-soft text-success">
                     Can spend {member.pointsBalance.toLocaleString()} pts
                   </Badge>
                   {member.pointsExpireAt && (
@@ -315,12 +315,12 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
                     </Badge>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-teal-800">
+                <p className="mt-1 text-xs text-ink-soft">
                   {member.memberNo} - {member.phone}
                 </p>
                 {member.warnings[0] && <p className="mt-1 text-xs text-amber-700">{member.warnings[0]}</p>}
               </div>
-              <Badge variant="outline" className="shrink-0 border-teal-300 bg-white text-teal-800">
+              <Badge variant="outline" className="shrink-0 border-line bg-white text-brown">
                 Use {member.rewardCount} rewards
               </Badge>
             </button>

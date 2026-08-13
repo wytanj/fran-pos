@@ -629,13 +629,13 @@ function SkumsImportWizardContent({
   return (
     <div className="mt-5 space-y-5">
       {job.status === 'ready' ? (
-        <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-900 dark:text-sky-100">
+        <div className="rounded-sm border border-line bg-yellow-soft p-3 text-sm text-brown">
           Preflight only — products are not in POS yet. Click <strong>Start Sync</strong> (or use the toolbar button, which auto-starts).
         </div>
       ) : null}
 
       {job.status === 'completed' ? (
-        <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700">
+        <div className="flex items-center gap-2 rounded-sm border border-transparent bg-success-soft p-3 text-sm text-success">
           <CheckCircle2 className="h-4 w-4" />
           <span>
             Applied to POS products: {job.created.toLocaleString()} new, {job.updated.toLocaleString()} updated.

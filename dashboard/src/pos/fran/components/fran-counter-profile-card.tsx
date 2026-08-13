@@ -48,7 +48,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
             {member.memberNo} - {member.phone}
           </p>
         </div>
-        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
+        <Badge variant="outline" className="border-transparent bg-success-soft text-success">
           Can spend {member.pointsBalance.toLocaleString()} pts
         </Badge>
       </div>
@@ -68,9 +68,9 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
       </div>
 
       {pointsExpiryAlert && (
-        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-950">
+        <div className="mt-3 rounded-sm border border-warning/30 bg-warning-soft p-2 text-warning">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
             <div className="min-w-0">
               <p className="text-xs font-semibold">Expiring soon</p>
               <p className="mt-0.5 text-xs">
@@ -86,25 +86,25 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
       )}
 
       {activePerks.length > 0 && (
-        <div className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-2 text-teal-950">
+        <div className="mt-3 rounded-sm border border-line bg-peach-soft p-2 text-brown">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-semibold">Use now: active perks</p>
-            <Badge variant="outline" className="border-teal-300 bg-white text-teal-800">{activePerks.length}</Badge>
+            <Badge variant="outline" className="border-line bg-white text-brown">{activePerks.length}</Badge>
           </div>
           <div className="space-y-1.5">
             {activePerks.map((perk) => (
-              <div key={perk.id} className="rounded-sm border border-teal-100 bg-white px-2 py-1.5">
+              <div key={perk.id} className="rounded-sm border border-line-soft bg-white px-2 py-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs font-medium">{perk.title}</p>
-                    <p className="mt-0.5 text-[11px] text-teal-800">{perk.description}</p>
+                    <p className="mt-0.5 text-[11px] text-ink-soft">{perk.description}</p>
                   </div>
-                  <Badge variant="outline" className="shrink-0 border-teal-200 bg-teal-50 text-teal-800">
+                  <Badge variant="outline" className="shrink-0 border-line bg-yellow-soft text-brown">
                     {perk.valueLabel}
                   </Badge>
                 </div>
                 {(perk.thresholdAmount != null || perk.expiresAt) && (
-                  <p className="mt-1 text-[11px] text-teal-700">
+                  <p className="mt-1 text-[11px] text-ink-soft">
                     {perk.thresholdAmount != null
                       ? `Threshold ${formatCurrency(perk.thresholdAmount, perk.currency)}`
                       : null}
@@ -119,9 +119,9 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
       )}
 
       {preview?.tierProgress?.crossesTierThreshold && preview.tierProgress.upgradeAlert && (
-        <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 p-2 text-emerald-950">
+        <div className="mt-3 rounded-sm border border-transparent bg-success-soft p-2 text-success">
           <div className="flex items-start gap-2">
-            <Trophy className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <Trophy className="mt-0.5 h-4 w-4 shrink-0 text-success" />
             <div>
               <p className="text-xs font-semibold">Tier upgrade available</p>
               <p className="mt-0.5 text-xs">{preview.tierProgress.upgradeAlert}</p>
@@ -131,14 +131,14 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
       )}
 
       {preview?.tierProgress && (
-        <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2 text-blue-950">
+        <div className="mt-3 rounded-sm border border-line bg-surface-sunken p-2 text-ink">
           <p className="mb-1 text-xs font-semibold">Tier spend progress</p>
           <div className="flex justify-between text-xs">
             <span>{preview.tierProgress.currentTierLabel}</span>
             <span>{preview.tierProgress.nextTierLabel ?? 'Top tier'}</span>
           </div>
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-white">
-            <div className="h-full bg-blue-500" style={{ width: `${preview.tierProgress.progressPercent}%` }} />
+            <div className="h-full bg-yellow" style={{ width: `${preview.tierProgress.progressPercent}%` }} />
           </div>
           <div className="mt-2 grid grid-cols-3 gap-1.5">
             <ProgressMetric
@@ -168,7 +168,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
                 ? `${formatCurrency(preview.tierProgress.transactionValue, STORE.currency)} basket leaves ${formatCurrency(preview.tierProgress.gapRemaining, STORE.currency)} gap`
                 : 'Tier maintained')}
           </p>
-          <p className="mt-0.5 text-[11px] text-blue-700">
+          <p className="mt-0.5 text-[11px] text-ink-soft">
             Calendar-year window: {formatMemberDate(preview.tierProgress.windowStart, 'Unknown')} -{' '}
             {formatMemberDate(preview.tierProgress.windowEnd, 'Unknown')}
           </p>
@@ -176,12 +176,12 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
       )}
 
       {earnProjection && (
-        <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-2 text-sky-950">
+        <div className="mt-3 rounded-sm border border-line bg-yellow-soft p-2 text-brown">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold">Earn after basket</p>
-            <Badge variant="outline" className="border-sky-300 bg-white text-sky-800">+{earnProjection.projectedEarnPoints.toLocaleString()} pts</Badge>
+            <Badge variant="outline" className="border-line bg-white text-brown">+{earnProjection.projectedEarnPoints.toLocaleString()} pts</Badge>
           </div>
-          <p className="mt-1 text-xs text-sky-800">
+          <p className="mt-1 text-xs text-ink-soft">
             {formatEarnPolicyBasis(earnProjection.policy.basis)} on{' '}
             {formatCurrency(earnProjection.baseAmount, STORE.currency)} - x{formatMultiplier(earnProjection.totalMultiplier)}
           </p>
@@ -190,7 +190,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
               <Badge
                 key={multiplier.code}
                 variant="outline"
-                className={multiplier.applied ? 'border-sky-300 bg-white text-sky-800' : 'border-slate-200 bg-white text-slate-500'}
+                className={multiplier.applied ? 'border-line bg-white text-brown' : 'border-line bg-white text-muted-foreground'}
               >
                 {multiplier.applied
                   ? `${multiplier.label} x${formatMultiplier(multiplier.multiplier)}`
@@ -202,7 +202,7 @@ export function FranCounterProfileCard({ session, preview }: FranCounterProfileC
       )}
 
       {session.warnings.length > 0 && (
-        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+        <p className="mt-2 rounded-sm border border-warning/30 bg-warning-soft px-2 py-1.5 text-xs text-warning">
           {session.warnings[0]}
         </p>
       )}
@@ -247,7 +247,7 @@ function ProgressMetric({
 }) {
   return (
     <div className="rounded-sm bg-white px-2 py-1">
-      <p className="text-[10px] text-blue-700">{label}</p>
+      <p className="text-[10px] text-ink-soft">{label}</p>
       <p className="truncate text-xs font-semibold">{value}</p>
     </div>
   )
@@ -283,40 +283,40 @@ function factToneClass(tone: FactTone) {
   switch (tone) {
     case 'spend':
       return {
-        container: 'border-emerald-200 bg-emerald-50',
-        label: 'text-emerald-700',
-        value: 'text-emerald-950',
+        container: 'border-transparent bg-success-soft',
+        label: 'text-success',
+        value: 'text-ink',
       }
     case 'use':
       return {
-        container: 'border-teal-200 bg-teal-50',
-        label: 'text-teal-700',
-        value: 'text-teal-950',
+        container: 'border-line bg-peach-soft',
+        label: 'text-brown',
+        value: 'text-ink',
       }
     case 'birthday':
       return {
-        container: 'border-rose-200 bg-rose-50',
-        label: 'text-rose-700',
-        value: 'text-rose-950',
+        container: 'border-line bg-yellow-soft',
+        label: 'text-brown',
+        value: 'text-ink',
       }
     case 'expire':
       return {
-        container: 'border-amber-200 bg-amber-50',
-        label: 'text-amber-700',
-        value: 'text-amber-950',
+        container: 'border-warning/30 bg-warning-soft',
+        label: 'text-warning',
+        value: 'text-ink',
       }
     case 'tier':
       return {
-        container: 'border-blue-200 bg-blue-50',
-        label: 'text-blue-700',
-        value: 'text-blue-950',
+        container: 'border-line bg-yellow',
+        label: 'text-brown',
+        value: 'text-ink',
       }
     case 'profile':
     default:
       return {
-        container: 'border-slate-200 bg-slate-50',
-        label: 'text-slate-600',
-        value: 'text-slate-950',
+        container: 'border-line bg-surface-sunken',
+        label: 'text-ink-soft',
+        value: 'text-ink',
       }
   }
 }

@@ -936,7 +936,7 @@ export default function ReturnsPage() {
       <Dialog open={done !== null} onOpenChange={(o) => !o && setDone(null)}>
         <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto" onClose={() => setDone(null)}>
           <div className="mb-3 flex flex-col items-center text-center">
-            <CheckCircle2 className="h-10 w-10 text-green-600" />
+            <CheckCircle2 className="h-10 w-10 text-success" />
             <h2 className="mt-2 text-lg font-semibold">Processed</h2>
             <p className="text-sm text-muted-foreground">{done?.receiptNo} · negative lines synced to cloud</p>
           </div>

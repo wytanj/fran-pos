@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/providers/auth-provider'
 import { usePosStaffMembers, useStartPosStaffSession } from '@/hooks/use-pos-staff'
 import type { PosStaffMember } from '@pos/shared'
+import { BrandMark } from '@/components/brand-mark'
 
 export default function PosLogin() {
   const { mode, setMode, setUser } = usePos()
@@ -112,25 +113,24 @@ export default function PosLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
-      <div className="w-full max-w-3xl rounded-2xl border bg-card p-6 shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
+      <div className="w-full max-w-3xl rounded-xl border border-line bg-white p-6 shadow-warm-md">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <ShoppingBag className="h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-semibold">Fran POS</h1>
+          <BrandMark size="lg" className="mb-3" />
+          <p className="eyebrow">Register</p>
+          <h1 className="h1-display">Fran POS</h1>
           <p className="text-sm text-muted-foreground">
             {STORE.name} - Store {STORE.code}
           </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-secondary p-1">
+        <div className="mb-6 grid grid-cols-2 gap-2 rounded-sm bg-surface-sunken p-1">
           <button
             type="button"
             onClick={() => setMode('demo')}
             className={cn(
               'rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              mode === 'demo' ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              mode === 'demo' ? 'bg-white font-semibold text-brown shadow-warm-xs' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             Demo mode
@@ -140,7 +140,7 @@ export default function PosLogin() {
             onClick={() => setMode('live')}
             className={cn(
               'rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              mode === 'live' ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              mode === 'live' ? 'bg-white font-semibold text-brown shadow-warm-xs' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             Live mode
@@ -181,7 +181,7 @@ export default function PosLogin() {
                       Select an active POS staff member and enter their register passcode.
                     </p>
                   </div>
-                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">Live</span>
+                  <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">Live</span>
                 </div>
 
                 {staffLoading ? (
@@ -218,7 +218,7 @@ export default function PosLogin() {
                               {member.role} - {member.employment_type || 'staff'}
                             </span>
                           </span>
-                          {member.is_eor && <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">EOR</span>}
+                          {member.is_eor && <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">EOR</span>}
                         </button>
                       ))}
                     </div>
@@ -320,7 +320,7 @@ export default function PosLogin() {
                   }}
                   className={cn(
                     'flex flex-col items-center gap-1 rounded-lg border p-3 text-sm font-medium transition-colors cursor-pointer',
-                    role === r.role ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent'
+                    role === r.role ? 'border-yellow bg-yellow font-semibold text-brown' : 'hover:bg-surface-sunken'
                   )}
                 >
                   <r.icon className="h-5 w-5" />

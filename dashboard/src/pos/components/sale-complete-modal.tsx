@@ -75,7 +75,7 @@ export function SaleCompleteModal({
           {isVoided ? (
             <Ban className="h-10 w-10 text-destructive" />
           ) : (
-            <CheckCircle2 className="h-10 w-10 text-green-600" />
+            <CheckCircle2 className="h-10 w-10 text-success" />
           )}
           <h2 className="mt-2 text-lg font-semibold">
             {isVoided ? 'Sale voided' : sale.isExchange ? 'Exchange completed' : 'Sale completed'}
@@ -177,7 +177,7 @@ function FranRewardReversalStatus({ sale }: { sale: CompletedSale }) {
 
   if (reward.status === 'reversed' && reward.reverse) {
     return (
-      <div className="mb-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+      <div className="mb-3 rounded-sm border border-transparent bg-success-soft px-3 py-2 text-sm text-success">
         <p className="font-medium">Fran reward reversed</p>
         <p className="mt-0.5 text-xs">
           {reward.reverse.pointsRestored.toLocaleString()} pts restored. Balance is{' '}
@@ -284,7 +284,7 @@ function SkumsSaleSyncStatus({
 
   const icon =
     sync.status === 'synced' ? (
-      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
     ) : sync.status === 'syncing' ? (
       <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
     ) : sync.status === 'queued' || pendingCount > 0 ? (

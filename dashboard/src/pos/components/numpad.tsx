@@ -21,7 +21,7 @@ export function Numpad({ onPress, onBackspace, decimal = false, className }: Num
             key={k}
             type="button"
             onClick={() => onPress(k)}
-            className="h-14 rounded-lg border bg-card text-xl font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent active:scale-[0.98] cursor-pointer"
+            className="press h-14 rounded-sm border border-line bg-white font-display text-2xl font-bold text-ink shadow-warm-xs transition-colors hover:bg-yellow-soft active:scale-[0.98] cursor-pointer"
           >
             {k}
           </button>
@@ -30,7 +30,7 @@ export function Numpad({ onPress, onBackspace, decimal = false, className }: Num
       <button
         type="button"
         onClick={onBackspace}
-        className="flex h-14 items-center justify-center rounded-lg border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent active:scale-[0.98] cursor-pointer"
+        className="press flex h-14 items-center justify-center rounded-sm border border-line bg-white text-ink shadow-warm-xs transition-colors hover:bg-yellow-soft active:scale-[0.98] cursor-pointer"
       >
         <Delete className="h-5 w-5" />
       </button>

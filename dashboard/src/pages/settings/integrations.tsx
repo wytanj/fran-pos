@@ -238,7 +238,7 @@ export default function IntegrationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm text-muted-foreground space-y-1">
+          <div className="rounded-md border border-line bg-surface-sunken p-3 text-sm text-muted-foreground space-y-1">
             <p>
               Demo member when CRM is linked: <code className="text-xs">FRAN-0001</code> · phone{' '}
               <code className="text-xs">81234470</code> → F3.
@@ -398,7 +398,7 @@ export default function IntegrationsPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-start gap-3 rounded-lg border p-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-yellow-soft text-brown">
               <UsersRound className="h-5 w-5 text-muted-foreground" />
             </div>
             <div className="min-w-0">

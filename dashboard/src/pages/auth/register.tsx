@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { AuthBrand } from '@/components/brand-mark'
 
 export default function RegisterPage() {
   const { signUp, signInWithGoogle, user, loading } = useAuth()
@@ -47,7 +48,7 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center bg-cream p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Check Your Email</CardTitle>
@@ -67,8 +68,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
+      <div className="w-full max-w-md">
+        <AuthBrand subtitle="Register your business to get started" />
+      <Card className="w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Create Account</CardTitle>
           <CardDescription>Register your business to get started</CardDescription>
@@ -150,6 +153,7 @@ export default function RegisterPage() {
           </form>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

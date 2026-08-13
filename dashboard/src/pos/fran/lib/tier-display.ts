@@ -34,15 +34,15 @@ export function tierBadgeClass(tier: FranCounterTier | string): string {
   const n = normalizeFwbTierKey(tier)
   switch (n) {
     case 'F3':
-      return 'border-amber-300 bg-amber-50 text-amber-900'
+      return 'border-yellow bg-yellow text-brown'
     case 'F2':
-      return 'border-violet-300 bg-violet-50 text-violet-900'
+      return 'border-tan bg-peach-soft text-brown'
     case 'F1':
-      return 'border-blue-200 bg-blue-50 text-blue-900'
+      return 'border-line bg-surface-sunken text-ink'
     case 'Tourist':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-800'
+      return 'border-line-strong bg-white text-ink-soft'
     default:
-      return 'border-slate-300 bg-slate-50 text-slate-800'
+      return 'border-line bg-white text-ink'
   }
 }
 

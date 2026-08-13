@@ -22,7 +22,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-black/80" onClick={() => onOpenChange(false)} />
+      <div className="fixed inset-0 bg-brown/45" onClick={() => onOpenChange(false)} />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         {children}
       </div>
@@ -37,7 +37,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
       role="dialog"
       aria-modal="true"
       className={cn(
-        "relative z-50 w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg",
+        "relative z-50 w-full max-w-lg rounded-lg border border-line bg-card p-6 shadow-warm-md",
         className
       )}
       {...props}
@@ -61,7 +61,7 @@ function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 }
 
 function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />
+  return <h2 className={cn("font-display text-xl font-bold leading-none tracking-tight", className)} {...props} />
 }
 
 function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {

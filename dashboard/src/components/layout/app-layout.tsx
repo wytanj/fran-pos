@@ -5,10 +5,10 @@ import { SkumsImportProgressPanel, SkumsImportProvider } from '@/hooks/use-skums
 
 export function AppLayout() {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-cream">
       <Sidebar />
       <SkumsImportProvider>
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-cream">
           <div className="mx-auto max-w-6xl p-6">
             <Outlet />
           </div>

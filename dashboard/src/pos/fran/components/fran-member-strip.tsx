@@ -38,7 +38,7 @@ export function FranMemberStrip({
     <div className="shrink-0 border-b bg-card px-3 py-2">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-yellow text-brown">
             {member ? <Star className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
           </div>
           <div className="min-w-0">
@@ -53,28 +53,28 @@ export function FranMemberStrip({
                       : 'Fran member required'}
               </p>
               {member && <Badge variant="outline" className={tierBadgeClass(member.tier)}>{memberTierLabel}</Badge>}
-              {session?.mode === 'tourist' && <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-800">Tourist</Badge>}
+              {session?.mode === 'tourist' && <Badge variant="outline" className="border-line-strong bg-white text-ink-soft">Tourist</Badge>}
               {session?.mode === 'non_member' && <Badge variant="outline">No member</Badge>}
-              {appliedReward && <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">Reward applied</Badge>}
+              {appliedReward && <Badge variant="outline" className="border-transparent bg-success-soft text-success">Reward applied</Badge>}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {member && <span className="font-medium text-emerald-700">Can spend {member.pointsBalance.toLocaleString()} pts</span>}
+              {member && <span className="font-medium text-success">Can spend {member.pointsBalance.toLocaleString()} pts</span>}
               {previewLoading && (
-                <span className="flex items-center gap-1 text-sky-700">
+                <span className="flex items-center gap-1 text-brown">
                   <Loader2 className="h-3 w-3 animate-spin" /> Loading earn from Fran CRM
                 </span>
               )}
               {preview?.projectedPointsBalance != null && (
-                <span className="text-blue-700">Projected {preview.projectedPointsBalance.toLocaleString()} pts</span>
+                <span className="text-ink-soft">Projected {preview.projectedPointsBalance.toLocaleString()} pts</span>
               )}
               {loyaltySync?.status === 'queued' && (
-                <span className="flex items-center gap-1 font-medium text-amber-700">
+                <span className="flex items-center gap-1 font-medium text-warning">
                   <AlertCircle className="h-3 w-3" /> CRM offline - earn queued
                   {loyaltySync.pointsEarnQueued > 0 ? ` (${loyaltySync.pointsEarnQueued.toLocaleString()} pts)` : ''}
                 </span>
               )}
               {appliedReward && (
-                <span className="font-medium text-emerald-700">{formatCurrency(appliedReward.quote.amount, STORE.currency)} reward line pending commit</span>
+                <span className="font-medium text-success">{formatCurrency(appliedReward.quote.amount, STORE.currency)} reward line pending commit</span>
               )}
               {previewError && (
                 <span className="flex items-center gap-1 text-destructive">
@@ -83,17 +83,17 @@ export function FranMemberStrip({
               )}
             </div>
             {member && earnPoints != null && (
-              <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs text-sky-950">
-                <Coins className="h-3.5 w-3.5 shrink-0 text-sky-700" />
+              <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-line bg-yellow-soft px-2.5 py-1.5 text-xs text-brown">
+                <Coins className="h-3.5 w-3.5 shrink-0 text-brown" />
                 <span className="min-w-0 break-words font-medium">
                   Customer will earn {earnPoints.toLocaleString()} points on this order.
                 </span>
-                <span className="text-sky-700">Loaded from Fran CRM.</span>
+                <span className="text-ink-soft">Loaded from Fran CRM.</span>
               </div>
             )}
             {member && loyaltySync?.status === 'queued' && loyaltySync.pointsEarnQueued > 0 && (
-              <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+              <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs text-warning">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warning" />
                 <span className="min-w-0 break-words font-medium">
                   Customer earn will queue for {loyaltySync.pointsEarnQueued.toLocaleString()} points when payment completes.
                 </span>
@@ -101,11 +101,11 @@ export function FranMemberStrip({
             )}
             {activePerks.length > 0 && (
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="flex items-center gap-1 font-medium text-teal-700">
+                <span className="flex items-center gap-1 font-medium text-brown">
                   <Gift className="h-3.5 w-3.5" /> Active perks
                 </span>
                 {activePerks.slice(0, 3).map((perk) => (
-                  <Badge key={perk.id} variant="outline" className="border-teal-200 bg-teal-50 text-teal-800">
+                  <Badge key={perk.id} variant="outline" className="border-line bg-peach-soft text-brown">
                     {perk.title}
                   </Badge>
                 ))}

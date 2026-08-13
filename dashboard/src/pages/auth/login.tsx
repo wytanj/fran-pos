@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { getSafeRedirectPath } from '@/lib/auth-redirect'
+import { AuthBrand } from '@/components/brand-mark'
 
 export default function LoginPage() {
   const { signIn, signInWithGoogle, user, loading } = useAuth()
@@ -46,8 +47,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
+      <div className="w-full max-w-md">
+        <AuthBrand subtitle="HQ dashboard, catalog, and live register" />
+      <Card className="w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Sign In</CardTitle>
           <CardDescription>Enter your credentials to access your dashboard</CardDescription>
@@ -113,6 +116,7 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

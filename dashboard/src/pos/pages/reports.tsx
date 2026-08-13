@@ -247,7 +247,7 @@ function Integrations() {
             <div key={i} className="flex items-center justify-between p-3 text-sm">
               <div className="flex items-center gap-3">
                 {it.status === 'Ready' ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <CheckCircle2 className="h-4 w-4 text-success" />
                 ) : (
                   <AlertCircle className="h-4 w-4 text-amber-500" />
                 )}
@@ -288,7 +288,7 @@ function Kpi({ icon: Icon, label, value, delta }: { icon: typeof DollarSign; lab
         <Icon className="h-4 w-4" /> {label}
       </div>
       <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
-      <p className="text-xs text-green-600">{delta}</p>
+      <p className="text-xs text-success">{delta}</p>
     </div>
   )
 }
@@ -305,7 +305,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 function Movement({ label, value, tone }: { label: string; value: string; tone?: 'green' | 'red' }) {
   return (
     <div className="rounded-lg bg-secondary p-3">
-      <p className={cn('text-xl font-bold tabular-nums', tone === 'green' && 'text-green-600', tone === 'red' && 'text-destructive')}>
+      <p className={cn('font-display text-xl font-bold tabular-nums', tone === 'green' && 'text-success', tone === 'red' && 'text-destructive')}>
         {value}
       </p>
       <p className="text-xs text-muted-foreground">{label}</p>

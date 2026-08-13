@@ -457,7 +457,7 @@ export function SkumsImportProgressPanel() {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             {job.status === 'completed' ? (
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
             ) : (
               <RefreshCw className={cn('h-4 w-4 text-primary', job.status === 'syncing' && 'animate-spin')} />
             )}

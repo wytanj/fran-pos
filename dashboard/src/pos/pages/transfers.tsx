@@ -286,7 +286,7 @@ export default function TransfersPage() {
                     </tbody>
                   </table>
                   {selected.status === 'Received' ? (
-                    <p className="mt-4 flex items-center gap-2 text-sm text-green-600">
+                    <p className="mt-4 flex items-center gap-2 text-sm text-success">
                       <CheckCircle2 className="h-4 w-4" /> Already received
                     </p>
                   ) : (

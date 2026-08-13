@@ -190,10 +190,10 @@ export default function DashboardPage() {
             type="button"
             onClick={() => setActiveTab(tab.id)}
             aria-pressed={activeTab === tab.id}
-            className={`flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${
+            className={`press flex h-10 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-colors ${
               activeTab === tab.id
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground'
+                ? 'border-yellow bg-yellow font-semibold text-brown'
+                : 'border-line bg-white text-muted-foreground hover:bg-surface-sunken hover:text-ink'
             }`}
           >
             <tab.icon className="h-4 w-4" />
@@ -467,7 +467,7 @@ function MetricCard({ icon: Icon, label, value }: { icon: typeof DollarSign; lab
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="font-display text-[28px] font-bold tracking-tight">{value}</div>
       </CardContent>
     </Card>
   )
@@ -488,11 +488,11 @@ function SalesChart({
       <CardContent>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={stats.chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#EDE4D4" />
             <XAxis dataKey="day" />
             <YAxis />
             <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-            <Bar dataKey="revenue" fill="#18181b" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="revenue" fill="#3A2415" radius={[8, 8, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
@@ -554,8 +554,8 @@ function ActionPanel({
   action: string
 }) {
   return (
-    <div className="rounded-md border bg-background p-4">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+    <div className="rounded-md border border-line bg-white p-4 shadow-warm-xs">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-sm bg-yellow-soft text-brown">
         <Icon className="h-5 w-5" />
       </div>
       <h2 className="font-semibold">{title}</h2>
@@ -580,7 +580,7 @@ function StatusRow({
   tone: 'success' | 'default'
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-sm border border-line px-3 py-2">
       <span className="text-sm text-muted-foreground">{label}</span>
       <Badge variant={tone === 'success' ? 'success' : 'secondary'}>{value}</Badge>
     </div>

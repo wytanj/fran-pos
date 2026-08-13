@@ -8,6 +8,7 @@ import {
   previewCompanyInvite,
   type CompanyInvitePreview,
 } from '@/hooks/use-company-invites'
+import { AuthBrand } from '@/components/brand-mark'
 
 export default function CompanyInvitePage() {
   const { token = '' } = useParams()
@@ -66,7 +67,7 @@ export default function CompanyInvitePage() {
 
   if (loading || loadingPreview) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center bg-cream p-4">
         <p className="text-sm text-muted-foreground">Loading invite…</p>
       </div>
     )
@@ -76,8 +77,10 @@ export default function CompanyInvitePage() {
   const companyName = preview?.company_name || 'Fran POS company'
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
+      <div className="w-full max-w-md">
+        <AuthBrand subtitle="Accept your company invitation" />
+      <Card className="w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Join {companyName}</CardTitle>
           <CardDescription>
@@ -119,6 +122,7 @@ export default function CompanyInvitePage() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

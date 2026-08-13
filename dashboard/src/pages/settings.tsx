@@ -15,7 +15,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
-      <nav className="flex border-b">
+      <nav className="flex flex-wrap gap-1.5 rounded-sm bg-surface-sunken p-1">
         {tabs.map((tab) => (
           <NavLink
             key={tab.to}
@@ -23,10 +23,10 @@ export default function SettingsPage() {
             end={tab.end}
             className={({ isActive }) =>
               cn(
-                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                'press rounded-full px-4 py-2 text-sm font-medium transition-colors',
                 isActive
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'bg-yellow font-semibold text-brown shadow-warm-xs'
+                  : 'text-muted-foreground hover:bg-white hover:text-ink'
               )
             }
           >

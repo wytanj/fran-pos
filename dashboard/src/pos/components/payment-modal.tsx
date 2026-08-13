@@ -195,7 +195,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
           {/* Left: balance + applied payments */}
           <div className="rounded-l-lg bg-primary p-6 text-primary-foreground">
             <p className="text-sm opacity-80">Balance Due</p>
-            <p className="text-4xl font-bold tabular-nums">
+            <p className="font-display text-4xl font-bold tabular-nums">
               {formatCurrency(Math.max(remaining, 0), STORE.currency)}
             </p>
             <div className="mt-1 text-sm opacity-80">
@@ -254,7 +254,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
           <div className="p-6">
             {fullyPaid ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center rounded-lg border bg-muted/30 p-6 text-center">
-                <CheckCircle2 className="h-8 w-8 text-green-600" />
+                <CheckCircle2 className="h-8 w-8 text-success" />
                 <p className="mt-3 text-sm font-medium">Payment complete</p>
                 <p className="mt-1 text-xs text-muted-foreground">Review the tender summary, then print the receipt.</p>
               </div>
@@ -353,7 +353,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                        <CheckCircle2 className="h-8 w-8 text-success" />
                         <p className="mt-3 text-sm font-medium">
                           {mode === 'square_pos' ? 'Square POS reference captured' : `${cardType} approved`}
                         </p>

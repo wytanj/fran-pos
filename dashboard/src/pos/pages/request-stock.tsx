@@ -176,7 +176,7 @@ export default function RequestStockPage() {
             Store: <span className="font-medium text-foreground">{store.code}</span> · {store.name}
           </p>
           {waveHint && (
-            <p className="mt-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-900 dark:text-sky-100">
+            <p className="mt-2 rounded-sm border border-line bg-yellow-soft px-3 py-2 text-sm text-brown">
               {waveHint}
             </p>
           )}
@@ -184,7 +184,7 @@ export default function RequestStockPage() {
       </div>
 
       {message && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+        <div className="rounded-sm border border-transparent bg-success-soft px-3 py-2 text-sm text-success">
           {message}
         </div>
       )}
