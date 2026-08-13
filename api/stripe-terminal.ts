@@ -48,7 +48,15 @@ function mapPaymentIntent(pi: Stripe.PaymentIntent) {
   }
 }
 
-function mapReader(reader: Stripe.Terminal.Reader) {
+function assertReader(reader: Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader): Stripe.Terminal.Reader {
+  if ('deleted' in reader && reader.deleted) {
+    throw new Error('That Stripe reader was deleted. Register the S700 again.')
+  }
+  return reader
+}
+
+function mapReader(reader: Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader) {
+  reader = assertReader(reader)
   const action = reader.action
   const processPi = action && 'process_payment_intent' in action ? action.process_payment_intent : null
   return {
