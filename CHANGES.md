@@ -1,5 +1,36 @@
 # Changes
 
+## 2026-08-18 Update
+
+### Summary
+
+Tightened the phone / portrait register so member status and sale type sit in one icon row, made scan vs add vs catalog obvious, and fixed Android debug camera (permission + a dedicated live-reload port).
+
+### What Changed Today
+
+- Portrait register collapses “Fran member required”, Find member, and the five sale-type chips into one icon toolbar. Wide / landscape still uses the full labels.
+- Product entry is one row: type SKU in the field, camera icon in the field to scan, yellow + to add the typed code, bag to browse catalog.
+- Android asks for Camera at launch so Tap / barcode `getUserMedia` can run after the cashier allows it.
+- Debug live-reload uses `CAP_LIVE_URL` (default `http://127.0.0.1:5180`) so it does not collide with sibling Vite apps on 5173. `npm run android:live` bakes that URL; store APKs still omit it and serve bundled HTTPS assets.
+- Local Vite `/api` proxies to production so a phone on the live server can reach Stripe Terminal routes.
+
+### Why
+
+The Find N3 vertical register spent most of the screen on member copy and sale-type tags, and Camera / Add / Catalog competed. Debug installs also failed to open the camera or the page when another app held 5173 or Android resolved `localhost` over IPv6.
+
+### Verification
+
+- Portrait and desktop register screenshots via headless Chrome after demo PIN login.
+- `tests/live-demo-mode.test.mjs` and `tests/stripe-terminal.test.mjs` passed.
+- Live debug APK installed on the Find N3 with `adb reverse tcp:5180`.
+
+### Deployment
+
+- Production app: `https://fran-pos.vercel.app`
+- Store / Galaxy Tab APKs: run `npm run cap:sync` without `CAP_LIVE_URL` before assemble so they ship bundled files, not the PC live URL.
+
+---
+
 ## 2026-08-14 Update
 
 ### Summary

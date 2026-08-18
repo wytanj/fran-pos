@@ -1,10 +1,37 @@
-import { AlertCircle, Coins, Gift, Loader2, Search, ShieldCheck, Star, UserPlus, X } from 'lucide-react'
+import {
+  AlertCircle,
+  Coins,
+  Gift,
+  Handshake,
+  IdCard,
+  Loader2,
+  Lock,
+  Megaphone,
+  PackageX,
+  Plane,
+  Search,
+  ShieldCheck,
+  ShoppingBag,
+  Star,
+  Store,
+  UserPlus,
+  UserX,
+  X,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { formatCurrency } from '@/lib/utils'
-import { STORE } from '@/pos/data/mock'
+import { formatCurrency, cn } from '@/lib/utils'
+import { SALES_TYPES, STORE, type SalesType } from '@/pos/data/mock'
 import { tierBadgeClass, tierLabel } from '../lib/tier-display'
 import type { FranAppliedReward, FranBasketPreview, FranCounterSession, FranLoyaltySyncState } from '../types'
+
+const SALES_TYPE_ICONS: Record<SalesType, typeof ShoppingBag> = {
+  normal: Store,
+  sponsorship: Handshake,
+  staff: IdCard,
+  'vm-writeoff': PackageX,
+  influencer: Megaphone,
+}
 
 interface FranMemberStripProps {
   session: FranCounterSession | null
@@ -13,9 +40,58 @@ interface FranMemberStripProps {
   previewLoading: boolean
   previewError: string | null
   loyaltySync: FranLoyaltySyncState | null
+  salesType: SalesType
+  onChooseSalesType: (next: SalesType) => void
   onFindMember: () => void
   onOpenDetails: () => void
   onClearSession: () => void
+}
+
+function sessionStatusLabel(session: FranCounterSession | null) {
+  const member = session?.member ?? null
+  if (member) return `${member.name} - ${member.memberNo}`
+  if (session?.mode === 'tourist') return 'Tourist exception selected'
+  if (session?.mode === 'non_member') return 'Non-member sale selected'
+  return 'Fran member required'
+}
+
+function CompactSalesTypeIcons({
+  salesType,
+  onChooseSalesType,
+}: {
+  salesType: SalesType
+  onChooseSalesType: (next: SalesType) => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Sale type">
+      {SALES_TYPES.map((s) => {
+        const Icon = SALES_TYPE_ICONS[s.value]
+        const selected = salesType === s.value
+        return (
+          <button
+            key={s.value}
+            type="button"
+            title={`${s.label}${s.requiresManager ? ' (manager)' : ''} — ${s.hint}`}
+            aria-label={s.label}
+            aria-pressed={selected}
+            onClick={() => onChooseSalesType(s.value)}
+            className={cn(
+              'relative flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
+              selected
+                ? 'border-brown bg-yellow text-brown'
+                : 'border-line bg-white text-ink-soft hover:bg-surface-sunken',
+              s.requiresManager && !selected && 'text-muted-foreground',
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {s.requiresManager && (
+              <Lock className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 text-ink-soft" aria-hidden />
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export function FranMemberStrip({
@@ -25,6 +101,8 @@ export function FranMemberStrip({
   previewLoading,
   previewError,
   loyaltySync,
+  salesType,
+  onChooseSalesType,
   onFindMember,
   onOpenDetails,
   onClearSession,
@@ -33,9 +111,71 @@ export function FranMemberStrip({
   const activePerks = session?.activePerks ?? []
   const earnPoints = preview?.earnPoints ?? null
   const memberTierLabel = member ? tierLabel(member.tier, member.tierLabel) : null
+  const statusLabel = sessionStatusLabel(session)
+  const StatusIcon = member
+    ? Star
+    : session?.mode === 'tourist'
+      ? Plane
+      : session?.mode === 'non_member'
+        ? UserX
+        : ShieldCheck
+  const compactName = member
+    ? member.name
+    : session?.mode === 'tourist'
+      ? 'Tourist'
+      : session?.mode === 'non_member'
+        ? 'Walk-in'
+        : 'No member'
 
   return (
-    <div className="shrink-0 border-b bg-card px-3 py-2">
+    <div className="shrink-0 border-b bg-card">
+      <div className="flex items-center gap-1 px-2 py-1.5 lg:hidden">
+        <button
+          type="button"
+          onClick={session ? onOpenDetails : onFindMember}
+          title={statusLabel}
+          aria-label={session ? `${statusLabel}. Open member details` : 'Fran member required. Find member'}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full pr-1 hover:bg-surface-sunken"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yellow text-brown">
+            <StatusIcon className="h-4 w-4" />
+          </div>
+          <span className="hidden max-w-[7rem] truncate text-sm font-semibold sm:inline">{compactName}</span>
+          {(previewError || loyaltySync?.status === 'queued') && (
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+          )}
+        </button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          title={session ? 'Change member' : 'Find member'}
+          aria-label={session ? 'Change member' : 'Find member'}
+          onClick={onFindMember}
+        >
+          {session ? <Search className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+        </Button>
+        {session && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            title="Clear member"
+            aria-label="Clear member"
+            onClick={onClearSession}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <div className="hidden h-6 w-px bg-line sm:block" aria-hidden />
+          <CompactSalesTypeIcons salesType={salesType} onChooseSalesType={onChooseSalesType} />
+        </div>
+      </div>
+
+      <div className="hidden px-3 py-2 lg:block">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-yellow text-brown">
@@ -130,6 +270,7 @@ export function FranMemberStrip({
             </Button>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

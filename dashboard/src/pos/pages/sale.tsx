@@ -172,7 +172,42 @@ function isExpectedZxingScanMiss(error: unknown) {
 }
 
 function cameraScanErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Camera scanner failed. Continue with the product entry field.'
+  const raw = error instanceof Error ? error.message : ''
+  const lower = raw.toLowerCase()
+  if (lower.includes('notallowed') || lower.includes('permission') || lower.includes('denied') || lower.includes('securityerror')) {
+    return 'Camera is blocked. Allow Camera for Fran POS in Android settings, then tap the camera icon again.'
+  }
+  if (lower.includes('notfound') || lower.includes('requested device not found')) {
+    return 'No camera was found on this device. Type the SKU or open Catalog instead.'
+  }
+  if (lower.includes('notreadable') || lower.includes('trackstart') || lower.includes('abort')) {
+    return 'Another app is using the camera. Close it and tap the camera icon again.'
+  }
+  return raw || 'Camera scanner failed. Continue with the product entry field.'
+}
+
+async function requestCameraStream() {
+  const attempts: MediaStreamConstraints[] = [
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    },
+    { audio: false, video: { facingMode: { ideal: 'environment' } } },
+    { audio: false, video: true },
+  ]
+  let lastError: unknown = null
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints)
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Camera permission was blocked or no camera was found.')
 }
 
 /** Pause re-accept while the cart processes a hit, then keep the stream open. */
@@ -1087,7 +1122,11 @@ export default function SalePage() {
       if (typeof window === 'undefined' || typeof navigator === 'undefined') return
       if (!window.isSecureContext) {
         setCameraStatus('error')
-        setCameraMessage('Camera requires HTTPS or localhost. Open the app from a secure URL and try again.')
+        setCameraMessage(
+          window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'Camera requires HTTPS or localhost. Restart Fran POS with USB debugging still on.'
+            : 'Camera requires HTTPS or localhost. Keep USB debugging on and reopen Fran POS so the scanner can use 127.0.0.1.',
+        )
         return
       }
 
@@ -1112,14 +1151,7 @@ export default function SalePage() {
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        })
+        const stream = await requestCameraStream()
 
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop())
@@ -1830,46 +1862,46 @@ export default function SalePage() {
               enterKeyHint="done"
               autoComplete="off"
               autoFocus
-              className="h-11 pl-9 text-base sm:text-sm"
+              className="h-11 pl-9 pr-12 text-base sm:text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            <button
+              type="button"
+              className={cn(
+                'absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border transition-colors',
+                cameraOpen
+                  ? 'border-brown bg-yellow text-brown'
+                  : 'border-line bg-white text-brown hover:bg-surface-sunken',
+              )}
+              aria-label={cameraOpen ? 'Close camera scanner' : 'Open camera scanner'}
+              aria-pressed={cameraOpen}
+              title={cameraOpen ? 'Close camera scanner' : 'Scan with camera'}
+              onClick={() => setCameraOpen((open) => !open)}
+            >
+              {cameraOpen ? <X className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+            </button>
           </div>
-          <Button type="submit" className="h-11 shrink-0 gap-2" disabled={scanResolving}>
-            {scanResolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+          <Button type="submit" className="h-11 shrink-0 gap-2 px-3 sm:px-4" disabled={scanResolving} title="Add typed SKU or barcode" aria-label="Add product">
+            {scanResolving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span className="hidden sm:inline">Add product</span>
-            <span className="sm:hidden">Add</span>
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2 md:hidden" title="Browse catalog" aria-label="Browse catalog" onClick={() => setMobileCatalogOpen(true)}>
+            <ShoppingBag className="h-4 w-4" />
+            <span className="sr-only">Catalog</span>
           </Button>
         </div>
-        <div className="flex shrink-0 items-center justify-between gap-2 md:justify-end">
+        <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
           <Badge variant="secondary" className="shrink-0">
             {catalogSource === 'skums' ? 'SKUMS catalog' : catalogSource === 'live' ? 'Live catalog' : 'Demo catalog'}
           </Badge>
-          <Button
-            type="button"
-            variant={cameraOpen ? 'secondary' : 'outline'}
-            size="sm"
-            className="gap-2"
-            aria-label={cameraOpen ? 'Close camera scanner' : 'Open camera scanner'}
-            aria-pressed={cameraOpen}
-            onClick={() => setCameraOpen((open) => !open)}
-          >
-            <Camera className="h-4 w-4" />
-            {cameraOpen ? 'Close camera' : 'Camera'}
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="gap-2 md:hidden" onClick={() => setMobileCatalogOpen(true)}>
-            <ShoppingBag className="h-4 w-4" />
-            Catalog
-          </Button>
-          <div className="hidden md:block">
-            {renderCatalogViewToggle()}
-          </div>
+          {renderCatalogViewToggle()}
         </div>
       </form>
       {cameraOpen && (
         <div className="shrink-0 border-b bg-card px-3 pb-3">
-          <div className="grid gap-3 rounded-lg border bg-background p-3 md:grid-cols-[minmax(260px,420px)_minmax(0,1fr)]">
-            <div className="relative aspect-video overflow-hidden rounded-md bg-black">
+          <div className="grid gap-3 rounded-lg border bg-background p-2 md:grid-cols-[minmax(260px,420px)_minmax(0,1fr)] md:p-3">
+            <div className="relative h-36 overflow-hidden rounded-md bg-black md:aspect-video md:h-auto">
               <video
                 ref={cameraVideoRef}
                 className="h-full w-full object-cover"
@@ -1877,9 +1909,43 @@ export default function SalePage() {
                 playsInline
                 autoPlay
               />
-              <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-24 -translate-y-1/2 rounded-lg border-2 border-white/80 shadow-[0_0_0_999px_rgba(0,0,0,0.18)]" />
+              <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-16 -translate-y-1/2 rounded-lg border-2 border-white/80 shadow-[0_0_0_999px_rgba(0,0,0,0.18)] md:h-24" />
+              <div className="absolute inset-x-2 bottom-2 flex items-end justify-between gap-2 md:hidden">
+                <div className="min-w-0">
+                  <Badge
+                    variant={
+                      cameraStatus === 'scanning' || cameraStatus === 'detected'
+                        ? 'success'
+                        : cameraStatus === 'error' || cameraStatus === 'unsupported'
+                          ? 'warning'
+                          : 'secondary'
+                    }
+                  >
+                    {cameraStatus === 'scanning'
+                      ? 'Point at a barcode'
+                      : cameraStatus === 'detected'
+                        ? 'Added'
+                        : cameraStatus === 'error' || cameraStatus === 'unsupported'
+                          ? 'Camera blocked'
+                          : 'Starting'}
+                  </Badge>
+                  {(cameraStatus === 'error' || cameraStatus === 'unsupported') && (
+                    <p className="mt-1 max-h-12 overflow-hidden text-[11px] leading-snug text-white">
+                      {cameraMessage}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/60 text-white"
+                  aria-label="Close camera scanner"
+                  onClick={() => setCameraOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex min-w-0 flex-col justify-between gap-3">
+            <div className="hidden min-w-0 flex-col justify-between gap-3 md:flex">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge
@@ -1941,6 +2007,8 @@ export default function SalePage() {
         previewLoading={franPreviewLoading}
         previewError={franPreviewError}
         loyaltySync={franLoyaltySync}
+        salesType={salesType}
+        onChooseSalesType={chooseSalesType}
         onFindMember={openMemberLookup}
         onOpenDetails={() => setFranMemberDialogOpen(true)}
         onClearSession={clearFranSession}
@@ -1998,8 +2066,8 @@ export default function SalePage() {
           </div>
         )}
 
-        {/* Sales type */}
-        <div className="border-b px-3 py-2">
+        {/* Sales type — labeled chips on wide / landscape. Portrait uses icons in FranMemberStrip. */}
+        <div className="hidden border-b px-3 py-2 lg:block">
           <div className="flex flex-wrap gap-1.5">
             {SALES_TYPES.map((s) => (
               <button
