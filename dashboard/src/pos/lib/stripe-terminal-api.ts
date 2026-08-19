@@ -14,6 +14,7 @@ export type StripeTerminalAction =
   | 'ensure_simulated_reader'
   | 'list_locations'
   | 'create_location'
+  | 'create_qr_payment_intent'
   | 'client_log'
   | 'health'
 
@@ -190,6 +191,58 @@ export function registerStripeReader(input: { registration_code: string; locatio
 // is diagnosable from the server when the phone offers no console or logcat.
 export function logTapToPayTrace(note: string) {
   void callStripeTerminal('client_log', { note }).catch(() => {})
+}
+
+export type StripeQrMethod = 'paynow' | 'wechat_pay'
+
+export interface StripeQrCode {
+  data: string
+  image_url_png: string
+  image_url_svg: string
+  hosted_instructions_url: string
+}
+
+export function createStripeQrPaymentIntent(input: {
+  method: StripeQrMethod
+  amount: number
+  currency?: string
+  description?: string
+  metadata?: Record<string, string>
+}) {
+  return callStripeTerminal<{ payment_intent: StripePaymentIntentResult; qr: StripeQrCode | null }>('create_qr_payment_intent', {
+    method: input.method,
+    amount: amountToStripeCents(input.amount),
+    currency: stripeCurrencyCode(input.currency),
+    description: input.description || 'Fran POS QR sale',
+    metadata: input.metadata || {},
+  })
+}
+
+// Polls the PaymentIntent until the customer's scan settles it. `shouldStop`
+// lets the caller abort (cancel button, expired QR) without racing the loop.
+export async function waitForQrPayment(id: string, options?: {
+  timeoutMs?: number
+  intervalMs?: number
+  shouldStop?: () => boolean
+}) {
+  const timeoutMs = options?.timeoutMs ?? 330_000
+  const intervalMs = options?.intervalMs ?? 2000
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    if (options?.shouldStop?.()) throw new Error('QR payment canceled')
+    const { payment_intent } = await retrieveStripePaymentIntent(id)
+    if (payment_intent.status === 'succeeded') return payment_intent
+    if (payment_intent.status === 'canceled') {
+      throw new Error('This QR payment was canceled. Generate a new QR to try again.')
+    }
+    if (payment_intent.status === 'requires_payment_method') {
+      throw new Error('The payment failed or was declined in the customer’s app. Generate a new QR to try again.')
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+
+  throw new Error('No payment received for this QR. Generate a new QR if the customer still wants to pay.')
 }
 
 export function stripeTerminalHealth() {

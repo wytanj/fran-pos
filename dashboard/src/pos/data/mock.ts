@@ -169,6 +169,7 @@ export const PAYMENT_MODES = [
   { id: 'card', label: 'Credit / Debit', icon: 'CreditCard' },
   { id: 'square_pos', label: 'Square POS', icon: 'CreditCard' },
   { id: 'paynow', label: 'PayNow QR', icon: 'QrCode' },
+  { id: 'wechat', label: 'WeChat Pay', icon: 'QrCode' },
   { id: 'store-credit', label: 'Store Credit', icon: 'Wallet' },
   { id: 'gift-card', label: 'Gift Card', icon: 'Gift' },
   { id: 'misc', label: 'Misc / Exchange', icon: 'Shuffle' },

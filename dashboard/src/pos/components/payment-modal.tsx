@@ -24,7 +24,16 @@ import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
 import { cancelStripeCollection, collectStripeInPerson } from '@/pos/lib/stripe-collect'
 import { resolveTapToPayConfig, tapToPaySupported } from '@/pos/lib/stripe-tap-to-pay'
-import { logTapToPayTrace } from '@/pos/lib/stripe-terminal-api'
+import {
+  cancelStripePaymentIntent,
+  createStripeQrPaymentIntent,
+  logTapToPayTrace,
+  waitForQrPayment,
+  type StripePaymentIntentResult,
+  type StripeQrMethod,
+} from '@/pos/lib/stripe-terminal-api'
+import { stripeCentsToAmount } from '@/pos/lib/stripe-money'
+import { QrPaymentOverlay, type QrPaymentPhase } from '@/pos/components/qr-payment-overlay'
 
 const ICONS: Record<string, typeof Banknote> = {
   cash: Banknote,
@@ -33,6 +42,7 @@ const ICONS: Record<string, typeof Banknote> = {
   card: CreditCard,
   square_pos: CreditCard,
   paynow: QrCode,
+  wechat: QrCode,
   'store-credit': Wallet,
   'gift-card': Gift,
   misc: Shuffle,
@@ -61,6 +71,19 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const stripeBusy = useRef(false)
   const chargeGen = useRef(0)
   const terminalMessageRef = useRef('')
+
+  const QR_VALID_MS = 5 * 60_000
+  const [qrSession, setQrSession] = useState<{
+    method: StripeQrMethod
+    modeId: 'paynow' | 'wechat'
+    amount: number
+    pi: StripePaymentIntentResult | null
+    qrPng: string
+    startedAt: number
+    expiresAt: number
+    phase: QrPaymentPhase
+    error?: string
+  } | null>(null)
 
   const tapReady = tapToPaySupported()
   const visibleModes = useMemo(() => {
@@ -107,6 +130,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     setTerminalMessage('')
     setTerminalError('')
     setWaitElapsed(0)
+    setQrSession(null)
     stripeBusy.current = false
   }
 
@@ -201,6 +225,101 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   ) => {
     addPayment({ mode: mode!, label, amount: value, detail, ...metadata })
     reset()
+  }
+
+  const runQrCharge = async (modeId: 'paynow' | 'wechat') => {
+    if (stripeBusy.current) return
+    stripeBusy.current = true
+    const gen = ++chargeGen.current
+    const method: StripeQrMethod = modeId === 'wechat' ? 'wechat_pay' : 'paynow'
+    const methodLabel = modeId === 'wechat' ? 'WeChat Pay' : 'PayNow'
+    const chargeAmount = Math.min(amountNum || remaining, Math.max(remaining, 0))
+    setTerminalError('')
+    setQrSession({
+      method,
+      modeId,
+      amount: chargeAmount,
+      pi: null,
+      qrPng: '',
+      startedAt: Date.now(),
+      expiresAt: Date.now() + QR_VALID_MS,
+      phase: 'creating',
+    })
+    try {
+      logTapToPayTrace(`qr ${method} create for ${chargeAmount}`)
+      const created = await createStripeQrPaymentIntent({
+        method,
+        amount: chargeAmount,
+        currency: STORE.currency,
+        description: `Fran POS ${STORE.code} ${methodLabel}`,
+        metadata: { store_code: STORE.code, register: '01' },
+      })
+      if (gen !== chargeGen.current) {
+        if (created?.payment_intent?.id) void cancelStripePaymentIntent(created.payment_intent.id).catch(() => {})
+        return
+      }
+      const qrPng = created?.qr?.image_url_png || created?.qr?.image_url_svg || ''
+      if (!created?.payment_intent?.id || !qrPng) {
+        throw new Error(`Stripe did not return a ${methodLabel} QR. Check that ${methodLabel} is activated under Payment methods in the Stripe Dashboard.`)
+      }
+      setQrSession((s) => s && {
+        ...s,
+        pi: created.payment_intent,
+        qrPng,
+        startedAt: Date.now(),
+        expiresAt: Date.now() + QR_VALID_MS,
+        phase: 'waiting',
+      })
+      const finalIntent = await waitForQrPayment(created.payment_intent.id, {
+        shouldStop: () => gen !== chargeGen.current,
+      })
+      if (gen !== chargeGen.current) return
+      logTapToPayTrace(`qr ${method} paid ${finalIntent.id}`)
+      setQrSession((s) => s && { ...s, phase: 'approved' })
+      scheduleTerminalStep(() => {
+        commit(methodLabel, stripeCentsToAmount(finalIntent.amount) || chargeAmount, finalIntent.id, {
+          provider: 'stripe',
+          providerRef: finalIntent.id,
+          status: 'captured',
+          providerMetadata: {
+            adapter: modeId,
+            payment_intent_id: finalIntent.id,
+            charge_id: finalIntent.latest_charge || null,
+          },
+        })
+      }, 1600)
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim() ? error.message : `${methodLabel} payment failed`
+      logTapToPayTrace(`qr ${method} error${gen !== chargeGen.current ? ' (late, discarded)' : ''}: ${message}`)
+      if (gen !== chargeGen.current) return
+      stripeBusy.current = false
+      setQrSession((s) => s && { ...s, phase: 'error', error: message })
+      onPaymentFailed?.(`${modeId} payment_failed: ${message}`)
+    }
+  }
+
+  // Expired: stop polling and void the intent, but keep the takeover up so the
+  // cashier can hand a fresh QR to the customer in one tap.
+  const expireQr = () => {
+    const current = qrSession
+    if (!current || current.phase !== 'waiting') return
+    chargeGen.current += 1
+    stripeBusy.current = false
+    if (current.pi?.id) void cancelStripePaymentIntent(current.pi.id).catch(() => {})
+    logTapToPayTrace(`qr ${current.method} expired ${current.pi?.id || ''}`)
+    setQrSession({ ...current, phase: 'expired' })
+  }
+
+  const cancelQr = () => {
+    const current = qrSession
+    chargeGen.current += 1
+    stripeBusy.current = false
+    if (current?.pi?.id && current.phase === 'waiting') {
+      void cancelStripePaymentIntent(current.pi.id).catch(() => {})
+      logTapToPayTrace(`qr ${current.method} canceled by cashier ${current.pi.id}`)
+    }
+    setQrSession(null)
   }
 
   const handleConfirm = async () => {
@@ -313,8 +432,8 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
       commit(`Gift Card ${customer?.giftCardNo ?? ''}`.trim(), Math.min(amountNum || max, max))
       return
     }
-    if (mode === 'paynow') {
-      commit('PayNow QR', Math.min(amountNum || remaining, remaining))
+    if (mode === 'paynow' || mode === 'wechat') {
+      void runQrCharge(mode)
       return
     }
     // misc / exchange tender
@@ -334,6 +453,22 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const change = totals.paid - totals.total
 
   return (
+    <>
+      {qrSession && (
+        <QrPaymentOverlay
+          method={qrSession.method}
+          amount={qrSession.amount}
+          currency={STORE.currency}
+          qrPng={qrSession.qrPng}
+          phase={qrSession.phase}
+          error={qrSession.error}
+          startedAt={qrSession.startedAt}
+          expiresAt={qrSession.expiresAt}
+          onExpired={expireQr}
+          onNewQr={() => void runQrCharge(qrSession.modeId)}
+          onCancel={cancelQr}
+        />
+      )}
     <Dialog open={open} onOpenChange={(o) => !o && closeAndReset()}>
       <DialogContent className="max-w-2xl p-0" onClose={closeAndReset}>
         <div className="grid grid-cols-1 md:grid-cols-2">
@@ -469,7 +604,12 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                 )}
                 {mode === 'paynow' && (
                   <p className="mb-2 text-xs text-muted-foreground">
-                    Generate a PayNow QR for {formatCurrency(tenderLimit, STORE.currency)} or enter a lower split amount.
+                    Shows a full-screen PayNow QR for the customer to scan with their banking app.
+                  </p>
+                )}
+                {mode === 'wechat' && (
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Shows a full-screen QR for the customer to scan inside WeChat.
                   </p>
                 )}
                 {mode === 'card' && (
@@ -580,7 +720,8 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                         (mode === 'store-credit' && storeCreditAvail <= 0) ||
                         (mode === 'gift-card' && giftAvail <= 0) ||
                         amountTooHigh ||
-                        (mode === 'cash' ? amountNum <= 0 : amountNum < 0)
+                        (mode === 'cash' ? amountNum <= 0 : amountNum < 0) ||
+                        ((mode === 'paynow' || mode === 'wechat') && (amountNum || remaining) < 0.5)
                       }
                     >
                       {mode === 'card'
@@ -591,7 +732,11 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                             ? 'Charge on S700'
                             : mode === 'stripe_tap'
                               ? 'Charge with Tap to Pay'
-                              : 'Add tender'}{' '}
+                              : mode === 'paynow'
+                                ? 'Show PayNow QR'
+                                : mode === 'wechat'
+                                  ? 'Show WeChat Pay QR'
+                                  : 'Add tender'}{' '}
                       {amountNum > 0 && `· ${formatCurrency(amountNum, STORE.currency)}`}
                     </Button>
                     {(mode === 'card' || mode === 'square_pos' || mode === 'stripe_s700' || mode === 'stripe_tap') && (
@@ -607,5 +752,6 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
         </div>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

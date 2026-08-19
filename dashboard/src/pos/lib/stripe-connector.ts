@@ -74,7 +74,7 @@ export function visiblePaymentModes(input: {
   s700Ready: boolean
   tapReady: boolean
 }) {
-  const modes = ['cash', 'stripe_s700', 'stripe_tap', 'card', 'square_pos', 'paynow', 'store-credit', 'gift-card', 'misc'] as const
+  const modes = ['cash', 'stripe_s700', 'stripe_tap', 'card', 'square_pos', 'paynow', 'wechat', 'store-credit', 'gift-card', 'misc'] as const
   return modes.filter((id) => {
     if (id === 'stripe_s700') return input.stripeEnabled && input.s700Ready
     if (id === 'stripe_tap') return input.tapReady

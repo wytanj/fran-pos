@@ -156,6 +156,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return json(res, 200, { payment_intent: mapPaymentIntent(pi) })
     }
 
+    if (action === 'create_qr_payment_intent') {
+      const method = String(body.method || '')
+      if (method !== 'paynow' && method !== 'wechat_pay') {
+        throw new Error('QR method must be paynow or wechat_pay')
+      }
+      const amount = Number(body.amount)
+      if (!Number.isInteger(amount) || amount < 50) {
+        throw new Error('Amount must be at least 50 cents for a QR payment')
+      }
+      const currency = String(body.currency || 'sgd').toLowerCase()
+      const pi = await stripe.paymentIntents.create({
+        amount,
+        currency,
+        payment_method_types: [method],
+        payment_method_data: { type: method },
+        ...(method === 'wechat_pay' ? { payment_method_options: { wechat_pay: { client: 'web' } } } : {}),
+        confirm: true,
+        description: String(body.description || 'Fran POS QR sale'),
+        metadata: {
+          source: 'fran-pos',
+          ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
+        },
+      } as Stripe.PaymentIntentCreateParams)
+      const nextAction = pi.next_action as unknown as {
+        paynow_display_qr_code?: { data?: string; image_url_png?: string; image_url_svg?: string; hosted_instructions_url?: string }
+        wechat_pay_display_qr_code?: { data?: string; image_url_png?: string; image_url_svg?: string; hosted_instructions_url?: string }
+      } | null
+      const qr = nextAction?.paynow_display_qr_code || nextAction?.wechat_pay_display_qr_code || null
+      return json(res, 200, {
+        payment_intent: mapPaymentIntent(pi),
+        qr: qr
+          ? {
+              data: qr.data || '',
+              image_url_png: qr.image_url_png || '',
+              image_url_svg: qr.image_url_svg || '',
+              hosted_instructions_url: qr.hosted_instructions_url || '',
+            }
+          : null,
+      })
+    }
+
     if (action === 'retrieve_payment_intent') {
       const pi = await stripe.paymentIntents.retrieve(String(body.id || ''))
       return json(res, 200, { payment_intent: mapPaymentIntent(pi) })

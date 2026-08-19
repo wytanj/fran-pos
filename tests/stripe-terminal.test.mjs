@@ -138,3 +138,27 @@ test('tap to pay collects on the device NFC reader', () => {
   assert.match(server, /stripe_terminal_action/)
   assert.match(server, /Could not verify the Google session/)
 })
+
+test('paynow and wechat show a full-screen stripe qr and poll until paid', () => {
+  const server = readFileSync(new URL('../api/stripe-terminal.ts', import.meta.url), 'utf8')
+  assert.match(server, /create_qr_payment_intent/)
+  assert.match(server, /paynow_display_qr_code/)
+  assert.match(server, /wechat_pay_display_qr_code/)
+  assert.match(server, /QR method must be paynow or wechat_pay/)
+
+  const api = readFileSync(new URL('../dashboard/src/pos/lib/stripe-terminal-api.ts', import.meta.url), 'utf8')
+  assert.match(api, /createStripeQrPaymentIntent/)
+  assert.match(api, /waitForQrPayment/)
+  assert.match(api, /requires_payment_method/)
+
+  const modal = readFileSync(new URL('../dashboard/src/pos/components/payment-modal.tsx', import.meta.url), 'utf8')
+  assert.match(modal, /runQrCharge/)
+  assert.match(modal, /QrPaymentOverlay/)
+  // The old fake tender that recorded PayNow without any Stripe payment is gone.
+  assert.doesNotMatch(modal, /commit\('PayNow QR'/)
+
+  const overlay = readFileSync(new URL('../dashboard/src/pos/components/qr-payment-overlay.tsx', import.meta.url), 'utf8')
+  assert.match(overlay, /createPortal/)
+  assert.match(overlay, /QR valid for/)
+  assert.match(overlay, /Payment received/)
+})
