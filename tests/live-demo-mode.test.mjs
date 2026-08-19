@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const posContext = readFileSync(new URL('../dashboard/src/pos/lib/pos-context.tsx', import.meta.url), 'utf8')
 const posLogin = readFileSync(new URL('../dashboard/src/pos/pages/pos-login.tsx', import.meta.url), 'utf8')
+const numpad = readFileSync(new URL('../dashboard/src/pos/components/numpad.tsx', import.meta.url), 'utf8')
 const salePage = readFileSync(new URL('../dashboard/src/pos/pages/sale.tsx', import.meta.url), 'utf8')
 const lineActionModal = readFileSync(new URL('../dashboard/src/pos/components/line-action-modal.tsx', import.meta.url), 'utf8')
 const receiptPreview = readFileSync(new URL('../dashboard/src/pos/components/receipt-preview.tsx', import.meta.url), 'utf8')
@@ -39,6 +40,8 @@ test('POS start screen exposes demo and live mode choices', () => {
   assert.match(posLogin, /signInWithGoogle\('\/pos\?mode=demo'\)/)
   assert.match(posLogin, /signInWithGoogle\('\/pos'\)/)
   assert.match(posLogin, /Open Register/)
+  assert.match(posLogin, /min-h-dvh/)
+  assert.match(numpad, /dense/)
   assert.match(posLogin, /Use another Google account/)
   assert.match(posLogin, /handleGoogleSignOut/)
   assert.match(posLogin, /signOut\(\)/)

@@ -125,23 +125,23 @@ export default function PosLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
-      <div className="w-full max-w-3xl rounded-xl border border-line bg-white p-6 shadow-warm-md">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <BrandMark size="lg" className="mb-3" />
+    <div className="flex min-h-dvh items-center justify-center bg-cream p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <div className="w-full max-w-3xl rounded-xl border border-line bg-white p-4 shadow-warm-md sm:p-6">
+        <div className="mb-3 flex flex-col items-center text-center">
+          <BrandMark size="sm" className="mb-1.5" />
           <p className="eyebrow">Register</p>
-          <h1 className="h1-display">Fran POS</h1>
+          <h1 className="h1-display leading-tight">Fran POS</h1>
           <p className="text-sm text-muted-foreground">
             {STORE.name} - Store {STORE.code}
           </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-2 rounded-sm bg-surface-sunken p-1">
+        <div className="mb-3 grid grid-cols-2 gap-2 rounded-sm bg-surface-sunken p-1">
           <button
             type="button"
             onClick={() => setMode('demo')}
             className={cn(
-              'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               mode === 'demo' ? 'bg-white font-semibold text-brown shadow-warm-xs' : 'text-muted-foreground hover:text-foreground'
             )}
           >
@@ -151,7 +151,7 @@ export default function PosLogin() {
             type="button"
             onClick={() => setMode('live')}
             className={cn(
-              'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               mode === 'live' ? 'bg-white font-semibold text-brown shadow-warm-xs' : 'text-muted-foreground hover:text-foreground'
             )}
           >
@@ -160,7 +160,7 @@ export default function PosLogin() {
         </div>
 
         {mode === 'live' ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {loading ? (
               <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">Checking live session...</p>
             ) : !user ? (
@@ -186,7 +186,7 @@ export default function PosLogin() {
                 </Link>
                 <Button
                   variant="outline"
-                  className="mt-2 h-11 w-full"
+                  className="mt-2 h-9 w-full"
                   onClick={() => void handleGoogleSignOut()}
                   disabled={signingOut}
                 >
@@ -195,14 +195,14 @@ export default function PosLogin() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4 rounded-lg border p-4">
+              <div className="space-y-4 rounded-lg border p-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="font-semibold">{company.name}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-0.5 text-sm text-muted-foreground">
                       Select an active POS staff member and enter their register passcode.
                     </p>
-                    {user.email && <p className="mt-1 truncate text-xs text-muted-foreground">{user.email}</p>}
+                    {user.email && <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>}
                   </div>
                   <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">Live</span>
                 </div>
@@ -231,7 +231,7 @@ export default function PosLogin() {
                           type="button"
                           onClick={() => selectStaff(member)}
                           className={cn(
-                            'flex items-center justify-between rounded-lg border p-3 text-left transition-colors cursor-pointer',
+                            'flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors cursor-pointer',
                             selectedStaff?.id === member.id ? 'border-primary bg-accent' : 'hover:bg-accent'
                           )}
                         >
@@ -246,12 +246,12 @@ export default function PosLogin() {
                       ))}
                     </div>
 
-                    <div className="rounded-lg bg-secondary p-4">
-                      <div className="mb-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <div className="rounded-lg bg-secondary p-3">
+                      <div className="mb-2 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                         <KeyRound className="h-4 w-4" />
                         Passcode for <span className="font-medium text-foreground">{selectedStaff?.display_name}</span>
                       </div>
-                      <div className="mb-4 flex justify-center gap-2">
+                      <div className="mb-2 flex justify-center gap-2">
                         {Array.from({ length: 6 }).map((_, i) => (
                           <div key={i} className={cn('h-3.5 w-3.5 rounded-full', i < pin.length ? 'bg-primary' : 'bg-muted')} />
                         ))}
@@ -262,6 +262,7 @@ export default function PosLogin() {
                         </div>
                       )}
                       <Numpad
+                        dense
                         onPress={(k) => {
                           setError(false)
                           setPin((p) => (p.length < 12 ? p + k : p))
@@ -272,7 +273,7 @@ export default function PosLogin() {
                         }}
                       />
                       <Button
-                        className="mt-4 h-11 w-full text-base"
+                        className="mt-3 h-10 w-full text-base"
                         onClick={openLiveTerminal}
                         disabled={pin.length < 4 || startStaffSession.isPending}
                       >
@@ -283,12 +284,12 @@ export default function PosLogin() {
 
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Link to="/products?new=1">
-                        <Button variant="outline" className="w-full">
+                        <Button variant="outline" className="h-9 w-full text-xs">
                           <PackagePlus className="h-4 w-4" /> Create Product
                         </Button>
                       </Link>
                       <Link to="/products?import=skums">
-                        <Button variant="outline" className="w-full">
+                        <Button variant="outline" className="h-9 w-full text-xs">
                           <CloudDownload className="h-4 w-4" /> Import SKUMS
                         </Button>
                       </Link>
@@ -297,7 +298,7 @@ export default function PosLogin() {
                 )}
                 <Button
                   variant="outline"
-                  className="h-11 w-full"
+                  className="h-9 w-full"
                   onClick={() => void handleGoogleSignOut()}
                   disabled={signingOut}
                 >
@@ -325,7 +326,7 @@ export default function PosLogin() {
                 )}
                 <Button
                   variant="outline"
-                  className="mt-3 h-11 w-full"
+                  className="mt-2 h-9 w-full"
                   onClick={() => void handleGoogleSignOut()}
                   disabled={signingOut}
                 >
@@ -360,11 +361,11 @@ export default function PosLogin() {
                     setError(false)
                   }}
                   className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border p-3 text-sm font-medium transition-colors cursor-pointer',
+                    'flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer',
                     role === r.role ? 'border-yellow bg-yellow font-semibold text-brown' : 'hover:bg-surface-sunken'
                   )}
                 >
-                  <r.icon className="h-5 w-5" />
+                  <r.icon className="h-4 w-4" />
                   {r.label}
                 </button>
               ))}
@@ -374,7 +375,7 @@ export default function PosLogin() {
               Enter PIN for <span className="font-medium text-foreground">{selected?.name}</span>
             </p>
 
-            <div className="mb-4 flex justify-center gap-2">
+            <div className="mb-2 flex justify-center gap-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className={cn('h-3.5 w-3.5 rounded-full', i < pin.length ? 'bg-primary' : 'bg-muted')} />
               ))}
@@ -387,6 +388,7 @@ export default function PosLogin() {
             )}
 
             <Numpad
+              dense
               onPress={(k) => {
                 setError(false)
                 setPin((p) => (p.length < 4 ? p + k : p))
@@ -397,11 +399,11 @@ export default function PosLogin() {
               }}
             />
 
-            <Button className="mt-4 h-11 w-full text-base" onClick={submit} disabled={pin.length < 4}>
+            <Button className="mt-3 h-10 w-full text-base" onClick={submit} disabled={pin.length < 4}>
               Sign In
             </Button>
 
-            <p className="mt-4 text-center text-xs text-muted-foreground">
+            <p className="mt-2 text-center text-xs text-muted-foreground">
               Demo PINs - Cashier: <span className="font-mono">1111</span> - Manager:{' '}
               <span className="font-mono">9999</span>
             </p>
