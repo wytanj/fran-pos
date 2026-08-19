@@ -19,6 +19,7 @@ import {
 import { maskCustomerEmailToken } from '@/pos/lib/customer-email-connector'
 import { listSkumsPosCatalog } from '@/pos/lib/skums-client'
 import { buildSkumsConnectorSettings, maskSkumsApiKey, toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
+import { setFranCrmDebugOverride } from '@/pos/fran/lib/fran-crm-client'
 
 const defaultPosConfig = {
   quick_sale_mode: false,
@@ -225,10 +226,15 @@ export default function IntegrationsPage() {
       'fran_crm_workspace_id',
       franForm.workspace_id.trim() || '11111111-1111-4111-8111-111111111111',
     )
+    // Workspace routing is SKUMS's decision alone. This legacy path may only run for the
+    // current browser tab's session — never persisted, never assumed from a bare endpoint URL —
+    // so saving it here is the one explicit, conscious act that grants that temporary trust.
+    const goingLive = !franForm.offline_mode && Boolean(franForm.endpoint_url.trim())
+    setFranCrmDebugOverride(goingLive)
     toast.success(
-      franForm.offline_mode || !franForm.endpoint_url.trim()
-        ? 'Fran CRM settings saved (mock/offline)'
-        : 'Fran CRM live endpoint saved — reload Sale to use CRM policy/members',
+      goingLive
+        ? 'Fran CRM live endpoint saved for this session only — reload Sale to use CRM policy/members'
+        : 'Fran CRM settings saved (mock/offline)',
     )
   }
 
@@ -445,6 +451,9 @@ export default function IntegrationsPage() {
             <div className="mt-4 space-y-4">
               <p className="text-xs text-muted-foreground">
                 Only use when debugging CRM without SKUMS. Production path is SKUMS-only.
+                Saving here only takes effect for this browser tab or app session — closing the
+                tab or force-closing the app clears it, so it can never silently carry over to
+                another company or store the way a saved field otherwise would.
               </p>
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div>

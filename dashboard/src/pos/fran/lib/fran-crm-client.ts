@@ -89,19 +89,46 @@ function hasSkumsBridge(skums?: FranCrmSkumsBridge | null) {
   return Boolean(skums?.apiUrl?.trim() && skums?.apiKey?.trim())
 }
 
+const DEBUG_OVERRIDE_KEY = 'fran_crm_debug_override'
+
+/**
+ * Workspace routing is SKUMS's decision alone (workspace_crm_links), never POS's to guess.
+ * The legacy direct-CRM-URL path is a dev/debug escape hatch and must never activate from a
+ * bare deployment-wide env var or a stale cached endpoint — only when this browser tab has
+ * explicitly opted in for the current session (see Settings → Integrations advanced panel).
+ */
+export function hasFranCrmDebugOverride() {
+  if (typeof window === 'undefined') return false
+  try {
+    return sessionStorage.getItem(DEBUG_OVERRIDE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function setFranCrmDebugOverride(enabled: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    if (enabled) sessionStorage.setItem(DEBUG_OVERRIDE_KEY, 'true')
+    else sessionStorage.removeItem(DEBUG_OVERRIDE_KEY)
+  } catch {
+    // sessionStorage can throw in locked-down WebViews; the override simply stays off.
+  }
+}
+
 /**
  * Live loyalty available when:
- * - SKUMS connector is set (target architecture), or
- * - legacy direct CRM URL with offline mock off.
+ * - SKUMS connector is set (target architecture — SKUMS decides the workspace), or
+ * - legacy direct CRM URL, but only with an explicit session debug override AND offline mock off.
  */
 export function isFranCrmLiveConfigured(options: FranCrmClientOptions = {}) {
   if (options.mode === 'mock') return false
   if (hasSkumsBridge(options.skums)) return true
+  if (!hasFranCrmDebugOverride()) return false
   const saved = browserFranCrmSettings()
   const configuredEndpoint = options.endpointUrl ?? import.meta.env.VITE_FRAN_CRM_URL
   const endpointUrl = normalizeEndpoint(configuredEndpoint ?? saved.endpointUrl)
   if (options.mode === 'live' || options.mode === 'skums') return Boolean(endpointUrl || hasSkumsBridge(options.skums))
-  if (configuredEndpoint) return true
   return Boolean(endpointUrl) && !saved.offlineMode
 }
 
@@ -405,9 +432,11 @@ export function createFranCrmClient(options: FranCrmClientOptions = {}): FranCrm
     }
   }
 
+  // Same trust rule as isFranCrmLiveConfigured: an endpoint alone (env var or a stale saved
+  // value) never implies live — only an explicit session debug override does.
   const mode =
     options.mode ??
-    (configuredEndpoint ? 'live' : saved.offlineMode ? 'mock' : directCrmUrl ? 'live' : 'mock')
+    (hasFranCrmDebugOverride() && !saved.offlineMode && (configuredEndpoint || directCrmUrl) ? 'live' : 'mock')
 
   if (mode === 'mock' || mode === 'skums') {
     // mode skums without bridge falls through to mock

@@ -96,6 +96,42 @@ test('Fran CRM client exposes the genesis decision methods with mock fallback', 
   assert.match(franMock, /mockPreviewBasket/)
 })
 
+test('Fran CRM workspace routing is SKUMS-only; the legacy direct path needs an explicit session opt-in', () => {
+  // Workspace_crm_links (country-scoped, many stores -> one CRM workspace) lives entirely in
+  // SKUMS. The legacy direct-CRM-URL path must never activate merely from a deployment-wide env
+  // var or a stale cached endpoint, or one store's device could silently use another
+  // company's/country's loyalty pool. See docs/pos-crm-workspace-routing-plan.md.
+  assert.match(franClient, /hasFranCrmDebugOverride/)
+  assert.match(franClient, /setFranCrmDebugOverride/)
+  assert.match(franClient, /sessionStorage/)
+  assert.doesNotMatch(franClient, /localStorage\.(get|set)Item\('fran_crm_debug_override'/)
+
+  // isFranCrmLiveConfigured must check the override before it can ever return true from a
+  // bare endpoint (env var or saved value) — SKUMS-bridge availability is the one exception.
+  const liveConfiguredFn = franClient.slice(
+    franClient.indexOf('export function isFranCrmLiveConfigured'),
+    franClient.indexOf('export function createFranCrmClient'),
+  )
+  assert.match(liveConfiguredFn, /hasFranCrmDebugOverride/)
+  assert.ok(
+    liveConfiguredFn.indexOf('hasFranCrmDebugOverride') < liveConfiguredFn.indexOf('configuredEndpoint'),
+    'the debug override must be checked before any endpoint is trusted',
+  )
+
+  // createFranCrmClient's own implicit-mode inference (used by the sale.tsx bare fallback
+  // createFranCrmClient() with no options) must apply the same rule, not re-derive "live" from
+  // a bare configuredEndpoint the way the original code did.
+  const createClientFn = franClient.slice(franClient.indexOf('export function createFranCrmClient'))
+  assert.match(createClientFn, /hasFranCrmDebugOverride\(\) && !saved\.offlineMode/)
+
+  const integrations = readFileSync(
+    new URL('../dashboard/src/pages/settings/integrations.tsx', import.meta.url),
+    'utf8',
+  )
+  assert.match(integrations, /setFranCrmDebugOverride/)
+  assert.match(integrations, /not for production/)
+})
+
 test('Fran sale page requires explicit member or exception and commits rewards after payment', () => {
   assert.match(salePage, /<FranMemberStrip/)
   assert.match(salePage, /<FranCustomerModal/)
