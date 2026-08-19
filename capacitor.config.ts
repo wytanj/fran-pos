@@ -38,6 +38,10 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
     backgroundColor: '#FFFEF5',
+    // Android 15 edge-to-edge: the web layer pads with env(safe-area-inset-*)
+    // (pos-shell.tsx). If a device's WebView reports zero insets, opt out
+    // natively at the next APK rebuild via windowOptOutEdgeToEdgeEnforcement
+    // in android/app/src/main/res/values/styles.xml.
     buildOptions: {
       // Produce a distributable APK (not AAB) from `cap build android`.
       // For signed release, set CAPACITOR_ANDROID_KEYSTORE_PATH and related

@@ -54,7 +54,7 @@ export function QrPaymentOverlay(props: QrPaymentOverlayProps) {
   }, [props, remainMs])
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background p-6">
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       {props.phase === 'approved' ? (
         <div className="flex flex-col items-center text-center">
           <CheckCircle2 className="h-24 w-24 text-success" />
@@ -124,7 +124,7 @@ export function QrPaymentOverlay(props: QrPaymentOverlayProps) {
 
           <button
             onClick={props.onCancel}
-            className="absolute bottom-6 left-6 flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-6 flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" /> Cancel
           </button>
