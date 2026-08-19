@@ -35,17 +35,27 @@ export async function collectStripeInPerson(input: {
   try {
     if (input.kind === 'tap_to_pay') {
       input.onStatus?.('1/5 Checking the Google session for Stripe…')
+      const piPromise = createStripePaymentIntent({
+        amount: input.amount,
+        currency: input.currency,
+        description: input.description,
+        metadata: input.metadata,
+      })
+      piPromise.then((r) => { payment_intent = r?.payment_intent }).catch(() => {})
       await ensureTapToPayReady({ config: input.config, onStatus: input.onStatus })
+      input.onStatus?.('Creating the Stripe test charge…')
+      const created = await piPromise
+      payment_intent = created?.payment_intent
+    } else {
+      input.onStatus?.('Creating the Stripe test charge…')
+      const created = await createStripePaymentIntent({
+        amount: input.amount,
+        currency: input.currency,
+        description: input.description,
+        metadata: input.metadata,
+      })
+      payment_intent = created?.payment_intent
     }
-
-    input.onStatus?.('Creating the Stripe test charge…')
-    const created = await createStripePaymentIntent({
-      amount: input.amount,
-      currency: input.currency,
-      description: input.description,
-      metadata: input.metadata,
-    })
-    payment_intent = created?.payment_intent
     if (!payment_intent?.id) throw new Error('Stripe did not return a PaymentIntent. Check the Google session and try again.')
 
     if (input.kind === 's700') {

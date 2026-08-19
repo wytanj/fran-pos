@@ -23,7 +23,7 @@ import { usePos } from '@/pos/lib/pos-context'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
 import { cancelStripeCollection, collectStripeInPerson } from '@/pos/lib/stripe-collect'
-import { resolveTapToPayConfig, tapToPaySupported } from '@/pos/lib/stripe-tap-to-pay'
+import { resolveTapToPayConfig, tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import {
   cancelStripePaymentIntent,
   createStripeQrPaymentIntent,
@@ -115,6 +115,12 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
       setAmount(Math.max(remaining, 0).toFixed(2))
     }
   }, [open, mode, payments.length, remaining, stripe])
+
+  useEffect(() => {
+    if (open && tapToPaySupported() && !stripeBusy.current) {
+      warmUpTapToPay(stripe)
+    }
+  }, [open])
   const fullyPaid = remaining <= 0.001
   const paymentLimitReached = payments.length >= MAX_TENDERS_PER_PAYMENT
   const storeCreditAvail = customer?.storeCredit ?? 0
@@ -202,6 +208,9 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const chooseMode = (paymentMode: PaymentModeId) => {
     setMode(paymentMode)
     setAmount(getTenderLimit(paymentMode).toFixed(2))
+    if (paymentMode === 'paynow' || paymentMode === 'wechat') {
+      logTapToPayTrace('qr tile opened: ' + paymentMode)
+    }
   }
 
   const scheduleTerminalStep = (run: () => void, delayMs: number) => {

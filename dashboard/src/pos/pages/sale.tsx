@@ -79,6 +79,8 @@ import {
 } from '@/pos/lib/pos-outbox'
 import { useAuth } from '@/providers/auth-provider'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
+import { useStripeConnector } from '@/hooks/use-stripe-connector'
+import { tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import type {
   Product as DbProduct,
   SkumsGraphRefs,
@@ -399,6 +401,7 @@ export default function SalePage() {
   const pos = usePos()
   const { company } = useAuth()
   const { connector: skumsConnector } = useSkumsConnector()
+  const { connector: stripe } = useStripeConnector()
   const {
     mode,
     cart,
@@ -441,6 +444,10 @@ export default function SalePage() {
     skums: { ok: boolean }
   } | null>(null)
   const [posCapabilitiesError, setPosCapabilitiesError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (tapToPaySupported()) warmUpTapToPay(stripe)
+  }, [])
 
   useEffect(() => {
     if (!skumsConnector) {

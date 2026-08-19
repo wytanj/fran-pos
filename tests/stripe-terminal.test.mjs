@@ -139,6 +139,25 @@ test('tap to pay collects on the device NFC reader', () => {
   assert.match(server, /Could not verify the Google session/)
 })
 
+test('tap to pay reuses a connected reader and warms up before charge', () => {
+  const tap = readFileSync(new URL('../dashboard/src/pos/lib/stripe-tap-to-pay.ts', import.meta.url), 'utf8')
+  const collect = readFileSync(new URL('../dashboard/src/pos/lib/stripe-collect.ts', import.meta.url), 'utf8')
+  const api = readFileSync(new URL('../dashboard/src/pos/lib/stripe-terminal-api.ts', import.meta.url), 'utf8')
+  const sale = readFileSync(new URL('../dashboard/src/pos/pages/sale.tsx', import.meta.url), 'utf8')
+
+  assert.match(tap, /tap reuse connected reader/)
+  assert.match(tap, /warmUpTapToPay/)
+  assert.match(tap, /fran-pos\.stripe\.location_id/)
+  assert.doesNotMatch(tap, /await terminalApi\(/)
+  assert.match(tap, /already running on this phone/)
+
+  const collectFn = collect.slice(collect.indexOf('export async function collectStripeInPerson'))
+  assert.ok(collectFn.indexOf('createStripePaymentIntent') < collectFn.indexOf('ensureTapToPayReady'))
+
+  assert.match(api, /intervalMs \?\? 1500/)
+  assert.match(sale, /warmUpTapToPay/)
+})
+
 test('paynow and wechat show a full-screen stripe qr and poll until paid', () => {
   const server = readFileSync(new URL('../api/stripe-terminal.ts', import.meta.url), 'utf8')
   assert.match(server, /create_qr_payment_intent/)

@@ -190,7 +190,11 @@ export function registerStripeReader(input: { registration_code: string; locatio
 // Fire-and-forget breadcrumb to the Vercel function log so tap-to-pay progress
 // is diagnosable from the server when the phone offers no console or logcat.
 export function logTapToPayTrace(note: string) {
-  void callStripeTerminal('client_log', { note }).catch(() => {})
+  if (typeof window !== 'undefined') {
+    window.setTimeout(() => { void callStripeTerminal('client_log', { note }).catch(() => {}) }, 1200)
+  } else {
+    void callStripeTerminal('client_log', { note }).catch(() => {})
+  }
 }
 
 export type StripeQrMethod = 'paynow' | 'wechat_pay'
@@ -226,7 +230,7 @@ export async function waitForQrPayment(id: string, options?: {
   shouldStop?: () => boolean
 }) {
   const timeoutMs = options?.timeoutMs ?? 330_000
-  const intervalMs = options?.intervalMs ?? 2000
+  const intervalMs = options?.intervalMs ?? 1500
   const started = Date.now()
 
   while (Date.now() - started < timeoutMs) {

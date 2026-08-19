@@ -50,6 +50,33 @@ function describeError(error: unknown, fallback: string) {
   return fallback
 }
 
+const LOCATION_CACHE_KEY = 'fran-pos.stripe.location_id'
+
+function readCachedLocationId() {
+  try {
+    return localStorage.getItem(LOCATION_CACHE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function writeCachedLocationId(locationId: string) {
+  if (!locationId) return
+  try {
+    localStorage.setItem(LOCATION_CACHE_KEY, locationId)
+  } catch {
+    // Capacitor WebView storage can throw.
+  }
+}
+
+function clearCachedLocationId() {
+  try {
+    localStorage.removeItem(LOCATION_CACHE_KEY)
+  } catch {
+    // Capacitor WebView storage can throw.
+  }
+}
+
 export async function resolveTapToPayConfig(config: StripeTerminalConfig | null): Promise<StripeTerminalConfig> {
   const session = await Promise.race([
     supabase.auth.getSession(),
@@ -62,10 +89,14 @@ export async function resolveTapToPayConfig(config: StripeTerminalConfig | null)
   }
 
   if (config?.enabled && config.location_id) {
+    writeCachedLocationId(config.location_id)
     return { ...config, simulated: false }
   }
 
   let locationId = config?.location_id || ''
+  if (!locationId) {
+    locationId = readCachedLocationId()
+  }
   if (!locationId) {
     const listed = await listStripeLocations()
     const locations = Array.isArray(listed?.locations) ? listed.locations : []
@@ -79,6 +110,8 @@ export async function resolveTapToPayConfig(config: StripeTerminalConfig | null)
     throw new Error('Could not find or create a Stripe Terminal location. Open Settings → Integrations and save a Location ID.')
   }
 
+  writeCachedLocationId(locationId)
+
   return {
     enabled: true,
     simulated: false,
@@ -91,6 +124,7 @@ export async function resolveTapToPayConfig(config: StripeTerminalConfig | null)
 }
 
 let tokenListenerAttached = false
+let ensureInFlight: Promise<void> | null = null
 
 // NEVER await this or return its result from an async function. The Capacitor
 // plugin proxy fabricates a method for every property — including `then` — so
@@ -128,6 +162,11 @@ export async function initTapToPay(config: StripeTerminalConfig, onStatus?: (mes
   const status = (message: string) => {
     onStatus?.(message)
     logTapToPayTrace(message)
+  }
+
+  if (tokenListenerAttached) {
+    status('2/5 Stripe is already running on this phone.')
+    return
   }
 
   status('2/5 Requesting a Stripe connection token…')
@@ -224,35 +263,54 @@ export async function ensureTapToPayReady(input: {
   onStatus?: (message: string) => void
 }) {
   if (!input.config.location_id) throw new Error('Set a Stripe Terminal location before using Tap to Pay')
+  if (ensureInFlight) return ensureInFlight
 
-  await initTapToPay(input.config, input.onStatus)
-  const terminal = terminalApi()
+  ensureInFlight = (async () => {
+    const terminal = terminalApi()
+    if (tokenListenerAttached) {
+      const already = await withTimeout(
+        terminal.getConnectedReader().catch(() => ({ reader: null })),
+        4000,
+        'Checking the connected reader',
+      ).catch(() => ({ reader: null }))
+      if (already?.reader) {
+        input.onStatus?.('Reader already connected — ready.')
+        logTapToPayTrace('tap reuse connected reader')
+        return
+      }
+    }
 
-  const already = await withTimeout(
-    terminal.getConnectedReader().catch(() => ({ reader: null })),
-    4000,
-    'Checking the connected reader',
-  ).catch(() => ({ reader: null }))
-  if (already?.reader) {
-    await withTimeout(terminal.disconnectReader().catch(() => {}), 4000, 'Resetting the previous reader').catch(() => {})
+    try {
+      await initTapToPay(input.config, input.onStatus)
+      const readyTerminal = terminalApi()
+
+      input.onStatus?.('4/5 Finding the NFC reader on this phone…')
+      logTapToPayTrace('4/5 discover readers')
+      const reader = await discoverTapToPayReader(readyTerminal, input.config.location_id)
+
+      input.onStatus?.('5/5 Connecting this phone as the Stripe reader…')
+      logTapToPayTrace('5/5 connect reader')
+      await withTimeout(
+        readyTerminal.connectReader({
+          reader: reader as never,
+          autoReconnectOnUnexpectedDisconnect: true,
+          merchantDisplayName: input.config.merchant_display_name,
+        }),
+        15_000,
+        'Connecting Tap to Pay',
+      )
+    } catch (error) {
+      clearCachedLocationId()
+      throw error
+    }
+    // Deliberately returns nothing — see the thenable trap note on terminalApi.
+  })()
+
+  try {
+    await ensureInFlight
+  } finally {
+    ensureInFlight = null
   }
-
-  input.onStatus?.('4/5 Finding the NFC reader on this phone…')
-  logTapToPayTrace('4/5 discover readers')
-  const reader = await discoverTapToPayReader(terminal, input.config.location_id)
-
-  input.onStatus?.('5/5 Connecting this phone as the Stripe reader…')
-  logTapToPayTrace('5/5 connect reader')
-  await withTimeout(
-    terminal.connectReader({
-      reader: reader as never,
-      autoReconnectOnUnexpectedDisconnect: true,
-      merchantDisplayName: input.config.merchant_display_name,
-    }),
-    15_000,
-    'Connecting Tap to Pay',
-  )
-  // Deliberately returns nothing — see the thenable trap note on terminalApi.
 }
 
 export async function collectTapToPay(input: {
@@ -287,4 +345,17 @@ export async function cancelTapToPay() {
   if (!tapToPaySupported()) return
   await StripeTerminal?.cancelCollectPaymentMethod?.().catch(() => {})
   await StripeTerminal?.cancelDiscoverReaders?.().catch(() => {})
+  await StripeTerminal?.disconnectReader?.().catch(() => {})
+}
+
+export function warmUpTapToPay(config: StripeTerminalConfig | null): void {
+  if (!tapToPaySupported()) return
+  void resolveTapToPayConfig(config)
+    .then((resolved) => ensureTapToPayReady({ config: resolved }))
+    .then(() => {
+      logTapToPayTrace('warmup connected')
+    })
+    .catch((error) => {
+      logTapToPayTrace('warmup: ' + describeError(error, 'warmup failed'))
+    })
 }
