@@ -5,6 +5,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.vercel.pull
 *.log
 .DS_Store
 .vite/
@@ -18,6 +19,8 @@ android/.gradle/
 android/app/build/
 android/build/
 android/local.properties
+android/key.properties
+android/keystore/
 android/captures/
 android/.idea/
 android/app/src/main/assets/public/

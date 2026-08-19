@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, CloudDownload, KeyRound, PackagePlus, Shield, ShoppingBag, User, UserCheck, Wifi } from 'lucide-react'
+import { AlertCircle, CloudDownload, KeyRound, LogOut, PackagePlus, Shield, ShoppingBag, User, UserCheck, Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Numpad } from '@/pos/components/numpad'
 import { usePos } from '@/pos/lib/pos-context'
@@ -13,13 +13,14 @@ import { BrandMark } from '@/components/brand-mark'
 
 export default function PosLogin() {
   const { mode, setMode, setUser } = usePos()
-  const { user, company, loading, signInWithGoogle } = useAuth()
+  const { user, company, loading, signInWithGoogle, signOut } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [role, setRole] = useState<PosRole>('cashier')
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
   const { data: staff = [], isLoading: staffLoading } = usePosStaffMembers()
   const startStaffSession = useStartPosStaffSession()
@@ -112,6 +113,17 @@ export default function PosLogin() {
     }
   }
 
+  const handleGoogleSignOut = async () => {
+    setSigningOut(true)
+    setError(false)
+    setPin('')
+    try {
+      await signOut()
+    } finally {
+      setSigningOut(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-cream p-4">
       <div className="w-full max-w-3xl rounded-xl border border-line bg-white p-6 shadow-warm-md">
@@ -168,9 +180,19 @@ export default function PosLogin() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Create the live POS company before opening the register.
                 </p>
+                {user.email && <p className="mt-2 truncate text-xs text-muted-foreground">{user.email}</p>}
                 <Link to="/onboarding">
                   <Button className="mt-4 w-full">Finish Setup</Button>
                 </Link>
+                <Button
+                  variant="outline"
+                  className="mt-2 h-11 w-full"
+                  onClick={() => void handleGoogleSignOut()}
+                  disabled={signingOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {signingOut ? 'Signing out...' : 'Use another Google account'}
+                </Button>
               </div>
             ) : (
               <div className="space-y-4 rounded-lg border p-4">
@@ -180,6 +202,7 @@ export default function PosLogin() {
                     <p className="mt-1 text-sm text-muted-foreground">
                       Select an active POS staff member and enter their register passcode.
                     </p>
+                    {user.email && <p className="mt-1 truncate text-xs text-muted-foreground">{user.email}</p>}
                   </div>
                   <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">Live</span>
                 </div>
@@ -272,6 +295,15 @@ export default function PosLogin() {
                     </div>
                   </>
                 )}
+                <Button
+                  variant="outline"
+                  className="h-11 w-full"
+                  onClick={() => void handleGoogleSignOut()}
+                  disabled={signingOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {signingOut ? 'Signing out...' : 'Use another Google account'}
+                </Button>
               </div>
             )}
           </div>
@@ -291,6 +323,15 @@ export default function PosLogin() {
                     Finish company setup
                   </Link>
                 )}
+                <Button
+                  variant="outline"
+                  className="mt-3 h-11 w-full"
+                  onClick={() => void handleGoogleSignOut()}
+                  disabled={signingOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {signingOut ? 'Signing out...' : 'Use another Google account'}
+                </Button>
               </div>
             ) : (
               <div className="mb-4 flex flex-col gap-3 rounded-lg border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">

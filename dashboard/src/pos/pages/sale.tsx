@@ -43,7 +43,7 @@ import { ManagerAuthModal } from '@/pos/components/manager-auth-modal'
 import { PaymentModal } from '@/pos/components/payment-modal'
 import { SaleCompleteModal } from '@/pos/components/sale-complete-modal'
 import { FranCounterProfileCard } from '@/pos/fran/components/fran-counter-profile-card'
-import { FranCustomerModal } from '@/pos/fran/components/fran-customer-modal'
+import { createFranExceptionSession, FranCustomerModal } from '@/pos/fran/components/fran-customer-modal'
 import { FranMemberStrip } from '@/pos/fran/components/fran-member-strip'
 import { FranRewardRedemptionPanel } from '@/pos/fran/components/fran-reward-redemption-panel'
 import { FranVoucherScanPanel } from '@/pos/fran/components/fran-voucher-scan'
@@ -485,12 +485,38 @@ export default function SalePage() {
         return
       }
     }
+    setCameraOpen(false)
+    setMobileCatalogOpen(false)
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    productEntryRef.current?.blur()
+    franCustomerOpenRef.current = true
     setFranCustomerOpen(true)
+  }
+
+  const applyFranException = (mode: 'non_member' | 'tourist') => {
+    const session = createFranExceptionSession(mode)
+    clearFranReward()
+    setFranSession(session)
+    setCustomer(null)
+    setFranLoyaltySync(null)
+    setFranQuote(null)
+    setFranAppliedReward(null)
+    setFranRewardBasketKey(null)
+    setFranPreview(null)
+    setFranPreviewLoading(false)
+    setFranPreviewError(null)
+    setFranMemberDialogOpen(false)
+    franCustomerOpenRef.current = false
+    setFranCustomerOpen(false)
   }
 
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
   const [franCustomerOpen, setFranCustomerOpen] = useState(false)
+  const franCustomerOpenRef = useRef(false)
+  franCustomerOpenRef.current = franCustomerOpen
   const [franMemberDialogOpen, setFranMemberDialogOpen] = useState(false)
   const [franSession, setFranSession] = useState<FranCounterSession | null>(null)
   const [franPreview, setFranPreview] = useState<FranBasketPreview | null>(null)
@@ -602,7 +628,7 @@ export default function SalePage() {
 
   useEffect(() => {
     let cancelled = false
-    if (!franSession) {
+    if (!franSession || franSession.mode !== 'member') {
       setFranPreview(null)
       setFranPreviewError(null)
       setFranPreviewLoading(false)
@@ -953,7 +979,10 @@ export default function SalePage() {
 
   const focusProductEntry = useCallback(() => {
     if (typeof window === 'undefined') return
-    window.setTimeout(() => productEntryRef.current?.focus(), 0)
+    window.setTimeout(() => {
+      if (franCustomerOpenRef.current) return
+      productEntryRef.current?.focus()
+    }, 0)
   }, [])
 
   const stopCameraHardware = useCallback(() => {
@@ -1820,6 +1849,33 @@ export default function SalePage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {franCustomerOpen && (
+        <FranCustomerModal
+          open
+          client={franCrm}
+          onClose={() => {
+            franCustomerOpenRef.current = false
+            setFranCustomerOpen(false)
+          }}
+          onResolved={(session, nextCustomer) => {
+            clearFranReward()
+            setFranSession(session)
+            setCustomer(nextCustomer)
+            setFranLoyaltySync(null)
+            setFranQuote(null)
+            setFranAppliedReward(null)
+            setFranRewardBasketKey(null)
+            franCustomerOpenRef.current = false
+            setFranCustomerOpen(false)
+            if (session.mode === 'member') setFranMemberDialogOpen(true)
+          }}
+        />
+      )}
+      <div
+        className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', franCustomerOpen && 'hidden')}
+        inert={franCustomerOpen || undefined}
+        aria-hidden={franCustomerOpen || undefined}
+      >
       {skumsConnector && (
         <div
           className={cn(
@@ -1861,7 +1917,6 @@ export default function SalePage() {
               aria-label="Product barcode, QR, or SKU"
               enterKeyHint="done"
               autoComplete="off"
-              autoFocus
               className="h-11 pl-9 pr-12 text-base sm:text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -2010,8 +2065,12 @@ export default function SalePage() {
         salesType={salesType}
         onChooseSalesType={chooseSalesType}
         onFindMember={openMemberLookup}
-        onOpenDetails={() => setFranMemberDialogOpen(true)}
+        onOpenDetails={() => {
+          if (franSession?.mode === 'member') setFranMemberDialogOpen(true)
+        }}
         onClearSession={clearFranSession}
+        onTourist={() => applyFranException('tourist')}
+        onNonMember={() => applyFranException('non_member')}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden md:flex-row">
       {/* LEFT - catalogue */}
@@ -2222,26 +2281,12 @@ export default function SalePage() {
           </aside>
         </div>
       )}
+      </div>
 
-      {/* Modals */}
-      <FranCustomerModal
-        open={franCustomerOpen}
-        client={franCrm}
-        onClose={() => setFranCustomerOpen(false)}
-        onResolved={(session, nextCustomer) => {
-          clearFranReward()
-          setFranSession(session)
-          setCustomer(nextCustomer)
-          setFranLoyaltySync(null)
-          setFranQuote(null)
-          setFranAppliedReward(null)
-          setFranRewardBasketKey(null)
-          setFranCustomerOpen(false)
-          setFranMemberDialogOpen(true)
-        }}
-      />
-
-      <Dialog open={franMemberDialogOpen} onOpenChange={setFranMemberDialogOpen}>
+      <Dialog
+        open={franMemberDialogOpen && franSession?.mode === 'member'}
+        onOpenChange={setFranMemberDialogOpen}
+      >
         <DialogContent
           className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:w-full"
           onClose={() => setFranMemberDialogOpen(false)}

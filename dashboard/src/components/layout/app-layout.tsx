@@ -5,7 +5,7 @@ import { SkumsImportProgressPanel, SkumsImportProvider } from '@/hooks/use-skums
 
 export function AppLayout() {
   return (
-    <div className="flex h-screen overflow-hidden bg-cream">
+    <div className="relative flex h-screen overflow-hidden bg-cream">
       <Sidebar />
       <SkumsImportProvider>
         <main className="flex-1 overflow-y-auto bg-cream">
@@ -16,6 +16,7 @@ export function AppLayout() {
         <SkumsImportProgressPanel />
       </SkumsImportProvider>
       <Toaster position="top-right" />
+      <div id="fran-overlay-root" className="hidden" />
     </div>
   )
 }

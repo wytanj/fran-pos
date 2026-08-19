@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import type { User, Session } from '@supabase/supabase-js'
 import type { Profile, Company, CompanySettings } from '@pos/shared'
 import { supabase } from '@/lib/supabase'
+import { completeNativeOAuth, isNativeApp, oauthRedirectTo } from '@/lib/native-oauth'
+import { clearStripeAuthCache } from '@/pos/lib/stripe-terminal-api'
 
 interface AuthState {
   user: User | null
@@ -130,6 +132,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [loadUserData])
 
+  useEffect(() => {
+    if (!isNativeApp()) return
+    let remove: (() => void) | undefined
+    let cancelled = false
+
+    void import('@capacitor/app').then(async ({ App }) => {
+      const finish = async (url: string) => {
+        const result = await completeNativeOAuth(url)
+        const { Browser } = await import('@capacitor/browser')
+        await Browser.close().catch(() => {})
+        if (result.ok) {
+          const next = new URL('/auth/callback', window.location.origin)
+          if (result.redirectPath !== '/') next.searchParams.set('redirect', result.redirectPath)
+          window.location.replace(next.toString())
+        }
+      }
+
+      const launch = await App.getLaunchUrl()
+      if (launch?.url) {
+        try {
+          await finish(launch.url)
+        } catch (error) {
+          console.error('Native Google launch callback failed', error)
+        }
+      }
+
+      const listener = await App.addListener('appUrlOpen', async ({ url }) => {
+        try {
+          await finish(url)
+        } catch (error) {
+          console.error('Native Google callback failed', error)
+        }
+      })
+      if (cancelled) {
+        await listener.remove()
+        return
+      }
+      remove = () => {
+        void listener.remove()
+      }
+    })
+
+    return () => {
+      cancelled = true
+      remove?.()
+    }
+  }, [])
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
@@ -138,11 +188,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async (redirectPath = '/') => {
     const callbackUrl = new URL('/auth/callback', window.location.origin)
     if (redirectPath !== '/') callbackUrl.searchParams.set('redirect', redirectPath)
+    const redirectTo = oauthRedirectTo(redirectPath)
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: callbackUrl.toString(),
+        redirectTo,
+        skipBrowserRedirect: isNativeApp(),
         scopes: 'email profile',
         queryParams: {
           prompt: 'select_account',
@@ -150,6 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     })
     if (error) throw error
+    if (isNativeApp() && data?.url) {
+      const { Browser } = await import('@capacitor/browser')
+      await Browser.open({ url: data.url })
+    }
   }
 
   const signUp = async (email: string, password: string, companyName: string, displayName: string) => {
@@ -186,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     localStorage.removeItem('pos_active_company')
+    clearStripeAuthCache()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }

@@ -25,16 +25,39 @@ async function requireUser(req: VercelRequest) {
   const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   if (!supabaseUrl || !supabaseKey) throw new Error('Supabase auth is not configured for Stripe Terminal')
 
-  const response = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: supabaseKey,
-    },
-  })
-  if (!response.ok) throw new Error('Stripe Terminal session is not valid')
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+  let response: Response
+  try {
+    response = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseKey,
+      },
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Could not verify the Google session with Supabase. Try Charge again.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!response.ok) throw new Error('Stripe Terminal session is not valid. Sign out and Continue with Google again.')
   const user = await response.json()
-  if (!user?.id) throw new Error('Stripe Terminal session is not valid')
+  if (!user?.id) throw new Error('Stripe Terminal session is not valid. Sign out and Continue with Google again.')
   return user as { id: string; email?: string }
+}
+
+function publicErrorMessage(error: unknown) {
+  if (error && typeof error === 'object') {
+    const record = error as { raw?: { message?: string }; message?: string }
+    if (typeof record.raw?.message === 'string' && record.raw.message.trim()) return record.raw.message
+    if (typeof record.message === 'string' && record.message.trim()) return record.message
+  }
+  if (error instanceof Error && error.message.trim()) return error.message
+  return 'Stripe Terminal request failed'
 }
 
 function mapPaymentIntent(pi: Stripe.PaymentIntent) {
@@ -87,6 +110,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const action = String(body.action || '')
+    console.log(JSON.stringify({
+      stripe_terminal_action: action || 'missing',
+      ...(action === 'client_log' ? { note: String(body.note || '').slice(0, 500) } : {}),
+    }))
+    if (action === 'client_log') {
+      return json(res, 200, { ok: true })
+    }
     if (action === 'health') {
       const stripe = getStripe()
       const account = await stripe.accounts.retrieve()
@@ -189,6 +219,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return json(res, 200, { location: { id: location.id, display_name: location.display_name } })
     }
 
+    if (action === 'ensure_simulated_reader') {
+      const locationId = String(body.location_id || '').trim()
+      if (!locationId) throw new Error('Location is required for a Stripe test reader')
+      const existing = await stripe.terminal.readers.list({ location: locationId, limit: 50 })
+      const already =
+        existing.data.find((reader) => /simulat/i.test(String(reader.label || ''))) ||
+        existing.data.find((reader) => reader.device_type === 'simulated_wisepos_e') ||
+        existing.data[0]
+      if (already) return json(res, 200, { reader: mapReader(already) })
+      const reader = await stripe.terminal.readers.create({
+        registration_code: 'simulated-wpe',
+        location: locationId,
+        label: 'Fran simulated test reader',
+      })
+      return json(res, 200, { reader: mapReader(reader) })
+    }
+
     if (action === 'register_reader') {
       const registrationCode = String(body.registration_code || '').trim()
       const locationId = String(body.location_id || '').trim()
@@ -203,7 +250,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return json(res, 400, { error: `Unknown Stripe Terminal action: ${action}` })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Stripe Terminal request failed'
+    const message = publicErrorMessage(error)
+    console.error(JSON.stringify({ stripe_terminal_error: message }))
     const status = /not valid|Sign in/i.test(message) ? 401 : 400
     return json(res, status, { error: message })
   }

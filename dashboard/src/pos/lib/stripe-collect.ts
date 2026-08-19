@@ -9,7 +9,7 @@ import {
   waitForS700Action,
   type StripePaymentIntentResult,
 } from './stripe-terminal-api'
-import { cancelTapToPay, collectTapToPay } from './stripe-tap-to-pay'
+import { cancelTapToPay, collectTapToPay, ensureTapToPayReady } from './stripe-tap-to-pay'
 import { stripeCentsToAmount } from './stripe-money'
 
 export type StripeCollectKind = 's700' | 'tap_to_pay'
@@ -30,15 +30,24 @@ export async function collectStripeInPerson(input: {
   metadata?: Record<string, string>
   onStatus?: (message: string) => void
 }): Promise<StripeCollectResult> {
-  input.onStatus?.('Creating Stripe PaymentIntent…')
-  const { payment_intent } = await createStripePaymentIntent({
-    amount: input.amount,
-    currency: input.currency,
-    description: input.description,
-    metadata: input.metadata,
-  })
+  let payment_intent: StripePaymentIntentResult | undefined
 
   try {
+    if (input.kind === 'tap_to_pay') {
+      input.onStatus?.('1/5 Checking the Google session for Stripe…')
+      await ensureTapToPayReady({ config: input.config, onStatus: input.onStatus })
+    }
+
+    input.onStatus?.('Creating the Stripe test charge…')
+    const created = await createStripePaymentIntent({
+      amount: input.amount,
+      currency: input.currency,
+      description: input.description,
+      metadata: input.metadata,
+    })
+    payment_intent = created?.payment_intent
+    if (!payment_intent?.id) throw new Error('Stripe did not return a PaymentIntent. Check the Google session and try again.')
+
     if (input.kind === 's700') {
       if (!input.config.s700_reader_id) throw new Error('Register an S700 reader id in Settings → Integrations')
       input.onStatus?.('Sending the sale to the S700…')
@@ -62,7 +71,9 @@ export async function collectStripeInPerson(input: {
       })
     }
 
-    const { payment_intent: finalIntent } = await retrieveStripePaymentIntent(payment_intent.id)
+    const retrieved = await retrieveStripePaymentIntent(payment_intent.id)
+    const finalIntent = retrieved?.payment_intent
+    if (!finalIntent?.id) throw new Error('Stripe did not return the finished PaymentIntent')
     if (finalIntent.status !== 'succeeded' && finalIntent.status !== 'requires_capture') {
       throw new Error(`Stripe payment ended as ${finalIntent.status}`)
     }
@@ -72,9 +83,13 @@ export async function collectStripeInPerson(input: {
       amount: stripeCentsToAmount(finalIntent.amount) || input.amount,
     }
   } catch (error) {
-    await cancelStripeReader(input.config.s700_reader_id).catch(() => {})
+    if (input.config.s700_reader_id) {
+      await cancelStripeReader(input.config.s700_reader_id).catch(() => {})
+    }
     await cancelTapToPay().catch(() => {})
-    await cancelStripePaymentIntent(payment_intent.id).catch(() => {})
+    if (payment_intent?.id) {
+      await cancelStripePaymentIntent(payment_intent.id).catch(() => {})
+    }
     throw error
   }
 }

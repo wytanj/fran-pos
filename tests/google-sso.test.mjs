@@ -9,6 +9,7 @@ const callbackPage = readFileSync(new URL('../dashboard/src/pages/auth/callback.
 const onboardingPage = readFileSync(new URL('../dashboard/src/pages/auth/onboarding.tsx', import.meta.url), 'utf8')
 const protectedRoute = readFileSync(new URL('../dashboard/src/components/auth/protected-route.tsx', import.meta.url), 'utf8')
 const routes = readFileSync(new URL('../dashboard/src/routes.tsx', import.meta.url), 'utf8')
+const nativeOauth = readFileSync(new URL('../dashboard/src/lib/native-oauth.ts', import.meta.url), 'utf8')
 
 test('POS auth provider supports Google OAuth with a production callback route', () => {
   assert.match(authProvider, /signInWithGoogle/)
@@ -16,6 +17,10 @@ test('POS auth provider supports Google OAuth with a production callback route',
   assert.match(authProvider, /provider: 'google'/)
   assert.match(authProvider, /new URL\('\/auth\/callback', window\.location\.origin\)/)
   assert.match(authProvider, /scopes: 'email profile'/)
+  assert.match(authProvider, /skipBrowserRedirect: isNativeApp\(\)/)
+  assert.match(authProvider, /oauthRedirectTo\(redirectPath\)/)
+  assert.match(nativeOauth, /com\.fran\.pos:\/\/auth\/callback/)
+  assert.match(nativeOauth, /exchangeCodeForSession/)
 })
 
 test('POS login and registration expose Google SSO actions', () => {

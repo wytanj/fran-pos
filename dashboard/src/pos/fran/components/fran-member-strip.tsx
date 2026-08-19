@@ -45,6 +45,8 @@ interface FranMemberStripProps {
   onFindMember: () => void
   onOpenDetails: () => void
   onClearSession: () => void
+  onTourist: () => void
+  onNonMember: () => void
 }
 
 function sessionStatusLabel(session: FranCounterSession | null) {
@@ -106,6 +108,8 @@ export function FranMemberStrip({
   onFindMember,
   onOpenDetails,
   onClearSession,
+  onTourist,
+  onNonMember,
 }: FranMemberStripProps) {
   const member = session?.member ?? null
   const activePerks = session?.activePerks ?? []
@@ -132,9 +136,9 @@ export function FranMemberStrip({
       <div className="flex items-center gap-1 px-2 py-1.5 lg:hidden">
         <button
           type="button"
-          onClick={session ? onOpenDetails : onFindMember}
+          onClick={session?.mode === 'member' ? onOpenDetails : undefined}
           title={statusLabel}
-          aria-label={session ? `${statusLabel}. Open member details` : 'Fran member required. Find member'}
+          aria-label={statusLabel}
           className="flex h-9 shrink-0 items-center gap-1.5 rounded-full pr-1 hover:bg-surface-sunken"
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-yellow text-brown">
@@ -156,6 +160,38 @@ export function FranMemberStrip({
         >
           {session ? <Search className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
         </Button>
+        {session?.mode !== 'tourist' && session?.mode !== 'non_member' && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 px-2.5"
+              title="Tourist exception"
+              aria-label="Tourist"
+              onClick={(event) => {
+                event.stopPropagation()
+                onTourist()
+              }}
+            >
+              <Plane className="h-4 w-4" />
+              <span className="text-xs">Tourist</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              title="Non-member exception"
+              aria-label="Non-member"
+              onClick={(event) => {
+                event.stopPropagation()
+                onNonMember()
+              }}
+            >
+              <UserX className="h-4 w-4" />
+            </Button>
+          </>
+        )}
         {session && (
           <Button
             type="button"
@@ -255,7 +291,7 @@ export function FranMemberStrip({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {session && (
+          {session?.mode === 'member' && (
             <Button variant="outline" size="sm" onClick={onOpenDetails}>
               <Gift className="h-4 w-4" /> Details
             </Button>
@@ -264,6 +300,16 @@ export function FranMemberStrip({
             {session ? <Search className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
             {session ? 'Change' : 'Find member'}
           </Button>
+          {session?.mode !== 'tourist' && session?.mode !== 'non_member' && (
+            <>
+              <Button variant="outline" size="sm" onClick={onTourist}>
+                <Plane className="h-4 w-4" /> Tourist
+              </Button>
+              <Button variant="outline" size="sm" onClick={onNonMember}>
+                <UserX className="h-4 w-4" /> Non-member
+              </Button>
+            </>
+          )}
           {session && (
             <Button variant="outline" size="sm" onClick={onClearSession}>
               <X className="h-4 w-4" /> Clear

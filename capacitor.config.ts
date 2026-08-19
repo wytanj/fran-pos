@@ -2,6 +2,15 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const liveUrl = (process.env.CAP_LIVE_URL || '').trim()
 
+const allowNavigation = [
+  '*.google.com',
+  '*.youtube.com',
+  '*.googleusercontent.com',
+  '*.gstatic.com',
+  '*.supabase.co',
+  'fran-pos.vercel.app',
+]
+
 /**
  * Fran POS Android shell wraps the existing Vite web build in dashboard/dist.
  * Web (Vercel) stays unchanged; APK builds sync that same dist into android/.
@@ -16,13 +25,15 @@ const config: CapacitorConfig = {
   server: liveUrl
     ? {
         url: liveUrl,
-        cleartext: true,
-        androidScheme: 'http',
+        cleartext: liveUrl.startsWith('http://'),
+        androidScheme: liveUrl.startsWith('https://') ? 'https' : 'http',
+        allowNavigation,
       }
     : {
         // Serve the SPA over https in the WebView so Secure Context APIs work
         // (camera / barcode scan via getUserMedia, etc.).
         androidScheme: 'https',
+        allowNavigation,
       },
   android: {
     allowMixedContent: false,

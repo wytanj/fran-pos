@@ -16,12 +16,22 @@ public class MainActivity extends BridgeActivity {
     super.onCreate(savedInstanceState);
     // Galaxy Tab store registers stay awake on the counter next to the S700.
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    requestCameraIfNeeded();
+    requestRuntimePermissions();
   }
 
-  private void requestCameraIfNeeded() {
+  private void requestRuntimePermissions() {
+    java.util.ArrayList<String> needed = new java.util.ArrayList<>();
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-      ActivityCompat.requestPermissions(this, new String[] { Manifest.permission.CAMERA }, CAMERA_PERMISSION_REQUEST);
+      needed.add(Manifest.permission.CAMERA);
+    }
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+      needed.add(Manifest.permission.ACCESS_FINE_LOCATION);
+    }
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+      needed.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+    }
+    if (!needed.isEmpty()) {
+      ActivityCompat.requestPermissions(this, needed.toArray(new String[0]), CAMERA_PERMISSION_REQUEST);
     }
   }
 }

@@ -117,7 +117,7 @@ export function PosShell() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-cream text-foreground">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-cream text-foreground">
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-white px-2 shadow-warm-xs sm:px-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -287,6 +287,7 @@ export function PosShell() {
           <Outlet />
         </main>
       </div>
+      <div id="fran-overlay-root" className="hidden" />
     </div>
   )
 }

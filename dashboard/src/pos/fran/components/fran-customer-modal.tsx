@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Loader2, QrCode, Search, UserPlus, UsersRound } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Loader2, Plane, QrCode, Search, UserPlus, UsersRound, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,7 +78,7 @@ function offlineMemberSession(raw: string, method: FranMemberLookupMethod): Fran
   }
 }
 
-function offlineExceptionSession(mode: 'non_member' | 'tourist'): FranCounterSession {
+export function createFranExceptionSession(mode: 'non_member' | 'tourist'): FranCounterSession {
   return {
     sessionId: offlineSessionId(mode),
     mode,
@@ -88,8 +87,8 @@ function offlineExceptionSession(mode: 'non_member' | 'tourist'): FranCounterSes
     pointsExpiryAlert: null,
     startedAt: new Date().toISOString(),
     expiresAt: addMinutesIso(45),
-    prompts: [`${mode === 'tourist' ? 'Tourist' : 'Non-member'} selected while Fran CRM is offline.`],
-    warnings: ['Fran CRM offline. Sale can continue without loyalty decisions.'],
+    prompts: [`${mode === 'tourist' ? 'Tourist' : 'Non-member'} exception selected.`],
+    warnings: [],
   }
 }
 
@@ -164,20 +163,9 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
     }
   }
 
-  const chooseException = async (mode: 'non_member' | 'tourist') => {
-    setLoading(true)
-    setError(null)
-    try {
-      const session = await client.getCounterSession({ mode })
-      onResolved(session, null)
-      close()
-    } catch {
-      const session = offlineExceptionSession(mode)
-      onResolved(session, null)
-      close()
-    } finally {
-      setLoading(false)
-    }
+  const chooseException = (mode: 'non_member' | 'tourist') => {
+    onResolved(createFranExceptionSession(mode), null)
+    close()
   }
 
   const continueOfflineMember = () => {
@@ -224,18 +212,17 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
-      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-xl overflow-y-auto p-4 sm:w-full" onClose={close}>
-        <DialogHeader>
-          <DialogTitle>Fran member lookup</DialogTitle>
-        </DialogHeader>
+  if (!open) return null
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-card">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <h2 className="font-display text-xl font-bold tracking-tight">Fran member lookup</h2>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              autoFocus
               className="pl-9"
               value={query}
               placeholder="Scan QR, barcode, member number, or mobile"
@@ -248,23 +235,34 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
               }}
             />
           </div>
-          <Button onClick={() => void runResolve(query)} disabled={loading || !query.trim()}>
+          <Button type="button" onClick={() => void runResolve(query)} disabled={loading || !query.trim()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             Search
           </Button>
         </div>
 
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <Button variant="outline" className="border-line bg-yellow-soft text-brown hover:bg-yellow" onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}>
-            <QrCode className="h-4 w-4" /> QR demo
-          </Button>
-          <Button variant="outline" className="border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100" onClick={() => void chooseException('non_member')}>
-            <UsersRound className="h-4 w-4" /> Non-member
-          </Button>
-          <Button variant="outline" className="border-line bg-white text-ink hover:bg-surface-sunken" onClick={() => void chooseException('tourist')}>
-            <UsersRound className="h-4 w-4" /> Tourist
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-2 w-full border-line bg-yellow-soft text-brown hover:bg-yellow"
+          onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}
+        >
+          <QrCode className="h-4 w-4" /> QR demo
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-2 w-full border-line bg-yellow-soft text-brown hover:bg-yellow"
+          onClick={() => chooseException('tourist')}
+        >
+          <Plane className="h-4 w-4" /> Tourist
+        </Button>
+        <Button type="button" variant="outline" className="mt-2 w-full" onClick={() => chooseException('non_member')}>
+          <UsersRound className="h-4 w-4" /> Non-member
+        </Button>
+        <Button type="button" variant="outline" className="mt-2 w-full" onClick={close}>
+          <X className="h-4 w-4" /> Close
+        </Button>
 
         {error && (
           <div className="mt-3 rounded-sm border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
@@ -379,8 +377,8 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
             </form>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   )
 }
 

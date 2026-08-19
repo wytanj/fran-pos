@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 function amountToStripeCents(amount) {
   if (!Number.isFinite(amount) || amount < 0) return 0
@@ -24,11 +25,13 @@ function toStripeTerminalConfig(settings) {
 }
 
 function preferredStoreChargeMode(config, tapReady) {
-  if (!config?.enabled) return null
-  if (config.default_reader === 'tap_to_pay' && tapReady) return 'stripe_tap'
-  if (config.s700_reader_id) return 'stripe_s700'
-  if (tapReady) return 'stripe_tap'
-  return null
+  if (config?.enabled) {
+    if (config.default_reader === 'tap_to_pay' && tapReady) return 'stripe_tap'
+    if (config.s700_reader_id) return 'stripe_s700'
+    if (tapReady) return 'stripe_tap'
+    return null
+  }
+  return tapReady ? 'stripe_tap' : null
 }
 
 function stripeS700Ready(config) {
@@ -39,8 +42,8 @@ function visiblePaymentModes({ stripeEnabled, s700Ready, tapReady }) {
   const modes = ['cash', 'stripe_s700', 'stripe_tap', 'card', 'paynow']
   return modes.filter((id) => {
     if (id === 'stripe_s700') return stripeEnabled && s700Ready
-    if (id === 'stripe_tap') return stripeEnabled && tapReady
-    if (id === 'card') return !stripeEnabled
+    if (id === 'stripe_tap') return tapReady
+    if (id === 'card') return !stripeEnabled && !tapReady
     return true
   })
 }
@@ -80,6 +83,7 @@ test('S700 is ready only when enabled and a reader id exists', () => {
 
 test('payment sheet hides simulated card when Stripe is on', () => {
   assert.deepEqual(visiblePaymentModes({ stripeEnabled: false, s700Ready: false, tapReady: false }), ['cash', 'card', 'paynow'])
+  assert.deepEqual(visiblePaymentModes({ stripeEnabled: false, s700Ready: false, tapReady: true }), ['cash', 'stripe_tap', 'paynow'])
   assert.deepEqual(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: false }), ['cash', 'stripe_s700', 'paynow'])
   assert.deepEqual(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: true }), ['cash', 'stripe_s700', 'stripe_tap', 'paynow'])
 })
@@ -95,5 +99,42 @@ test('Galaxy Tab store kit charges the S700 first', () => {
   }
   assert.equal(preferredStoreChargeMode(config, true), 'stripe_s700')
   assert.equal(preferredStoreChargeMode({ ...config, default_reader: 'tap_to_pay' }, true), 'stripe_tap')
+  assert.equal(preferredStoreChargeMode({ ...config, s700_reader_id: '' }, true), 'stripe_tap')
+  assert.equal(preferredStoreChargeMode(null, true), 'stripe_tap')
   assert.equal(toStripeTerminalConfig({ pos_config: { stripe_terminal: { enabled: true, s700_reader_id: 'tmr_1' } } }).default_reader, 's700')
+})
+
+test('tap to pay collects on the device NFC reader', () => {
+  const collect = readFileSync(new URL('../dashboard/src/pos/lib/stripe-collect.ts', import.meta.url), 'utf8')
+  const tap = readFileSync(new URL('../dashboard/src/pos/lib/stripe-tap-to-pay.ts', import.meta.url), 'utf8')
+  const api = readFileSync(new URL('../dashboard/src/pos/lib/stripe-terminal-api.ts', import.meta.url), 'utf8')
+  assert.match(collect, /collectTapToPay/)
+  assert.match(collect, /ensureTapToPayReady/)
+  assert.ok(collect.indexOf('ensureTapToPayReady') < collect.indexOf("Creating the Stripe test charge"))
+  assert.doesNotMatch(collect, /ensureSimulatedReader/)
+  assert.match(tap, /initialize\(\{ isTest: false \}\)/)
+  assert.doesNotMatch(tap, /initialize\(\{ isTest: true \}\)/)
+  assert.match(tap, /TerminalConnectTypes.TapToPay/)
+  assert.match(tap, /DiscoveredReaders/)
+  assert.match(tap, /getConnectedReader/)
+  assert.match(tap, /prefetchedConnectionToken/)
+  assert.match(tap, /2\/5 Requesting a Stripe connection token/)
+  assert.match(tap, /3\/5 Checking the Tap to Pay plugin/)
+  assert.match(tap, /3\/5 Starting Stripe on this phone/)
+  assert.match(tap, /import \{ StripeTerminal \} from '@capgo\/capacitor-stripe-terminal'/)
+  assert.doesNotMatch(tap, /import\('@capgo\/capacitor-stripe-terminal'\)/)
+  assert.match(tap, /logTapToPayTrace/)
+  // The Capacitor plugin proxy fabricates a `then` method, so resolving a promise
+  // with it hangs forever. Never await it or return it from an async function.
+  assert.doesNotMatch(tap, /await terminalApi\(/)
+  assert.doesNotMatch(tap, /return terminal\b/)
+  assert.match(tap, /function terminalApi\(\)/)
+  assert.doesNotMatch(tap, /async function terminalApi/)
+  assert.match(tap, /cancelDiscoverReaders/)
+  assert.match(tap, /Developer options must stay off/)
+  assert.match(api, /Promise\.race\(\[fetchPromise, timeoutPromise\]\)/)
+  assert.match(api, /clearStripeAuthCache/)
+  const server = readFileSync(new URL('../api/stripe-terminal.ts', import.meta.url), 'utf8')
+  assert.match(server, /stripe_terminal_action/)
+  assert.match(server, /Could not verify the Google session/)
 })

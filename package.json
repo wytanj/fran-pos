@@ -22,6 +22,8 @@
     "db:migrate:status": "node scripts/migrate.mjs --status"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
     "@capgo/capacitor-stripe-terminal": "^8.0.3",
     "@vercel/node": "^5.9.9",
     "postgres": "^3.4.9",
