@@ -134,12 +134,14 @@ export function createStripePaymentIntent(input: {
   currency?: string
   description?: string
   metadata?: Record<string, string>
+  paymentMethodTypes?: string[]
 }) {
   return callStripeTerminal<{ payment_intent: StripePaymentIntentResult }>('create_payment_intent', {
     amount: amountToStripeCents(input.amount),
     currency: stripeCurrencyCode(input.currency),
     description: input.description || 'Fran POS in-person sale',
     metadata: input.metadata || {},
+    ...(input.paymentMethodTypes?.length ? { payment_method_types: input.paymentMethodTypes } : {}),
   })
 }
 
@@ -253,13 +255,18 @@ export function stripeTerminalHealth() {
   return callStripeTerminal<{ ok: boolean; livemode: boolean; simulated_ready: boolean }>('health')
 }
 
-export async function waitForS700Action(readerId: string, options?: { timeoutMs?: number; intervalMs?: number }) {
+export async function waitForS700Action(readerId: string, options?: {
+  timeoutMs?: number
+  intervalMs?: number
+  shouldStop?: () => boolean
+}) {
   const timeoutMs = options?.timeoutMs ?? 120_000
   const intervalMs = options?.intervalMs ?? 1500
   const started = Date.now()
   let last: StripeReaderStatus | null = null
 
   while (Date.now() - started < timeoutMs) {
+    if (options?.shouldStop?.()) throw new Error('S700 payment canceled')
     const { reader } = await getStripeReaderStatus(readerId)
     last = reader
     if (reader.action_status === 'succeeded') return reader

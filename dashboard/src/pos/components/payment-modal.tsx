@@ -22,7 +22,7 @@ import { CARD_TYPES, PAYMENT_MODES, STORE, type PaymentModeId } from '@/pos/data
 import { usePos } from '@/pos/lib/pos-context'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
-import { cancelStripeCollection, collectStripeInPerson } from '@/pos/lib/stripe-collect'
+import { cancelStripeCollection, collectS700Qr, collectStripeInPerson, S700QrStartError } from '@/pos/lib/stripe-collect'
 import { resolveTapToPayConfig, tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import {
   cancelStripePaymentIntent,
@@ -79,6 +79,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     amount: number
     pi: StripePaymentIntentResult | null
     qrPng: string
+    onReader: boolean
     startedAt: number
     expiresAt: number
     phase: QrPaymentPhase
@@ -244,12 +245,86 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     const methodLabel = modeId === 'wechat' ? 'WeChat Pay' : 'PayNow'
     const chargeAmount = Math.min(amountNum || remaining, Math.max(remaining, 0))
     setTerminalError('')
+
+    // S700-first registers show the QR on the reader's customer-facing screen.
+    // If the reader can't start (offline, simulated, not configured) we fall
+    // back to the on-screen QR below without having charged anything.
+    const readerFirst = Boolean(
+      stripe &&
+      stripeS700Ready(stripe) &&
+      !stripe.simulated &&
+      preferredStoreChargeMode(stripe, tapToPaySupported()) === 'stripe_s700',
+    )
+    if (readerFirst) {
+      setQrSession({
+        method,
+        modeId,
+        amount: chargeAmount,
+        pi: null,
+        qrPng: '',
+        onReader: true,
+        startedAt: Date.now(),
+        expiresAt: Date.now() + QR_VALID_MS,
+        phase: 'creating',
+      })
+      try {
+        logTapToPayTrace(`qr ${method} via s700 for ${chargeAmount}`)
+        const finalIntent = await collectS700Qr({
+          config: stripe!,
+          method,
+          amount: chargeAmount,
+          currency: STORE.currency,
+          description: `Fran POS ${STORE.code} ${methodLabel}`,
+          metadata: { store_code: STORE.code, register: '01' },
+          onDisplaying: () => {
+            setQrSession((s) => s && {
+              ...s,
+              startedAt: Date.now(),
+              expiresAt: Date.now() + QR_VALID_MS,
+              phase: 'reader',
+            })
+          },
+          shouldStop: () => gen !== chargeGen.current,
+        })
+        if (gen !== chargeGen.current) return
+        logTapToPayTrace(`qr ${method} paid on s700 ${finalIntent.id}`)
+        setQrSession((s) => s && { ...s, phase: 'approved' })
+        scheduleTerminalStep(() => {
+          commit(methodLabel, stripeCentsToAmount(finalIntent.amount) || chargeAmount, finalIntent.id, {
+            provider: 'stripe',
+            providerRef: finalIntent.id,
+            status: 'captured',
+            providerMetadata: {
+              adapter: modeId,
+              via: 's700',
+              payment_intent_id: finalIntent.id,
+              charge_id: finalIntent.latest_charge || null,
+            },
+          })
+        }, 1600)
+        return
+      } catch (error) {
+        if (gen !== chargeGen.current) return
+        if (!(error instanceof S700QrStartError)) {
+          const message =
+            error instanceof Error && error.message.trim() ? error.message : `${methodLabel} payment failed`
+          logTapToPayTrace(`qr ${method} s700 error: ${message}`)
+          stripeBusy.current = false
+          setQrSession((s) => s && { ...s, phase: 'error', error: message })
+          onPaymentFailed?.(`${modeId} payment_failed: ${message}`)
+          return
+        }
+        logTapToPayTrace(`qr ${method} s700 unavailable, using on-screen QR: ${error.message}`)
+      }
+    }
+
     setQrSession({
       method,
       modeId,
       amount: chargeAmount,
       pi: null,
       qrPng: '',
+      onReader: false,
       startedAt: Date.now(),
       expiresAt: Date.now() + QR_VALID_MS,
       phase: 'creating',
@@ -312,7 +387,9 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   // cashier can hand a fresh QR to the customer in one tap.
   const expireQr = () => {
     const current = qrSession
-    if (!current || current.phase !== 'waiting') return
+    if (!current || (current.phase !== 'waiting' && current.phase !== 'reader')) return
+    // For reader QRs, bumping the generation stops the poll loop and
+    // collectS700Qr's cleanup cancels the reader action and the intent.
     chargeGen.current += 1
     stripeBusy.current = false
     if (current.pi?.id) void cancelStripePaymentIntent(current.pi.id).catch(() => {})

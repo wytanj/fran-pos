@@ -142,10 +142,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         throw new Error('Amount must be at least 50 cents for card present')
       }
       const currency = String(body.currency || 'sgd').toLowerCase()
+      // The reader can also display QR methods (PayNow / WeChat Pay) on its own
+      // screen; both require automatic capture, which this intent already uses.
+      const allowedTypes = new Set(['card_present', 'paynow', 'wechat_pay'])
+      const requestedTypes = Array.isArray(body.payment_method_types)
+        ? body.payment_method_types.map(String).filter((t: string) => allowedTypes.has(t))
+        : []
       const pi = await stripe.paymentIntents.create({
         amount,
         currency,
-        payment_method_types: ['card_present'],
+        payment_method_types: requestedTypes.length ? requestedTypes : ['card_present'],
         capture_method: 'automatic',
         description: String(body.description || 'Fran POS in-person sale'),
         metadata: {

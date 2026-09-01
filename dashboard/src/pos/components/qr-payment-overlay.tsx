@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
 import type { StripeQrMethod } from '@/pos/lib/stripe-terminal-api'
 
-export type QrPaymentPhase = 'creating' | 'waiting' | 'approved' | 'expired' | 'error'
+export type QrPaymentPhase = 'creating' | 'waiting' | 'reader' | 'approved' | 'expired' | 'error'
 
 const METHOD_COPY: Record<StripeQrMethod, { name: string; instruction: string }> = {
   paynow: { name: 'PayNow', instruction: 'Scan with any Singapore banking app' },
@@ -48,7 +48,7 @@ export function QrPaymentOverlay(props: QrPaymentOverlayProps) {
   const remainSec = Math.floor((remainMs % 60_000) / 1000)
 
   useEffect(() => {
-    if (props.phase !== 'waiting' || remainMs > 0 || expiredNotified.current) return
+    if ((props.phase !== 'waiting' && props.phase !== 'reader') || remainMs > 0 || expiredNotified.current) return
     expiredNotified.current = true
     props.onExpired()
   }, [props, remainMs])
@@ -72,7 +72,15 @@ export function QrPaymentOverlay(props: QrPaymentOverlayProps) {
           </p>
 
           <div className="mt-6 rounded-2xl border bg-card p-6 shadow-sm">
-            {props.phase === 'creating' || !props.qrPng ? (
+            {props.phase === 'reader' ? (
+              <div className="flex h-[min(60vw,320px)] w-[min(60vw,320px)] flex-col items-center justify-center text-center">
+                <QrCode className="h-16 w-16 text-muted-foreground" />
+                <p className="mt-5 text-lg font-semibold">QR is on the card reader</p>
+                <p className="mt-2 max-w-[240px] text-sm text-muted-foreground">
+                  Scan the code shown on the S700 screen
+                </p>
+              </div>
+            ) : props.phase === 'creating' || !props.qrPng ? (
               <div className="flex h-[min(60vw,320px)] w-[min(60vw,320px)] flex-col items-center justify-center">
                 <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                 <p className="mt-4 text-sm text-muted-foreground">Creating the {copy.name} QR…</p>
@@ -89,7 +97,7 @@ export function QrPaymentOverlay(props: QrPaymentOverlayProps) {
             )}
           </div>
 
-          {props.phase === 'waiting' && (
+          {(props.phase === 'waiting' || props.phase === 'reader') && (
             <>
               <p className="mt-5 text-lg font-medium">{copy.instruction}</p>
               <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
