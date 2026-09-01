@@ -67,11 +67,13 @@ function publishApks() {
 }
 
 // Use cwd=android/ + relative wrapper so user home paths with spaces don't break.
+// On Windows, run the .bat through cmd with an explicit .\ prefix: bare names
+// fail when NoDefaultCurrentDirectoryInExePath is set, and spawn's shell:true
+// with a pre-quoted command string trips cmd's quote stripping.
 const child = isWin
-  ? spawn(`"${gradlewName}" ${task}`, {
+  ? spawn('cmd.exe', ['/d', '/s', '/c', `.\\${gradlewName} ${task}`], {
       cwd: androidDir,
       stdio: 'inherit',
-      shell: true,
       env: process.env,
     })
   : spawn(path.join(androidDir, gradlewName), [task], {
