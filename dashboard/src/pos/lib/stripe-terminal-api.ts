@@ -15,6 +15,7 @@ export type StripeTerminalAction =
   | 'list_locations'
   | 'create_location'
   | 'create_qr_payment_intent'
+  | 'collect_inputs'
   | 'client_log'
   | 'health'
 
@@ -27,6 +28,13 @@ export interface StripePaymentIntentResult {
   latest_charge?: string | null
 }
 
+export interface StripeCollectedInput {
+  type: string
+  skipped: boolean
+  selection_id: string | null
+  value: string | null
+}
+
 export interface StripeReaderStatus {
   id: string
   label: string | null
@@ -37,6 +45,13 @@ export interface StripeReaderStatus {
   failure_code?: string | null
   failure_message?: string | null
   payment_intent_id?: string | null
+  collected_inputs?: StripeCollectedInput[] | null
+}
+
+export type S700DemoForm = 'rewards_optin' | 'phone' | 'rating' | 'receipt_email'
+
+export function collectS700Inputs(readerId: string, form: S700DemoForm) {
+  return callStripeTerminal<{ reader: StripeReaderStatus }>('collect_inputs', { readerId, form })
 }
 
 export interface StripeLocationRow {

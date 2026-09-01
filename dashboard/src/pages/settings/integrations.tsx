@@ -11,10 +11,14 @@ import { useSaveCustomerEmailConnector } from '@/hooks/use-customer-email-connec
 import { useSaveSkumsConnector, useSkumsConnector } from '@/hooks/use-skums-connector'
 import { useSaveStripeConnector, useStripeConnector } from '@/hooks/use-stripe-connector'
 import {
+  cancelStripeReader,
+  collectS700Inputs,
   createStripeLocation,
   listStripeLocations,
   registerStripeReader,
   stripeTerminalHealth,
+  waitForS700Action,
+  type S700DemoForm,
 } from '@/pos/lib/stripe-terminal-api'
 import { maskCustomerEmailToken } from '@/pos/lib/customer-email-connector'
 import { listSkumsPosCatalog } from '@/pos/lib/skums-client'
@@ -64,6 +68,8 @@ export default function IntegrationsPage() {
     registration_code: '',
   })
   const [stripeHealth, setStripeHealth] = useState('')
+  const [readerDemoBusy, setReaderDemoBusy] = useState(false)
+  const [readerDemoResult, setReaderDemoResult] = useState('')
   const [franForm, setFranForm] = useState(() => {
     if (typeof window === 'undefined') {
       return {
@@ -207,6 +213,33 @@ export default function IntegrationsPage() {
       toast.success(`Registered reader ${reader.id}`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not register reader')
+    }
+  }
+
+  const handleReaderDemo = async (form: S700DemoForm, label: string) => {
+    if (readerDemoBusy) return
+    const readerId = stripeForm.s700_reader_id.trim()
+    if (!readerId) {
+      toast.error('Set the S700 reader ID first')
+      return
+    }
+    setReaderDemoBusy(true)
+    setReaderDemoResult(`Showing "${label}" on the S700 — hand the reader to the customer…`)
+    try {
+      await collectS700Inputs(readerId, form)
+      const reader = await waitForS700Action(readerId, { timeoutMs: 120_000 })
+      const parts = (reader.collected_inputs || []).map((inp) =>
+        inp.skipped ? `${inp.type}: skipped` : `${inp.type}: ${inp.value ?? '(no value)'}`,
+      )
+      setReaderDemoResult(parts.length ? `Customer answered → ${parts.join(' · ')}` : 'Completed, no inputs returned')
+      toast.success('S700 demo completed')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'S700 demo failed'
+      setReaderDemoResult(message)
+      toast.error(message)
+      void cancelStripeReader(readerId).catch(() => {})
+    } finally {
+      setReaderDemoBusy(false)
     }
   }
 
@@ -413,6 +446,30 @@ export default function IntegrationsPage() {
               {stripeHealth && <p className="mt-1 text-xs text-muted-foreground">{stripeHealth}</p>}
             </div>
           )}
+
+          <div className="rounded-lg border p-3">
+            <Label>Reader demos — customer input on the S700</Label>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Sends an on-reader form to the S700 so the customer can answer on its screen. Results appear here.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" disabled={readerDemoBusy} onClick={() => void handleReaderDemo('rewards_optin', 'Join Fran Rewards?')}>
+                Rewards opt-in
+              </Button>
+              <Button variant="outline" size="sm" disabled={readerDemoBusy} onClick={() => void handleReaderDemo('phone', 'Mobile number')}>
+                Phone capture
+              </Button>
+              <Button variant="outline" size="sm" disabled={readerDemoBusy} onClick={() => void handleReaderDemo('rating', 'How was your visit?')}>
+                Visit rating
+              </Button>
+              <Button variant="outline" size="sm" disabled={readerDemoBusy} onClick={() => void handleReaderDemo('receipt_email', 'E-receipt email')}>
+                E-receipt email
+              </Button>
+            </div>
+            {readerDemoResult && (
+              <p className="mt-3 rounded-sm bg-secondary px-3 py-2 text-sm">{readerDemoResult}</p>
+            )}
+          </div>
 
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => void handleStripeHealth()}>Check Stripe backend</Button>

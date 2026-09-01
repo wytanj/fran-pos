@@ -82,7 +82,22 @@ function mapReader(input: Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader
   const reader = assertReader(input)
   const action = reader.action
   const processPi = action && 'process_payment_intent' in action ? action.process_payment_intent : null
+  const collect = action?.type === 'collect_inputs' && 'collect_inputs' in action ? action.collect_inputs : null
   return {
+    collected_inputs: collect
+      ? (collect.inputs || []).map((inp) => ({
+          type: inp.type,
+          skipped: Boolean(inp.skipped),
+          selection_id: inp.selection?.id ?? null,
+          value:
+            inp.selection?.text ??
+            inp.phone?.value ??
+            inp.email?.value ??
+            inp.numeric?.value ??
+            inp.text?.value ??
+            (inp.signature?.value ? '(signature captured)' : null),
+        }))
+      : null,
     id: reader.id,
     label: reader.label,
     status: reader.status,
@@ -279,6 +294,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         registration_code: 'simulated-wpe',
         location: locationId,
         label: 'Fran simulated test reader',
+      })
+      return json(res, 200, { reader: mapReader(reader) })
+    }
+
+    if (action === 'collect_inputs') {
+      const readerId = String(body.readerId || body.reader_id || '').trim()
+      if (!readerId) throw new Error('Reader id is required')
+      const form = String(body.form || '').trim()
+      const forms: Record<string, Stripe.Terminal.ReaderCollectInputsParams.Input[]> = {
+        // Customers see big stacked buttons; the cashier's POS carries the
+        // detail. Keep titles short, skip descriptions, and cap choices at
+        // 2-3 so Stripe renders each button as large as possible.
+        rewards_optin: [
+          {
+            type: 'selection',
+            custom_text: {
+              title: 'Join Fran Rewards?',
+              skip_button: 'Skip',
+            },
+            selection: {
+              choices: [
+                { id: 'join', style: 'primary', text: 'Yes' },
+                { id: 'decline', style: 'secondary', text: 'No' },
+              ],
+            },
+          },
+        ],
+        phone: [
+          {
+            type: 'phone',
+            custom_text: {
+              title: 'Your mobile number',
+              submit_button: 'Done',
+            },
+          },
+        ],
+        rating: [
+          {
+            type: 'selection',
+            custom_text: {
+              title: 'Rate your visit',
+              skip_button: 'Skip',
+            },
+            selection: {
+              choices: [
+                { id: 'great', style: 'primary', text: 'Great' },
+                { id: 'okay', style: 'secondary', text: 'Okay' },
+                { id: 'poor', style: 'secondary', text: 'Poor' },
+              ],
+            },
+          },
+        ],
+        receipt_email: [
+          {
+            type: 'email',
+            custom_text: {
+              title: 'Email for e-receipt',
+              submit_button: 'Send',
+            },
+          },
+        ],
+      }
+      const inputs = forms[form]
+      if (!inputs) throw new Error(`Unknown collect_inputs form: ${form || '(missing)'}`)
+      const reader = await stripe.terminal.readers.collectInputs(readerId, {
+        inputs,
+        metadata: { source: 'fran-pos', form },
       })
       return json(res, 200, { reader: mapReader(reader) })
     }
