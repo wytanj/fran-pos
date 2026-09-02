@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, CloudDownload, KeyRound, LogOut, PackagePlus, Shield, ShoppingBag, User, UserCheck, Wifi } from 'lucide-react'
+import { AlertCircle, KeyRound, LogOut, Shield, ShoppingBag, User, UserCheck, Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Numpad } from '@/pos/components/numpad'
 import { usePos } from '@/pos/lib/pos-context'
@@ -282,18 +282,6 @@ export default function PosLogin() {
                       </Button>
                     </div>
 
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Link to="/products?new=1">
-                        <Button variant="outline" className="h-9 w-full text-xs">
-                          <PackagePlus className="h-4 w-4" /> Create Product
-                        </Button>
-                      </Link>
-                      <Link to="/products?import=skums">
-                        <Button variant="outline" className="h-9 w-full text-xs">
-                          <CloudDownload className="h-4 w-4" /> Import SKUMS
-                        </Button>
-                      </Link>
-                    </div>
                   </>
                 )}
                 <Button
