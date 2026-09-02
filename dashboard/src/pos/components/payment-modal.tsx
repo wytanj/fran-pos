@@ -107,11 +107,20 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const remaining = totals.balance
   const amountNum = parseFloat(amount) || 0
 
+  // Auto-pick the store's preferred method once per modal open. The ref stops
+  // it re-firing after "Change method" clears the mode — without it the
+  // preferred mode is forced straight back and the tile grid is unreachable.
+  const autoPickedMode = useRef(false)
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      autoPickedMode.current = false
+      return
+    }
+    if (autoPickedMode.current) return
     if (mode || payments.length > 0) return
     const preferred = preferredStoreChargeMode(stripe, tapToPaySupported())
     if (preferred) {
+      autoPickedMode.current = true
       setMode(preferred)
       setAmount(Math.max(remaining, 0).toFixed(2))
     }
