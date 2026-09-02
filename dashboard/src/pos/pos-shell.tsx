@@ -208,7 +208,10 @@ export function PosShell() {
             role="dialog"
             aria-modal="true"
             aria-label="POS menu"
-            className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-nav"
+            // fixed overlay escapes the root's safe-area padding, so re-apply it
+            // here: without it the close button sits under the status bar and
+            // taps never reach the app (Android 15 edge-to-edge).
+            className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-nav pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
           >
             <div className="flex items-center justify-between border-b px-3 py-3">
               <div className="min-w-0">
