@@ -48,7 +48,13 @@ export interface StripeReaderStatus {
   collected_inputs?: StripeCollectedInput[] | null
 }
 
-export type S700DemoForm = 'rewards_optin' | 'phone' | 'rating' | 'receipt_email'
+export type S700DemoForm =
+  | 'rewards_optin'
+  | 'phone'
+  | 'rating'
+  | 'receipt_email'
+  | 'member_country'
+  | 'intl_phone'
 
 export function collectS700Inputs(readerId: string, form: S700DemoForm) {
   return callStripeTerminal<{ reader: StripeReaderStatus }>('collect_inputs', { readerId, form })

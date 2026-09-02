@@ -330,6 +330,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           },
         ],
+        // Two-step international lookup: the built-in phone widget is locked to
+        // the location country (+65), so country choice is a big two-button
+        // selection, and international numbers come in as free text.
+        member_country: [
+          {
+            type: 'selection',
+            custom_text: {
+              title: 'Member lookup',
+              skip_button: 'Not a member',
+            },
+            selection: {
+              choices: [
+                { id: 'sg', style: 'primary', text: 'Singapore +65' },
+                { id: 'intl', style: 'secondary', text: 'International' },
+              ],
+            },
+          },
+        ],
+        intl_phone: [
+          {
+            type: 'text',
+            custom_text: {
+              title: 'Number with country code',
+              submit_button: 'Done',
+            },
+          },
+        ],
         rating: [
           {
             type: 'selection',
