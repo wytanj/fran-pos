@@ -72,6 +72,8 @@ export const USERS: PosUser[] = [
 export interface Product {
   id: string
   sku: string
+  /** Scannable codes (EAN/UPC/GTIN or the DB barcode) for instant local matching. */
+  barcodes?: string[]
   name: string
   category: string
   storeLocationCode?: string | null

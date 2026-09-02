@@ -226,6 +226,8 @@ function toPosProduct(item: SkumsPosCatalogItem): Product {
   return {
     id: item.id,
     sku: item.sku,
+    barcodes: [item.identifiers?.ean, item.identifiers?.upc, item.identifiers?.gtin]
+      .filter((code): code is string => Boolean(code)),
     name: item.display_name || item.title,
     category: item.category_name || 'Uncategorized',
     storeLocationCode: normalizeStoreStorageLocationCode(item.storage_location_code) ?? storeLocationCodeFromMetadata(item.metadata),
@@ -263,6 +265,7 @@ function toLiveProduct(product: DbProduct): Product {
   return {
     id: product.id,
     sku: product.sku || product.barcode || product.id.slice(0, 8),
+    barcodes: product.barcode ? [product.barcode] : [],
     name: product.name,
     category: product.category?.name || 'Uncategorized',
     storeLocationCode: storeLocationCodeFromMetadata(product.metadata),
@@ -304,6 +307,7 @@ function productMatchesEntryQuery(product: Product, normalizedQuery: string) {
   return (
     product.name.toLowerCase().includes(normalizedQuery) ||
     product.sku.toLowerCase().includes(normalizedQuery) ||
+    (product.barcodes?.some((code) => code.toLowerCase().includes(normalizedQuery)) ?? false) ||
     (product.storeLocationCode?.toLowerCase().includes(normalizedQuery) ?? false)
   )
 }
@@ -586,6 +590,17 @@ export default function SalePage() {
     const bySku = new Map<string, Product>()
     for (const product of catalog) bySku.set(product.sku, product)
     return bySku
+  }, [catalog])
+  // Every scannable code (sku, barcodes, id) lowercased -> product, so a scan
+  // resolves in one map hit instead of falling through to the remote resolver.
+  const catalogProductByCode = useMemo(() => {
+    const byCode = new Map<string, Product>()
+    for (const product of catalog) {
+      byCode.set(product.id.toLowerCase(), product)
+      byCode.set(product.sku.toLowerCase(), product)
+      for (const code of product.barcodes ?? []) byCode.set(code.toLowerCase(), product)
+    }
+    return byCode
   }, [catalog])
   const franBasketLines = useMemo(
     () => cart
@@ -984,11 +999,14 @@ export default function SalePage() {
     !promoDismissed &&
     cart.filter((l) => l.qty > 0 && catalog.find((p) => p.sku === l.sku)?.category === ACTIVE_PROMOTION.category).length >= 2
 
-  const focusProductEntry = useCallback(() => {
+  const focusProductEntry = useCallback((options?: { select?: boolean }) => {
     if (typeof window === 'undefined') return
     window.setTimeout(() => {
       if (franCustomerOpenRef.current) return
       productEntryRef.current?.focus()
+      // Select the leftover text after a miss so the next scan or keystroke
+      // replaces it — hardware scanners type into whatever is selected.
+      if (options?.select) productEntryRef.current?.select()
     }, 0)
   }, [])
 
@@ -1062,9 +1080,7 @@ export default function SalePage() {
     if (!needle) return
     const normalizedNeedle = needle.toLowerCase()
 
-    const exact = catalog.find(
-      (p) => p.sku.toLowerCase() === normalizedNeedle || p.id.toLowerCase() === normalizedNeedle
-    )
+    const exact = catalogProductByCode.get(normalizedNeedle)
     if (exact) {
       addProduct(exact)
       setSearch('')
@@ -1089,7 +1105,7 @@ export default function SalePage() {
 
     if (mode !== 'live' || !skumsConnector) {
       setScanMessage({ tone: 'warning', text: 'No local product matched this product code.' })
-      focusProductEntry()
+      focusProductEntry({ select: true })
       return
     }
 
@@ -1115,13 +1131,14 @@ export default function SalePage() {
         setScanMessage({ tone: 'info', text: 'Multiple SKUMS matches found. Select the correct item.' })
       } else {
         setScanMessage({ tone: 'warning', text: 'No SKUMS match found. Back office will review the scan.' })
+        focusProductEntry({ select: true })
       }
     } catch (err) {
       setScanMessage({
         tone: 'error',
         text: err instanceof Error ? err.message : 'Scan service unavailable. Continue with product entry.',
       })
-      focusProductEntry()
+      focusProductEntry({ select: true })
     } finally {
       setScanResolving(false)
     }
@@ -1924,10 +1941,25 @@ export default function SalePage() {
               aria-label="Product barcode, QR, or SKU"
               enterKeyHint="done"
               autoComplete="off"
-              className="h-11 pl-9 pr-12 text-base sm:text-sm"
+              className={cn('h-11 pl-9 text-base sm:text-sm', search ? 'pr-[5.5rem]' : 'pr-12')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            {search && (
+              <button
+                type="button"
+                aria-label="Clear product entry"
+                title="Clear"
+                onClick={() => {
+                  setSearch('')
+                  setScanMessage(null)
+                  focusProductEntry()
+                }}
+                className="absolute right-11 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
             <button
               type="button"
               className={cn(
