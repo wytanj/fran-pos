@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Loader2, Plane, QrCode, Search, UserPlus, UsersRound, X } from 'lucide-react'
+import { Loader2, Nfc, Plane, QrCode, Search, UserPlus, UsersRound, X } from 'lucide-react'
+import { useStripeConnector } from '@/hooks/use-stripe-connector'
+import { stripeS700Ready } from '@/pos/lib/stripe-connector'
+import { cancelStripeReader, collectS700Inputs, waitForS700Action } from '@/pos/lib/stripe-terminal-api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +29,14 @@ const emptyResolution: FranMemberResolution = {
   input: { raw: '', method: 'manual' },
   matches: [],
   warnings: [],
+}
+
+// The S700 returns E.164 (+6591234567). Fran CRM stores local SG numbers, so
+// strip the +65 country code before lookup; other prefixes pass through as-is.
+function normalizeReaderPhone(value: string) {
+  const compact = value.replace(/[\s-]/g, '')
+  const sg = compact.match(/^\+65(\d{8})$/)
+  return sg ? sg[1] : compact
 }
 
 function lookupMethod(value: string): FranMemberLookupMethod {
@@ -103,6 +114,42 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
     phone: '',
     birthday: '',
   })
+
+  // Customer keys their own mobile on the S700 (server-driven collect_inputs);
+  // staff typing into the search box above stays available the whole time.
+  const { connector: stripeConnector } = useStripeConnector()
+  const s700ReaderId =
+    stripeS700Ready(stripeConnector) && !stripeConnector?.simulated ? stripeConnector!.s700_reader_id : ''
+  const [readerWait, setReaderWait] = useState(false)
+
+  const askOnReader = async () => {
+    if (!s700ReaderId || readerWait) return
+    setReaderWait(true)
+    setError(null)
+    try {
+      await collectS700Inputs(s700ReaderId, 'phone')
+      const reader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
+      const phone = reader.collected_inputs?.find((inp) => inp.type === 'phone')
+      if (!phone || phone.skipped || !phone.value) {
+        setError('Customer skipped the number entry on the S700. Enter it here instead.')
+        return
+      }
+      const normalized = normalizeReaderPhone(phone.value)
+      setQuery(normalized)
+      await runResolve(normalized, 'mobile')
+    } catch (err) {
+      void cancelStripeReader(s700ReaderId).catch(() => {})
+      setError(err instanceof Error ? err.message : 'Could not collect the number on the S700.')
+    } finally {
+      setReaderWait(false)
+    }
+  }
+
+  const cancelReaderAsk = () => {
+    if (!s700ReaderId) return
+    // cancelAction makes the pending waitForS700Action throw, which resets state.
+    void cancelStripeReader(s700ReaderId).catch(() => {})
+  }
 
   const reset = () => {
     setQuery('')
@@ -241,6 +288,17 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
           </Button>
         </div>
 
+        {s700ReaderId && (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 w-full border-line bg-yellow-soft text-brown hover:bg-yellow"
+            onClick={() => (readerWait ? cancelReaderAsk() : void askOnReader())}
+          >
+            {readerWait ? <Loader2 className="h-4 w-4 animate-spin" /> : <Nfc className="h-4 w-4" />}
+            {readerWait ? 'Customer entering number on S700 — tap to cancel' : 'Ask for number on S700'}
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"
