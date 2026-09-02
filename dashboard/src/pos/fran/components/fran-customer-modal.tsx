@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
 import type { Customer } from '@/pos/data/mock'
 import type { FranCrmClient } from '../lib/fran-crm-client'
 import { tierBadgeClass, tierLabel, tierSummaryLine } from '../lib/tier-display'
@@ -30,6 +31,33 @@ const emptyResolution: FranMemberResolution = {
   matches: [],
   warnings: [],
 }
+
+// Staff pick the country on the register (our UI, no widget limits); the S700
+// only collects the number itself. 'other' falls back to free-text entry with
+// the country code typed on the reader.
+const LOOKUP_COUNTRIES: Array<{ dial: string; label: string }> = [
+  { dial: '+65', label: 'Singapore +65' },
+  { dial: '+60', label: 'Malaysia +60' },
+  { dial: '+62', label: 'Indonesia +62' },
+  { dial: '+86', label: 'China +86' },
+  { dial: '+852', label: 'Hong Kong +852' },
+  { dial: '+886', label: 'Taiwan +886' },
+  { dial: '+91', label: 'India +91' },
+  { dial: '+81', label: 'Japan +81' },
+  { dial: '+82', label: 'South Korea +82' },
+  { dial: '+63', label: 'Philippines +63' },
+  { dial: '+66', label: 'Thailand +66' },
+  { dial: '+84', label: 'Vietnam +84' },
+  { dial: '+673', label: 'Brunei +673' },
+  { dial: '+61', label: 'Australia +61' },
+  { dial: '+64', label: 'New Zealand +64' },
+  { dial: '+44', label: 'United Kingdom +44' },
+  { dial: '+1', label: 'US / Canada +1' },
+  { dial: '+49', label: 'Germany +49' },
+  { dial: '+33', label: 'France +33' },
+  { dial: '+971', label: 'UAE +971' },
+  { dial: 'other', label: 'Other country…' },
+]
 
 // The S700 returns E.164 (+6591234567) from the phone widget, and free text
 // from the international entry. Fran CRM stores local SG numbers, so strip the
@@ -122,70 +150,28 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
   const s700ReaderId =
     stripeS700Ready(stripeConnector) && !stripeConnector?.simulated ? stripeConnector!.s700_reader_id : ''
   const [readerWait, setReaderWait] = useState(false)
-  const [readerStep, setReaderStep] = useState('')
+  const [lookupDial, setLookupDial] = useState('+65')
 
-  // Two reader steps: a full-screen country choice (the biggest UI the reader
-  // renders), then either the native +65 keypad or free-text international
-  // entry — Stripe's phone widget itself is locked to the location country.
+  // Staff pick the country on the register; the reader shows exactly one
+  // screen — the +65 phone widget for Singapore, the numeric keypad for a
+  // chosen country (the app prepends the dial code), or free text for Other.
   const askOnReader = async () => {
     if (!s700ReaderId || readerWait) return
     setReaderWait(true)
     setError(null)
     try {
-      setReaderStep('Customer choosing number type on S700…')
-      await collectS700Inputs(s700ReaderId, 'member_country')
-      const countryReader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
-      const choice = countryReader.collected_inputs?.find((inp) => inp.type === 'selection')
-      if (!choice || choice.skipped) {
-        setError('Customer chose "Not a member" on the S700.')
-        return
-      }
-      const intl = choice.selection_id === 'intl'
-
-      // International: paged country buttons (Stripe caps selections at 4 per
-      // screen), then the numeric keypad; "Other" falls back to free text.
-      let countryCode: string | null = null
-      let useFreeText = false
-      if (intl) {
-        const CODES: Record<string, string> = { my: '+60', cn: '+86', id: '+62', in: '+91', jp: '+81', kr: '+82' }
-        let page: 'intl_country_1' | 'intl_country_2' = 'intl_country_1'
-        for (;;) {
-          setReaderStep('Customer choosing country on S700…')
-          await collectS700Inputs(s700ReaderId, page)
-          const pageReader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
-          const pick = pageReader.collected_inputs?.find((inp) => inp.type === 'selection')
-          if (!pick || pick.skipped) {
-            setError('Customer canceled the country choice on the S700.')
-            return
-          }
-          if (pick.selection_id === 'more') {
-            page = 'intl_country_2'
-            continue
-          }
-          if (pick.selection_id === 'other') {
-            useFreeText = true
-          } else {
-            countryCode = CODES[pick.selection_id || ''] || null
-            if (!countryCode) {
-              setError('Unrecognized country choice from the S700.')
-              return
-            }
-          }
-          break
-        }
-      }
-
-      setReaderStep('Customer entering number on S700…')
-      const numberForm = !intl ? 'phone' : useFreeText ? 'intl_phone' : 'intl_number'
-      const entryType = !intl ? 'phone' : useFreeText ? 'text' : 'numeric'
-      await collectS700Inputs(s700ReaderId, numberForm)
+      const sg = lookupDial === '+65'
+      const other = lookupDial === 'other'
+      const form = sg ? 'phone' : other ? 'intl_phone' : 'intl_number'
+      const entryType = sg ? 'phone' : other ? 'text' : 'numeric'
+      await collectS700Inputs(s700ReaderId, form)
       const reader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
       const entry = reader.collected_inputs?.find((inp) => inp.type === entryType)
       if (!entry || entry.skipped || !entry.value) {
         setError('Customer skipped the number entry on the S700. Enter it here instead.')
         return
       }
-      const rawNumber = countryCode ? `${countryCode}${entry.value.replace(/^0+/, '')}` : entry.value
+      const rawNumber = sg || other ? entry.value : `${lookupDial}${entry.value.replace(/^0+/, '')}`
       const normalized = normalizeReaderPhone(rawNumber)
       setQuery(normalized)
       await runResolve(normalized, 'mobile')
@@ -194,7 +180,6 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       setError(err instanceof Error ? err.message : 'Could not collect the number on the S700.')
     } finally {
       setReaderWait(false)
-      setReaderStep('')
     }
   }
 
@@ -342,15 +327,30 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
         </div>
 
         {s700ReaderId && (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-2 w-full border-line bg-yellow-soft text-brown hover:bg-yellow"
-            onClick={() => (readerWait ? cancelReaderAsk() : void askOnReader())}
-          >
-            {readerWait ? <Loader2 className="h-4 w-4 animate-spin" /> : <Nfc className="h-4 w-4" />}
-            {readerWait ? `${readerStep || 'Waiting for S700…'} — tap to cancel` : 'Ask for number on S700'}
-          </Button>
+          <div className="mt-2 flex gap-2">
+            <Select
+              aria-label="Country for S700 number entry"
+              className="h-10 w-40 shrink-0"
+              value={lookupDial}
+              disabled={readerWait}
+              onChange={(e) => setLookupDial(e.target.value)}
+            >
+              {LOOKUP_COUNTRIES.map((c) => (
+                <option key={c.dial} value={c.dial}>{c.label}</option>
+              ))}
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-w-0 flex-1 border-line bg-yellow-soft text-brown hover:bg-yellow"
+              onClick={() => (readerWait ? cancelReaderAsk() : void askOnReader())}
+            >
+              {readerWait ? <Loader2 className="h-4 w-4 animate-spin" /> : <Nfc className="h-4 w-4" />}
+              <span className="truncate">
+                {readerWait ? 'Customer entering number on S700 — tap to cancel' : 'Ask for number on S700'}
+              </span>
+            </Button>
+          </div>
         )}
         <Button
           type="button"
