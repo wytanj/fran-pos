@@ -84,7 +84,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
           type="button"
           aria-label="Close"
           onClick={onClose}
-          className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full text-brown opacity-80 ring-offset-background transition-opacity hover:bg-surface-sunken hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer"
+          className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white text-brown shadow-sm ring-offset-background transition-colors hover:bg-surface-sunken focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>

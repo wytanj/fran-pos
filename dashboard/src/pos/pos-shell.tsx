@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
 import {
   ShoppingBag,
   RefreshCcw,
@@ -107,6 +109,37 @@ export function PosShell() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [mobileNavOpen])
+
+  // Android hardware back: close the top-most overlay first (every dialog and
+  // drawer already closes on Escape), then step back through POS pages, and
+  // only minimize — never exit — at the root sale screen.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let handle: PluginListenerHandle | undefined
+    let removed = false
+    CapacitorApp.addListener('backButton', () => {
+      const overlayHost = document.getElementById('fran-overlay-root')
+      const overlayOpen = Number(overlayHost?.dataset.openCount || '0') > 0
+      const anyDialog = document.querySelector('[role="dialog"]')
+      if (overlayOpen || anyDialog) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+        return
+      }
+      const routerIdx = (window.history.state as { idx?: number } | null)?.idx ?? 0
+      if (window.location.pathname !== '/pos/sale' && routerIdx > 0) {
+        window.history.back()
+        return
+      }
+      void CapacitorApp.minimizeApp()
+    }).then((h) => {
+      if (removed) void h.remove()
+      else handle = h
+    })
+    return () => {
+      removed = true
+      void handle?.remove()
+    }
+  }, [])
 
   if (!posUser) return <Navigate to="/pos/login" replace />
 
