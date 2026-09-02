@@ -107,6 +107,16 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const remaining = totals.balance
   const amountNum = parseFloat(amount) || 0
 
+  // Reset on ANY close, including the parent closing us via setPaymentOpen
+  // (e.g. after a failed/canceled charge). Without this, mode and amount
+  // survive to the next open and a stale amount gets charged.
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (wasOpen.current && !open) reset()
+    wasOpen.current = open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   // Auto-pick the store's preferred method once per modal open. The ref stops
   // it re-firing after "Change method" clears the mode — without it the
   // preferred mode is forced straight back and the tile grid is unreachable.
