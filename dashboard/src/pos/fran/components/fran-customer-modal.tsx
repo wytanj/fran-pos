@@ -142,15 +142,51 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       }
       const intl = choice.selection_id === 'intl'
 
+      // International: paged country buttons (Stripe caps selections at 4 per
+      // screen), then the numeric keypad; "Other" falls back to free text.
+      let countryCode: string | null = null
+      let useFreeText = false
+      if (intl) {
+        const CODES: Record<string, string> = { my: '+60', cn: '+86', id: '+62', in: '+91', jp: '+81', kr: '+82' }
+        let page: 'intl_country_1' | 'intl_country_2' = 'intl_country_1'
+        for (;;) {
+          setReaderStep('Customer choosing country on S700…')
+          await collectS700Inputs(s700ReaderId, page)
+          const pageReader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
+          const pick = pageReader.collected_inputs?.find((inp) => inp.type === 'selection')
+          if (!pick || pick.skipped) {
+            setError('Customer canceled the country choice on the S700.')
+            return
+          }
+          if (pick.selection_id === 'more') {
+            page = 'intl_country_2'
+            continue
+          }
+          if (pick.selection_id === 'other') {
+            useFreeText = true
+          } else {
+            countryCode = CODES[pick.selection_id || ''] || null
+            if (!countryCode) {
+              setError('Unrecognized country choice from the S700.')
+              return
+            }
+          }
+          break
+        }
+      }
+
       setReaderStep('Customer entering number on S700…')
-      await collectS700Inputs(s700ReaderId, intl ? 'intl_phone' : 'phone')
+      const numberForm = !intl ? 'phone' : useFreeText ? 'intl_phone' : 'intl_number'
+      const entryType = !intl ? 'phone' : useFreeText ? 'text' : 'numeric'
+      await collectS700Inputs(s700ReaderId, numberForm)
       const reader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
-      const entry = reader.collected_inputs?.find((inp) => inp.type === (intl ? 'text' : 'phone'))
+      const entry = reader.collected_inputs?.find((inp) => inp.type === entryType)
       if (!entry || entry.skipped || !entry.value) {
         setError('Customer skipped the number entry on the S700. Enter it here instead.')
         return
       }
-      const normalized = normalizeReaderPhone(entry.value)
+      const rawNumber = countryCode ? `${countryCode}${entry.value.replace(/^0+/, '')}` : entry.value
+      const normalized = normalizeReaderPhone(rawNumber)
       setQuery(normalized)
       await runResolve(normalized, 'mobile')
     } catch (err) {

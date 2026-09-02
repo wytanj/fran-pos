@@ -55,6 +55,9 @@ export type S700DemoForm =
   | 'receipt_email'
   | 'member_country'
   | 'intl_phone'
+  | 'intl_country_1'
+  | 'intl_country_2'
+  | 'intl_number'
 
 export function collectS700Inputs(readerId: string, form: S700DemoForm) {
   return callStripeTerminal<{ reader: StripeReaderStatus }>('collect_inputs', { readerId, form })

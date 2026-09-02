@@ -357,6 +357,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           },
         ],
+        // Country picker, Stripe-style: selections cap at 4 choices per screen,
+        // so common countries page across two screens and "Other" falls back to
+        // free-text entry. The number itself comes via the numeric keypad and
+        // the app composes the E.164 string.
+        intl_country_1: [
+          {
+            type: 'selection',
+            custom_text: {
+              title: 'Country',
+              skip_button: 'Cancel',
+            },
+            selection: {
+              choices: [
+                { id: 'my', style: 'primary', text: 'Malaysia +60' },
+                { id: 'cn', style: 'primary', text: 'China +86' },
+                { id: 'id', style: 'primary', text: 'Indonesia +62' },
+                { id: 'more', style: 'secondary', text: 'More countries' },
+              ],
+            },
+          },
+        ],
+        intl_country_2: [
+          {
+            type: 'selection',
+            custom_text: {
+              title: 'Country',
+              skip_button: 'Cancel',
+            },
+            selection: {
+              choices: [
+                { id: 'in', style: 'primary', text: 'India +91' },
+                { id: 'jp', style: 'primary', text: 'Japan +81' },
+                { id: 'kr', style: 'primary', text: 'South Korea +82' },
+                { id: 'other', style: 'secondary', text: 'Other country' },
+              ],
+            },
+          },
+        ],
+        intl_number: [
+          {
+            type: 'numeric',
+            custom_text: {
+              title: 'Mobile number',
+              description: 'Without the country code',
+              submit_button: 'Done',
+            },
+          },
+        ],
         rating: [
           {
             type: 'selection',
