@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Loader2, Nfc, Plane, QrCode, Search, UserPlus, UsersRound, X } from 'lucide-react'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { stripeS700Ready } from '@/pos/lib/stripe-connector'
@@ -151,6 +151,7 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
     stripeS700Ready(stripeConnector) && !stripeConnector?.simulated ? stripeConnector!.s700_reader_id : ''
   const [readerWait, setReaderWait] = useState(false)
   const [lookupDial, setLookupDial] = useState('+65')
+  const readerCancelRef = useRef(false)
 
   // Staff pick the country on the register; the reader shows exactly one
   // screen — the +65 phone widget for Singapore, the numeric keypad for a
@@ -159,13 +160,20 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
     if (!s700ReaderId || readerWait) return
     setReaderWait(true)
     setError(null)
+    readerCancelRef.current = false
     try {
       const sg = lookupDial === '+65'
       const other = lookupDial === 'other'
       const form = sg ? 'phone' : other ? 'intl_phone' : 'intl_number'
       const entryType = sg ? 'phone' : other ? 'text' : 'numeric'
-      await collectS700Inputs(s700ReaderId, form)
-      const reader = await waitForS700Action(s700ReaderId, { timeoutMs: 120_000 })
+      const countryLabel = LOOKUP_COUNTRIES.find((c) => c.dial === lookupDial)?.label
+      await collectS700Inputs(s700ReaderId, form, {
+        title: sg || other || !countryLabel ? undefined : `${countryLabel} mobile number`,
+      })
+      const reader = await waitForS700Action(s700ReaderId, {
+        timeoutMs: 120_000,
+        shouldStop: () => readerCancelRef.current,
+      })
       const entry = reader.collected_inputs?.find((inp) => inp.type === entryType)
       if (!entry || entry.skipped || !entry.value) {
         setError('Customer skipped the number entry on the S700. Enter it here instead.')
@@ -177,7 +185,10 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
       await runResolve(normalized, 'mobile')
     } catch (err) {
       void cancelStripeReader(s700ReaderId).catch(() => {})
-      setError(err instanceof Error ? err.message : 'Could not collect the number on the S700.')
+      // A staff-initiated cancel is not an error — reset quietly.
+      if (!readerCancelRef.current) {
+        setError(err instanceof Error ? err.message : 'Could not collect the number on the S700.')
+      }
     } finally {
       setReaderWait(false)
     }
@@ -185,7 +196,8 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
 
   const cancelReaderAsk = () => {
     if (!s700ReaderId) return
-    // cancelAction makes the pending waitForS700Action throw, which resets state.
+    // Stop the wait loop immediately; the reader action is cleared in parallel.
+    readerCancelRef.current = true
     void cancelStripeReader(s700ReaderId).catch(() => {})
   }
 

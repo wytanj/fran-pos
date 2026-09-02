@@ -431,8 +431,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
         ],
       }
-      const inputs = forms[form]
-      if (!inputs) throw new Error(`Unknown collect_inputs form: ${form || '(missing)'}`)
+      const baseInputs = forms[form]
+      if (!baseInputs) throw new Error(`Unknown collect_inputs form: ${form || '(missing)'}`)
+      // Optional dynamic title (e.g. "Hong Kong +852 mobile number") so the
+      // reader screen names the register-side country choice. 40-char API cap.
+      const titleOverride = String(body.title || '').trim().slice(0, 40)
+      const inputs = titleOverride
+        ? baseInputs.map((input, index) =>
+            index === 0 ? { ...input, custom_text: { ...input.custom_text, title: titleOverride } } : input,
+          )
+        : baseInputs
       const reader = await stripe.terminal.readers.collectInputs(readerId, {
         inputs,
         metadata: { source: 'fran-pos', form },

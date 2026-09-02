@@ -59,8 +59,12 @@ export type S700DemoForm =
   | 'intl_country_2'
   | 'intl_number'
 
-export function collectS700Inputs(readerId: string, form: S700DemoForm) {
-  return callStripeTerminal<{ reader: StripeReaderStatus }>('collect_inputs', { readerId, form })
+export function collectS700Inputs(readerId: string, form: S700DemoForm, options?: { title?: string }) {
+  return callStripeTerminal<{ reader: StripeReaderStatus }>('collect_inputs', {
+    readerId,
+    form,
+    ...(options?.title ? { title: options.title } : {}),
+  })
 }
 
 export interface StripeLocationRow {
@@ -296,6 +300,12 @@ export async function waitForS700Action(readerId: string, options?: {
     if (reader.action_status === 'succeeded') return reader
     if (reader.action_status === 'failed') {
       throw new Error(reader.failure_message || reader.failure_code || 'S700 payment failed')
+    }
+    // Canceling an action clears it from the reader entirely — without this
+    // the loop would spin to its timeout after a cancel. Callers only wait
+    // after starting an action, so a missing action means it was canceled.
+    if (!reader.action_status) {
+      throw new Error('The S700 action was canceled.')
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs))
   }
