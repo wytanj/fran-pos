@@ -127,8 +127,8 @@ Do **not** rewrite Tap-to-Pay or dual full registers as part of B.
 ---
 
 ## J T unlock checklist
-- [ ] Unlock **P0** build (pair + cart mirror + pay/due + thank-you)  
-- [ ] Include **P1** ties-to-hit in same unlock? (yes / after P0)  
+- [x] Unlock **P0** build (pair + cart mirror + pay/due + thank-you)  
+- [x] Include **P1** ties-to-hit in same unlock? (yes — passive strip in P0 ship)  
 - [ ] Unlock **P2** multi-S700 picker when hardware lands  
 - [ ] Confirm Active5 remains **face-only** for P0â€“P1  
 

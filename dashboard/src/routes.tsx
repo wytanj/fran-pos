@@ -31,6 +31,7 @@ import ReportsPage from '@/pos/pages/reports'
 import RequestStockPage from '@/pos/pages/request-stock'
 import ReceiveDeliveryPage from '@/pos/pages/receive-delivery'
 import RosterPage from '@/pos/pages/roster'
+import CustomerDisplayPage from '@/pos/pages/customer-display'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -57,6 +58,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <PosLogin /> },
       { path: 'login', element: <PosLogin /> },
+      // Screen B — customer-facing display (Tab Active5). Kiosk pair with
+      // store code + pair token; deliberately outside PosShell (no cashier login).
+      { path: 'customer-display', element: <CustomerDisplayPage /> },
       {
         element: <PosShell />,
         children: [
