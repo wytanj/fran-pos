@@ -33,3 +33,7 @@ Open questions for tomorrow:
 - Does this replace or wrap the existing ad hoc checks (`posCapabilitiesError`, Stripe
   `stripeS700Ready`, tap-to-pay readiness chip idea from the payment-speed conversation), or
   do those stay as the per-system inputs feeding the composed gate?
+
+## Staff e-paper nametag (future idea)
+
+See [docs/STAFF_EPAPER_NAMETAG.md](docs/STAFF_EPAPER_NAMETAG.md). Special nametags — not ESL, not Screen B. Parked.
