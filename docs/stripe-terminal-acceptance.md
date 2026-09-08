@@ -1,4 +1,4 @@
-# Stripe Terminal acceptance — Galaxy Tab + S700
+# Stripe Terminal acceptance â€” Galaxy Tab + S700
 
 Store hardware kit:
 
@@ -17,8 +17,8 @@ The Stripe **secret key never leaves the server**. Connection tokens, PaymentInt
 
 | Path | How it collects |
 | --- | --- |
-| Register → Pay → **Stripe S700** | Creates a `card_present` PaymentIntent, sends it to the registered reader, waits for `reader.action` succeeded |
-| Register → Pay → **Tap to Pay** | Same PaymentIntent, then the Android SDK takes over NFC on this device |
+| Register â†’ Pay â†’ **Stripe S700** | Creates a `card_present` PaymentIntent, sends it to the registered reader, waits for `reader.action` succeeded |
+| Register â†’ Pay â†’ **Tap to Pay** | Same PaymentIntent, then the Android SDK takes over NFC on this device |
 | Simulated on | Uses Stripe test helpers (`present_payment_method`) so a sale can complete without hardware |
 
 Sale outcomes are unchanged: member/tourist still required, loyalty still commits after payment, failed Stripe collection does not add a tender.
@@ -27,21 +27,21 @@ Sale outcomes are unchanged: member/tourist still required, loyalty still commit
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `STRIPE_SECRET_KEY` | yes | `sk_test_…` for acceptance, `sk_live_…` after go-live |
+| `STRIPE_SECRET_KEY` | yes | `sk_test_â€¦` for acceptance, `sk_live_â€¦` after go-live |
 | `SUPABASE_URL` or `VITE_SUPABASE_URL` | yes | Validates the cashier/HQ JWT |
 | `SUPABASE_ANON_KEY` or `VITE_SUPABASE_ANON_KEY` | yes | Same |
-| `STRIPE_WEBHOOK_SECRET` | recommended | `whsec_…` for `/api/stripe-webhook` |
+| `STRIPE_WEBHOOK_SECRET` | recommended | `whsec_â€¦` for `/api/stripe-webhook` |
 
 Optional: `VITE_STRIPE_API_BASE` if the dashboard is served from a host that cannot reach `/api` on the same origin.
 
 ## Stripe Dashboard setup
 
 1. Request **Tap to Pay on Android** for the account (Singapore is supported).
-2. Create a Terminal **Location** (Settings → Integrations → Create location, or Stripe Dashboard).
+2. Create a Terminal **Location** (Settings â†’ Integrations â†’ Create location, or Stripe Dashboard).
 3. Register the S700:
    - Hardware: three-word pairing code from the reader admin menu
    - Simulated: registration code `simulated-wpe`
-4. Paste Location ID (`tml_…`) and Reader ID (`tmr_…`) into POS → Settings → Integrations → Stripe Terminal.
+4. Paste Location ID (`tml_â€¦`) and Reader ID (`tmr_â€¦`) into POS â†’ Settings â†’ Integrations â†’ Stripe Terminal.
 5. Enable **Simulated / test mode** for acceptance. Turn it off only on live hardware.
 6. Add a webhook endpoint `https://<host>/api/stripe-webhook` for:
    - `payment_intent.succeeded`
@@ -62,7 +62,7 @@ Optional: `VITE_STRIPE_API_BASE` if the dashboard is served from a host that can
 | Errors / retry | Payment modal shows the Stripe error and keeps the cart; cashier can retry the same amount |
 | Cancel mid-collect | Cancel / mark failed cancels the reader action and the PaymentIntent |
 | Receipts | Existing POS receipt + email connector after Complete & Print |
-| Register readers in the field | Integrations → Register S700 pairing code |
+| Register readers in the field | Integrations â†’ Register S700 pairing code |
 | S700 software updates | Smart readers update themselves when online |
 | Tap to Pay device rules | Android 13+, NFC, Play services, not rooted; APK `minSdk` 26, runtime 33+ |
 
@@ -97,8 +97,14 @@ Then open the dashboard URL that `vercel dev` prints so `/api` and the SPA share
 
 ## After Stripe approves live
 
-1. Replace `STRIPE_SECRET_KEY` with `sk_live_…`
+1. Replace `STRIPE_SECRET_KEY` with `sk_live_â€¦`
 2. Turn **Simulated** off
 3. Register the production S700 at the store location
 4. Confirm the webhook is on the live endpoint
 5. Run one live tap on S700 and one Tap to Pay on a supported Android device
+
+---
+
+## Related
+
+- Dual-tab + 3×S700 roadmap: [docs/SCREEN_A_B_PLAN.md](./SCREEN_A_B_PLAN.md)
