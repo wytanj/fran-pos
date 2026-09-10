@@ -2520,38 +2520,38 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
       onClick={onAdd}
       disabled={out}
       className={cn(
-        'group flex flex-col rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-primary hover:shadow active:scale-[0.99] cursor-pointer',
+        'group flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-primary hover:shadow active:scale-[0.99] cursor-pointer',
         out && 'cursor-not-allowed opacity-50'
       )}
     >
-      <div className="mb-2 flex items-start justify-between">
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-2xl">
+      <div className="mb-2 flex min-w-0 items-start justify-between gap-1">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-secondary text-2xl">
           {product.emoji}
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {product.mdPrice != null && <Badge variant="warning">MD / SSS</Badge>}
-          {!product.returnable && <Badge variant="outline" className="text-[10px]">Non-returnable</Badge>}
+        <div className="flex min-w-0 flex-col items-end gap-1">
+          {product.mdPrice != null && <Badge variant="warning" className="max-w-full truncate">MD / SSS</Badge>}
+          {!product.returnable && <Badge variant="outline" className="max-w-full truncate text-[10px]">Non-returnable</Badge>}
         </div>
       </div>
-      <p className="line-clamp-2 text-sm font-medium leading-tight">{product.name}</p>
-      <p className="text-xs text-muted-foreground">{product.sku}</p>
+      <p className="line-clamp-2 min-w-0 text-sm font-medium leading-tight">{product.name}</p>
+      <p className="truncate text-xs text-muted-foreground">{product.sku}</p>
       {product.storeLocationCode && (
-        <p className="mt-0.5 text-[11px] font-medium text-primary">Loc {product.storeLocationCode}</p>
+        <p className="mt-0.5 truncate text-[11px] font-medium text-primary">Loc {product.storeLocationCode}</p>
       )}
-      <div className="mt-2 flex items-end justify-between">
-        <div>
+      <div className="mt-2 flex min-w-0 items-end justify-between gap-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           {product.mdPrice != null ? (
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-destructive">{formatCurrency(product.mdPrice, STORE.currency)}</span>
-              <span className="text-xs text-muted-foreground line-through">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              <span className="truncate text-sm font-semibold tabular-nums text-destructive">{formatCurrency(product.mdPrice, STORE.currency)}</span>
+              <span className="truncate text-[11px] tabular-nums text-muted-foreground line-through">
                 {formatCurrency(product.price, STORE.currency)}
               </span>
             </div>
           ) : (
-            <span className="font-semibold">{formatCurrency(price, STORE.currency)}</span>
+            <span className="block truncate text-sm font-semibold tabular-nums">{formatCurrency(price, STORE.currency)}</span>
           )}
         </div>
-        <span className={cn('text-xs', out ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+        <span className={cn('shrink-0 whitespace-nowrap text-[11px]', out ? 'font-medium text-destructive' : 'text-muted-foreground')}>
           {out ? 'Out' : `${product.qtyOnHand} in stock`}
         </span>
       </div>
