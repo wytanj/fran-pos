@@ -62,6 +62,11 @@ export interface PosUser {
   isEor?: boolean
   /** Current SKUMS roster zone (floor assignment) */
   rosterZone?: { code: string; name: string; source?: string } | null
+  /** HRM staff id when unlocked via employee_code + PIN (auth P0) */
+  hrmEmployeeId?: string
+  employeeCode?: string
+  registerId?: string
+  storeCode?: string
 }
 
 export const USERS: PosUser[] = [

@@ -1,35 +1,50 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, KeyRound, LogOut, Shield, ShoppingBag, User, UserCheck, Wifi } from 'lucide-react'
+import { AlertCircle, KeyRound, LogOut, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Numpad } from '@/pos/components/numpad'
 import { usePos } from '@/pos/lib/pos-context'
 import { USERS, STORE, type PosRole } from '@/pos/data/mock'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/providers/auth-provider'
-import { usePosStaffMembers, useStartPosStaffSession } from '@/hooks/use-pos-staff'
-import type { PosStaffMember } from '@pos/shared'
 import { BrandMark } from '@/components/brand-mark'
+import {
+  clearRegisterBinding,
+  loadRegisterBinding,
+  pairRegisterDevice,
+  verifyHrmPosPin,
+  type RegisterBinding,
+} from '@/pos/lib/hrm-pos-auth'
 
 export default function PosLogin() {
   const { mode, setMode, setUser } = usePos()
-  const { user, company, loading, signInWithGoogle, signOut } = useAuth()
+  const { user, company, signInWithGoogle, signOut } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [role, setRole] = useState<PosRole>('cashier')
   const [pin, setPin] = useState('')
+  const [employeeCode, setEmployeeCode] = useState('')
   const [error, setError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
-  const { data: staff = [], isLoading: staffLoading } = usePosStaffMembers()
-  const startStaffSession = useStartPosStaffSession()
+  const [unlocking, setUnlocking] = useState(false)
+  const [binding, setBinding] = useState<RegisterBinding | null>(() =>
+    typeof window !== 'undefined' ? loadRegisterBinding() : null
+  )
+  const [storeCode, setStoreCode] = useState('')
+  const [pairCode, setPairCode] = useState('')
+  const [pairing, setPairing] = useState(false)
   const requestedMode = searchParams.get('mode')
   const connectedAccountLabel = company?.name || user?.email || null
 
   useEffect(() => {
     if (requestedMode === 'demo' || requestedMode === 'live') setMode(requestedMode)
   }, [requestedMode, setMode])
+
+  useEffect(() => {
+    setBinding(loadRegisterBinding())
+  }, [mode])
 
   const submit = () => {
     const demoUser = USERS.find((u) => u.role === role && u.pin === pin)
@@ -44,61 +59,11 @@ export default function PosLogin() {
 
   const selected = USERS.find((u) => u.role === role)
 
-  const liveStaff = staff.filter(
-    (member) => member.pos_access_enabled && !['terminated', 'inactive'].includes(member.employment_status.toLowerCase())
-  )
-  const selectedStaff = liveStaff.find((member) => member.id === selectedStaffId) || liveStaff[0] || null
-
-  const getDeviceId = () => {
-    const existing = localStorage.getItem('pos_device_id')
-    if (existing) return existing
-    const next = crypto.randomUUID()
-    localStorage.setItem('pos_device_id', next)
-    return next
-  }
-
-  const openLiveTerminal = async () => {
-    if (!user || !company || !selectedStaff) return
-    try {
-      const result = await startStaffSession.mutateAsync({
-        staffMemberId: selectedStaff.id,
-        passcode: pin,
-        registerId: STORE.code,
-        deviceId: getDeviceId(),
-      })
-      const posRole: PosRole = result.staff.role === 'cashier' ? 'cashier' : 'manager'
-      setPin('')
-      setError(false)
-      setSelectedStaffId(result.staff.id)
-      setMode('live')
-      setUser({
-        id: result.staff.id,
-        name: result.staff.display_name,
-        role: posRole,
-        pin: '',
-        staffMemberId: result.staff.id,
-        sessionId: result.session.id,
-        sourceProvider: result.staff.source_provider,
-        employmentType: result.staff.employment_type,
-        isEor: result.staff.is_eor,
-      })
-      navigate('/pos/sale')
-    } catch {
-      setError(true)
-    }
-  }
-
-  const selectStaff = (member: PosStaffMember) => {
-    setSelectedStaffId(member.id)
-    setPin('')
-    setError(false)
-    setMode('live')
-  }
-
   const handleGoogleSignIn = async () => {
+    // HQ / dashboard Google — not used for Live register unlock (P0).
     setGoogleLoading(true)
     try {
-      await signInWithGoogle('/pos')
+      await signInWithGoogle('/')
     } finally {
       setGoogleLoading(false)
     }
@@ -124,6 +89,70 @@ export default function PosLogin() {
     }
   }
 
+  const handlePair = async () => {
+    setPairing(true)
+    setError(false)
+    setErrorMessage(null)
+    try {
+      const next = await pairRegisterDevice({ storeCode, pairCode })
+      setBinding(next)
+      setStoreCode('')
+      setPairCode('')
+    } catch (e) {
+      setError(true)
+      setErrorMessage(e instanceof Error ? e.message : 'Pair failed')
+    } finally {
+      setPairing(false)
+    }
+  }
+
+  const handleUnbind = () => {
+    clearRegisterBinding()
+    setBinding(null)
+    setPin('')
+    setEmployeeCode('')
+  }
+
+  const openLiveWithHrmPin = async () => {
+    if (!binding) return
+    setUnlocking(true)
+    setError(false)
+    setErrorMessage(null)
+    try {
+      const { staff } = await verifyHrmPosPin({
+        employeeCode,
+        pin,
+        binding,
+      })
+      const posRole: PosRole =
+        staff.role === 'cashier' || staff.role === 'staff' || staff.role === 'supervisor'
+          ? 'cashier'
+          : 'manager'
+      setPin('')
+      setMode('live')
+      setUser({
+        id: staff.id,
+        name: staff.display_name,
+        role: posRole,
+        pin: '',
+        staffMemberId: staff.id,
+        sessionId: `hrm:${staff.id}:${Date.now()}`,
+        sourceProvider: 'fran-hrm',
+        employmentType: staff.employment_type,
+        hrmEmployeeId: staff.id,
+        employeeCode: staff.employee_code,
+        registerId: binding.register_id,
+        storeCode: binding.store_code,
+      })
+      navigate('/pos/sale')
+    } catch (e) {
+      setError(true)
+      setErrorMessage(e instanceof Error ? e.message : 'Unlock failed')
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
   return (
     <div className="flex min-h-dvh items-center justify-center bg-cream p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-3xl rounded-xl border border-line bg-white p-4 shadow-warm-md sm:p-6">
@@ -132,7 +161,7 @@ export default function PosLogin() {
           <p className="eyebrow">Register</p>
           <h1 className="h1-display leading-tight">Fran POS</h1>
           <p className="text-sm text-muted-foreground">
-            {STORE.name} - Store {STORE.code}
+            {binding ? `${binding.store_code} · ${binding.register_id}` : `${STORE.name} - Store ${STORE.code}`}
           </p>
         </div>
 
@@ -161,137 +190,120 @@ export default function PosLogin() {
 
         {mode === 'live' ? (
           <div className="space-y-3">
-            {loading ? (
-              <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">Checking live session...</p>
-            ) : !user ? (
-              <div className="rounded-lg border p-4 text-center">
-                <Wifi className="mx-auto mb-3 h-8 w-8 text-primary" />
-                <h2 className="font-semibold">Sign in for live POS</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Live mode uses your POS company, products, and SKUMS connector settings.
-                </p>
-                <Button className="mt-4 w-full" onClick={handleGoogleSignIn} disabled={googleLoading}>
-                  {googleLoading ? 'Opening Google...' : 'Continue with Google'}
-                </Button>
-              </div>
-            ) : !company ? (
-              <div className="rounded-lg border p-4 text-center">
-                <h2 className="font-semibold">Finish company setup</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Create the live POS company before opening the register.
-                </p>
-                {user.email && <p className="mt-2 truncate text-xs text-muted-foreground">{user.email}</p>}
-                <Link to="/onboarding">
-                  <Button className="mt-4 w-full">Finish Setup</Button>
-                </Link>
+            {!binding ? (
+              <div className="space-y-3 rounded-lg border p-4">
+                <div className="text-center">
+                  <Tablet className="mx-auto mb-3 h-8 w-8 text-primary" />
+                  <h2 className="font-semibold">Bind this register</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Enter the store code and pair code from HRM / ops. No Google on the register.
+                  </p>
+                </div>
+                <label className="block text-sm">
+                  <span className="text-muted-foreground">Store code</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 font-mono uppercase"
+                    value={storeCode}
+                    onChange={(e) => setStoreCode(e.target.value.toUpperCase())}
+                    placeholder="FRAN01"
+                    autoCapitalize="characters"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-muted-foreground">Pair code</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 font-mono uppercase tracking-widest"
+                    value={pairCode}
+                    onChange={(e) => setPairCode(e.target.value.toUpperCase())}
+                    placeholder="A1B2C3"
+                    autoCapitalize="characters"
+                  />
+                </label>
+                {error && (
+                  <div className="flex items-center justify-center gap-1.5 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" /> {errorMessage || 'Pair failed'}
+                  </div>
+                )}
                 <Button
-                  variant="outline"
-                  className="mt-2 h-9 w-full"
-                  onClick={() => void handleGoogleSignOut()}
-                  disabled={signingOut}
+                  className="w-full"
+                  onClick={() => void handlePair()}
+                  disabled={storeCode.length < 2 || pairCode.length < 4 || pairing}
                 >
-                  <LogOut className="h-4 w-4" />
-                  {signingOut ? 'Signing out...' : 'Use another Google account'}
+                  {pairing ? 'Binding…' : 'Bind register'}
                 </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  HQ web login stays on the dashboard — not on Live POS.
+                </p>
               </div>
             ) : (
               <div className="space-y-4 rounded-lg border p-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-semibold">{company.name}</h2>
+                    <h2 className="font-semibold">Unlock register</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      Select an active POS staff member and enter their register passcode.
+                      Employee code + 8-digit PIN from fran-hrm.
                     </p>
-                    {user.email && <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>}
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Bound · {binding.store_code} / {binding.register_id}
+                      {binding.label ? ` · ${binding.label}` : ''}
+                    </p>
                   </div>
                   <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">Live</span>
                 </div>
 
-                {staffLoading ? (
-                  <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">Loading POS staff...</p>
-                ) : liveStaff.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-center">
-                    <UserCheck className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-                    <h3 className="font-semibold">No POS staff enabled</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Add staff passcodes before opening the live register.
-                    </p>
-                    <Link to="/settings/staff">
-                      <Button className="mt-4 w-full">
-                        <UserCheck className="h-4 w-4" /> Manage Staff
-                      </Button>
-                    </Link>
+                <label className="block text-sm">
+                  <span className="text-muted-foreground">Employee code</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 font-mono uppercase"
+                    value={employeeCode}
+                    onChange={(e) => {
+                      setEmployeeCode(e.target.value.toUpperCase())
+                      setError(false)
+                    }}
+                    placeholder="E12345"
+                    autoCapitalize="characters"
+                  />
+                </label>
+
+                <div className="rounded-lg bg-secondary p-3">
+                  <div className="mb-2 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <KeyRound className="h-4 w-4" />
+                    8-digit PIN
                   </div>
-                ) : (
-                  <>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {liveStaff.map((member) => (
-                        <button
-                          key={member.id}
-                          type="button"
-                          onClick={() => selectStaff(member)}
-                          className={cn(
-                            'flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors cursor-pointer',
-                            selectedStaff?.id === member.id ? 'border-primary bg-accent' : 'hover:bg-accent'
-                          )}
-                        >
-                          <span>
-                            <span className="block font-medium">{member.display_name}</span>
-                            <span className="block text-xs capitalize text-muted-foreground">
-                              {member.role} - {member.employment_type || 'staff'}
-                            </span>
-                          </span>
-                          {member.is_eor && <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">EOR</span>}
-                        </button>
-                      ))}
+                  <div className="mb-2 flex justify-center gap-2">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className={cn('h-3.5 w-3.5 rounded-full', i < pin.length ? 'bg-primary' : 'bg-muted')} />
+                    ))}
+                  </div>
+                  {error && (
+                    <div className="mb-3 flex items-center justify-center gap-1.5 text-sm text-destructive">
+                      <AlertCircle className="h-4 w-4" /> {errorMessage || 'Incorrect or locked PIN'}
                     </div>
+                  )}
+                  <Numpad
+                    dense
+                    onPress={(k) => {
+                      setError(false)
+                      setPin((p) => (p.length < 8 ? p + k : p))
+                    }}
+                    onBackspace={() => {
+                      setError(false)
+                      setPin((p) => p.slice(0, -1))
+                    }}
+                  />
+                  <Button
+                    className="mt-3 h-10 w-full text-base"
+                    onClick={() => void openLiveWithHrmPin()}
+                    disabled={employeeCode.length < 1 || pin.length !== 8 || unlocking}
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    {unlocking ? 'Checking…' : 'Unlock'}
+                  </Button>
+                </div>
 
-                    <div className="rounded-lg bg-secondary p-3">
-                      <div className="mb-2 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <KeyRound className="h-4 w-4" />
-                        Passcode for <span className="font-medium text-foreground">{selectedStaff?.display_name}</span>
-                      </div>
-                      <div className="mb-2 flex justify-center gap-2">
-                        {Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className={cn('h-3.5 w-3.5 rounded-full', i < pin.length ? 'bg-primary' : 'bg-muted')} />
-                        ))}
-                      </div>
-                      {error && (
-                        <div className="mb-3 flex items-center justify-center gap-1.5 text-sm text-destructive">
-                          <AlertCircle className="h-4 w-4" /> Incorrect or locked passcode
-                        </div>
-                      )}
-                      <Numpad
-                        dense
-                        onPress={(k) => {
-                          setError(false)
-                          setPin((p) => (p.length < 12 ? p + k : p))
-                        }}
-                        onBackspace={() => {
-                          setError(false)
-                          setPin((p) => p.slice(0, -1))
-                        }}
-                      />
-                      <Button
-                        className="mt-3 h-10 w-full text-base"
-                        onClick={openLiveTerminal}
-                        disabled={pin.length < 4 || startStaffSession.isPending}
-                      >
-                        <ShoppingBag className="h-4 w-4" />
-                        {startStaffSession.isPending ? 'Opening...' : 'Open Register'}
-                      </Button>
-                    </div>
-
-                  </>
-                )}
-                <Button
-                  variant="outline"
-                  className="h-9 w-full"
-                  onClick={() => void handleGoogleSignOut()}
-                  disabled={signingOut}
-                >
+                <Button variant="outline" className="h-9 w-full" onClick={handleUnbind}>
                   <LogOut className="h-4 w-4" />
-                  {signingOut ? 'Signing out...' : 'Use another Google account'}
+                  Unbind this tablet
                 </Button>
               </div>
             )}
@@ -326,7 +338,7 @@ export default function PosLogin() {
               <div className="mb-4 flex flex-col gap-3 rounded-lg border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-medium">Standalone cashier demo</p>
-                  <p className="text-xs text-muted-foreground">Sign in to attach this demo session to an account.</p>
+                  <p className="text-xs text-muted-foreground">Optional: connect a Google account for demo extras.</p>
                 </div>
                 <Button variant="outline" onClick={handleDemoAccountSignIn} disabled={googleLoading}>
                   {googleLoading ? 'Connecting...' : 'Connect Account'}
@@ -395,6 +407,14 @@ export default function PosLogin() {
               Demo PINs - Cashier: <span className="font-mono">1111</span> - Manager:{' '}
               <span className="font-mono">9999</span>
             </p>
+
+            {/* HQ Google remains available off Live — e.g. open dashboard */}
+            {!user && (
+              <Button variant="ghost" className="mt-2 w-full text-xs text-muted-foreground" onClick={() => void handleGoogleSignIn()} disabled={googleLoading}>
+                <Wifi className="h-3 w-3" />
+                HQ dashboard Google sign-in
+              </Button>
+            )}
           </>
         )}
       </div>
