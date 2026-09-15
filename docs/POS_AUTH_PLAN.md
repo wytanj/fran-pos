@@ -1,7 +1,7 @@
 ﻿# Fran POS auth plan (fleet + HRM PIN)
 
-Status: **draft for J T lock** (2026-09-15) â€” not unlocked for Engineer build until approved.  
-Repo: `wytanj/fran-pos` `docs/POS_AUTH_PLAN.md` (this PR).  
+Status: **draft for J T lock** (2026-09-15, rev PIN 8-digit + 12m validity + bot confirm-disable in P0) â€” not unlocked for Engineer build until approved.  
+Repo: `wytanj/fran-pos` `docs/POS_AUTH_PLAN.md` (PR #5).  
 Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**; do not conflate).
 
 ## Goal
@@ -45,6 +45,7 @@ Screen B / customer display keeps existing **kiosk store+6-char pair** (SCREEN_A
    - generate PIN (or force rotate if rehire)
    - deliver PIN **out of band** once (prefer existing Telegram staff channel / `/link` path; else one-time reveal on the approve toast â€” no multi-field form)
 4. Terminate / disable in HRM clears `pos_access` and ends POS sessions (already intended).
+5. **Theft / urgent disable (P0):** Jarell tells the ops bot who to cut â†’ bot asks confirm â†’ on confirm, same disable path as terminate (PIN dead, sessions killed). No waiting on a dashboard hunt.
 
 Jarell does **not**: edit device lists, set per-register passcodes, click through POS dashboard staff CRUD, or manage Google accounts per tab.
 
@@ -59,7 +60,8 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 
 ## Defaults (CoS â€” change only if J T overrides)
 
-- PIN: **6 digits**, bcrypt in HRM only  
+- PIN: **8 digits**, bcrypt in HRM only  
+- Validity / rotate: **12 months** (floor was â€œat least 6 months or 1 yearâ€; pick 12m to cut friction â€” override to 6m if wanted). No naggy short rotations.  
 - Lockout: **5 fails â†’ 15 min** (reuse HRM fields if present)  
 - Issuance: **auto on hire approve** + one-time delivery (Telegram preferred)  
 - Identity: **reuse HRM `employee_code`** (no second POS code)  
@@ -67,16 +69,19 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 - Idle lock Screen A: **3 min**  
 - Google on POS Live: **removed**  
 - POS register passcode RPCs / dashboard staff passcode UI: **deprecated â†’ remove after cutover**
+- **Disable (theft / exit):** Jarell informs a bot â†’ **confirm** â†’ system clears `pos_access` + invalidates PIN + ends live POS sessions. Enum confirm only â€” not a multi-field form.
 
 ## P0 / P1 / Reject
 
 ### P0 (pilot S10 + small staff set)
 
-- Written verify API: POS â†’ HRM `employee_code`+PIN â†’ session on bound register  
+- Written verify API: POS â†’ HRM `employee_code`+**8-digit** PIN â†’ session on bound register  
 - Register bind without Google (store pair / device token)  
 - Hire-approve â†’ `pos_access` + PIN issue + one-time delivery  
+- PIN expiry metadata (**12 months** default); verify rejects expired  
+- **Bot disable with confirm** (theft/exit): Jarell â†’ bot â†’ confirm â†’ clear `pos_access` + kill PIN + end sessions  
 - Remove / hide Continue with Google on Live POS  
-- Audit: who unlocked which register when  
+- Audit: who unlocked which register when; who disabled whom when  
 
 ### P1
 
@@ -101,7 +106,9 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 
 1. PIN delivery: Telegram-only vs also SMS  
 2. Float staff across stores in P0 or P1  
-3. Exact idle minutes (2 vs 3 vs 5)
+3. Exact idle minutes (2 vs 3 vs 5)  
+4. Validity **6 vs 12 months** (default **12**)  
+5. Which bot channel for disable confirm (Fran Tech Ops Telegram vs dedicated HR bot) â€” P0 can be Telegram confirm callback wired to HRM disable API
 
 ## Unlock
 
