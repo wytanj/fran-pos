@@ -1,6 +1,6 @@
 ﻿# Fran POS auth plan (fleet + HRM PIN)
 
-Status: **draft for J T lock** (2026-09-15, rev PIN 8-digit + 12m validity + bot confirm-disable by SM/area+ via existing HRM scopes) â€” not unlocked for Engineer build until approved.  
+Status: **filed in repo 2026-09-15** (rev: 8-digit PIN, 12m rotate, bot disable by SM/area+/HQ via existing HRM scopes) — awaiting J T unlock before Engineer P0 build.
 Repo: `wytanj/fran-pos` `docs/POS_AUTH_PLAN.md` (PR #5).  
 Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**; do not conflate).
 
@@ -93,7 +93,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 
 - Per-device Gmail  
 - Sheets or WhatsApp as PIN SoT  
-- Jarell editing passcodes in a POS admin CRUD grid  
+- Anyone editing passcodes in a POS admin CRUD grid (judgment stays in HRM; no POS passcode CRUD)  
 - Conflating Screen B Tap overflow with this auth redesign  
 
 ## Human-verifiable artifacts
