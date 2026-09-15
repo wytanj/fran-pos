@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Loader2,
   Camera,
+  MonitorSmartphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -80,6 +81,10 @@ import {
 import { useAuth } from '@/providers/auth-provider'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
+import { getActiveStore } from '@/pos/lib/pos-store-config'
+import { buildCustomerDisplayPayload } from '@/pos/lib/build-customer-display-payload'
+import { useCustomerDisplayPublisher } from '@/pos/lib/use-customer-display-publisher'
+import { CustomerDisplayPairDialog } from '@/pos/components/customer-display-pair-dialog'
 import { tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import type {
   Product as DbProduct,
@@ -585,6 +590,32 @@ export default function SalePage() {
   // Line action (discount / override) + the manager-auth gate it routes through.
   const [lineAction, setLineAction] = useState<{ mode: LineActionMode; line: CartLine } | null>(null)
   const [pendingAuth, setPendingAuth] = useState<{ label: string; run: () => void } | null>(null)
+  const [customerDisplayOpen, setCustomerDisplayOpen] = useState(false)
+
+  // Screen B (customer display) — A publishes, B only renders. See docs/SCREEN_A_B_PLAN.md.
+  const activeStore = getActiveStore()
+  const customerDisplayPayload = useMemo(
+    () =>
+      buildCustomerDisplayPayload({
+        storeName: activeStore.name,
+        storeCode: activeStore.code,
+        currency: activeStore.currency || STORE.currency,
+        cart,
+        totals,
+        paymentOpen,
+        completedOpen,
+        lastSale: pos.lastSale,
+        franSession,
+        tierProgress: franPreview?.tierProgress ?? null,
+      }),
+    [activeStore.name, activeStore.code, activeStore.currency, cart, totals, paymentOpen, completedOpen, pos.lastSale, franSession, franPreview?.tierProgress],
+  )
+  const customerDisplay = useCustomerDisplayPublisher({
+    enabled: true,
+    storeCode: activeStore.code,
+    companyId: company?.id ?? null,
+    payload: customerDisplayPayload,
+  })
   const preOverrideTotal = totals.total - totals.cartAdjustment
   const catalogProductBySku = useMemo(() => {
     const bySku = new Map<string, Product>()
@@ -2271,6 +2302,29 @@ export default function SalePage() {
           {basketNotice && (
             <p className="mt-2 rounded-md bg-secondary px-3 py-2 text-xs text-muted-foreground">{basketNotice}</p>
           )}
+          <button
+            type="button"
+            onClick={() => setCustomerDisplayOpen(true)}
+            className="mt-2 flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+            title="Customer display pairing"
+          >
+            <span className="flex items-center gap-1.5">
+              <MonitorSmartphone className="h-3.5 w-3.5" />
+              Customer display
+            </span>
+            <span className="flex items-center gap-1.5 font-mono">
+              {customerDisplay.lane ? customerDisplay.lane.pairToken : customerDisplay.status === 'error' ? 'offline' : '…'}
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  customerDisplay.status === 'ready' && 'bg-success',
+                  customerDisplay.status === 'connecting' && 'bg-yellow-deep',
+                  customerDisplay.status === 'error' && 'bg-danger',
+                  customerDisplay.status === 'disabled' && 'bg-line-strong',
+                )}
+              />
+            </span>
+          </button>
           <Button
             className="mt-2 h-14 w-full text-lg"
             disabled={cart.length === 0 || totals.total <= 0 || !franSession}
@@ -2453,6 +2507,14 @@ export default function SalePage() {
           pendingAuth?.run()
           setPendingAuth(null)
         }}
+      />
+
+      <CustomerDisplayPairDialog
+        open={customerDisplayOpen}
+        onClose={() => setCustomerDisplayOpen(false)}
+        publisher={customerDisplay}
+        storeCode={activeStore.code}
+        state={customerDisplayPayload.state}
       />
 
       <PaymentModal
