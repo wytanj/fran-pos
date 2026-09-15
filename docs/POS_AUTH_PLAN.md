@@ -1,6 +1,6 @@
 ﻿# Fran POS auth plan (fleet + HRM PIN)
 
-Status: **draft for J T lock** (2026-09-15, rev PIN 8-digit + 12m validity + bot confirm-disable in P0) â€” not unlocked for Engineer build until approved.  
+Status: **draft for J T lock** (2026-09-15, rev PIN 8-digit + 12m validity + bot confirm-disable by SM/area+ via existing HRM scopes) â€” not unlocked for Engineer build until approved.  
 Repo: `wytanj/fran-pos` `docs/POS_AUTH_PLAN.md` (PR #5).  
 Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**; do not conflate).
 
@@ -11,7 +11,7 @@ Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**;
 1. Device boots into Fran POS **with no Google login**.
 2. App updates are **OTA** (Capacitor shell â†’ `https://fran-pos.vercel.app`) â€” rare APK only via Knox / managed Play.
 3. Staff (FT or temp) unlock a register with **`employee_code` + PIN** only after hire is approved in **fran-hrm**.
-4. Jarellâ€™s seat is **judgment**: approve / reject / hold â€” **not** device CRUD, not typing passcodes into POS admin UIs.
+4. People with HRM permission (store manager, area manager, and above â€” **existing scopes**, not a new role) do **judgment**: hire approve / reject / hold, and **confirm PIN disable** â€” **not** device CRUD, not typing passcodes into POS admin UIs.
 
 ## Locked product shape (J T 2026-09-11 + 2026-09-15)
 
@@ -19,7 +19,7 @@ Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**;
 | --- | --- | --- |
 | Fleet image | Knox / AE + Capacitor shell | Ops images device once |
 | Register bind | Store pair / device token | One-time counter setup (SM or ops) |
-| Staff secret | **fran-hrm only** (`employee_code` + bcrypt PIN, `pos_access_enabled`) | Jarell approves hire â†’ system issues access |
+| Staff secret | **fran-hrm only** (`employee_code` + bcrypt PIN, `pos_access_enabled`) | SM / area manager+ approve hire â†’ system issues access |
 | HQ / admin | Google SSO on **fran-hrm / web** only | Never on Live POS register |
 
 **Unify:** Today POS has Google â†’ pick `pos_staff_member` â†’ **register passcode**, while HRM has its own PIN **decoupled by design**. Target collapses to **one staff secret in HRM**. Kill Live POS â€œContinue with Googleâ€ and POS-local passcode as the staff auth path.
@@ -35,19 +35,19 @@ Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**;
 
 Screen B / customer display keeps existing **kiosk store+6-char pair** (SCREEN_A_B). Still not cashier auth.
 
-### B. Hire â†’ POS access (Jarell minimal)
+### B. Hire â†’ POS access (managers minimal)
 
 1. Hire record lands in fran-hrm (existing intake).
-2. Jarell sees one card: name, role, store, FT/temp â€” actions enum only: `approve` | `reject` | `hold`.
+2. Permissioned seat (store manager, area manager, HQ â€” **reuse fran-hrm role/scope catalog**) sees one card: name, role, store, FT/temp â€” actions enum only: `approve` | `reject` | `hold`.
 3. On **approve**:
    - set / keep `pos_access_enabled`
    - ensure `employee_code`
    - generate PIN (or force rotate if rehire)
    - deliver PIN **out of band** once (prefer existing Telegram staff channel / `/link` path; else one-time reveal on the approve toast â€” no multi-field form)
 4. Terminate / disable in HRM clears `pos_access` and ends POS sessions (already intended).
-5. **Theft / urgent disable (P0):** Jarell tells the ops bot who to cut â†’ bot asks confirm â†’ on confirm, same disable path as terminate (PIN dead, sessions killed). No waiting on a dashboard hunt.
+5. **Theft / urgent disable (P0):** any **store manager / area manager / above** (existing HRM permission) tells the ops bot who to cut â†’ bot checks their scope for that store â†’ asks confirm â†’ on confirm, same disable path as terminate (PIN dead, sessions killed). No waiting on a dashboard hunt.
 
-Jarell does **not**: edit device lists, set per-register passcodes, click through POS dashboard staff CRUD, or manage Google accounts per tab.
+They do **not**: edit device lists, set per-register passcodes, click through POS dashboard staff CRUD, or manage Google accounts per tab.
 
 ### C. Shift unlock (cashier)
 
@@ -69,7 +69,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 - Idle lock Screen A: **3 min**  
 - Google on POS Live: **removed**  
 - POS register passcode RPCs / dashboard staff passcode UI: **deprecated â†’ remove after cutover**
-- **Disable (theft / exit):** Jarell informs a bot â†’ **confirm** â†’ system clears `pos_access` + invalidates PIN + ends live POS sessions. Enum confirm only â€” not a multi-field form.
+- **Disable (theft / exit):** store manager / area manager / above (existing HRM scopes) informs a bot â†’ bot gates on their permission for that store â†’ **confirm** â†’ system clears `pos_access` + invalidates PIN + ends live POS sessions. Enum confirm only â€” not a multi-field form.
 
 ## P0 / P1 / Reject
 
@@ -79,7 +79,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 - Register bind without Google (store pair / device token)  
 - Hire-approve â†’ `pos_access` + PIN issue + one-time delivery  
 - PIN expiry metadata (**12 months** default); verify rejects expired  
-- **Bot disable with confirm** (theft/exit): Jarell â†’ bot â†’ confirm â†’ clear `pos_access` + kill PIN + end sessions  
+- **Bot disable with confirm** (theft/exit): SM / area manager+ â†’ bot (HRM scope check) â†’ confirm â†’ clear `pos_access` + kill PIN + end sessions  
 - Remove / hide Continue with Google on Live POS  
 - Audit: who unlocked which register when; who disabled whom when  
 
@@ -108,7 +108,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 2. Float staff across stores in P0 or P1  
 3. Exact idle minutes (2 vs 3 vs 5)  
 4. Validity **6 vs 12 months** (default **12**)  
-5. Which bot channel for disable confirm (Fran Tech Ops Telegram vs dedicated HR bot) â€” P0 can be Telegram confirm callback wired to HRM disable API
+5. Which bot channel for disable confirm (Fran Tech Ops Telegram vs dedicated HR bot) â€” P0 can be Telegram confirm callback wired to HRM disable API, authorizing via **existing** store/area/HQ scopes (no Jarell-only special case)
 
 ## Unlock
 
