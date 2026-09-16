@@ -212,6 +212,7 @@ function linePayload(line: CartLine, lineNumber: number) {
       manager_override_reason: returnMetadata.managerOverrideReason ?? null,
       discount_label: line.discountLabel ?? null,
       note: line.note ?? null,
+      needs_hq_review: line.lineKind === 'open_amount',
     },
   }
 }

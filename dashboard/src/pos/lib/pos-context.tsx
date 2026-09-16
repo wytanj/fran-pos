@@ -31,7 +31,7 @@ export interface CartLine extends Partial<SkumsGraphRefs> {
   lineId: string
   sku: string
   name: string
-  lineKind?: 'product' | 'fran_reward' | 'fran_points' | 'manual_adjustment'
+  lineKind?: 'product' | 'fran_reward' | 'fran_points' | 'manual_adjustment' | 'open_amount'
   unitPrice: number // current selling price (after markdown / overrides)
   listPrice: number // original ticket price
   qty: number // negative for returns/exchanges
