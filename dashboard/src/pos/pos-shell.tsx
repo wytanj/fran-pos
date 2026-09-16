@@ -20,6 +20,8 @@ import {
   MapPin,
   Users,
   Nfc,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePos } from '@/pos/lib/pos-context'
@@ -31,6 +33,8 @@ import { useCompanySettings } from '@/hooks/use-settings'
 import { BrandMark } from '@/components/brand-mark'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { useS700Status } from '@/hooks/use-s700-status'
+
+const NAV_COLLAPSED_KEY = 'fran-pos-nav-collapsed'
 
 const navItems = [
   { to: '/pos/sale', icon: ShoppingBag, label: 'Sale' },
@@ -44,6 +48,16 @@ const navItems = [
   { to: '/pos/reports', icon: BarChart3, label: 'Reports & Closing' },
 ]
 
+function readNavCollapsed(): boolean {
+  try {
+    const raw = localStorage.getItem(NAV_COLLAPSED_KEY)
+    if (raw === null) return true
+    return raw === '1'
+  } catch {
+    return true
+  }
+}
+
 export function PosShell() {
   const { user: posUser, setUser, clearSale, mode } = usePos()
   const { user: accountUser, company } = useAuth()
@@ -53,12 +67,21 @@ export function PosShell() {
   const navigate = useNavigate()
   const [now, setNow] = useState(new Date())
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [navCollapsed, setNavCollapsed] = useState(readNavCollapsed)
   const [rosterZoneLabel, setRosterZoneLabel] = useState<string | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000 * 30)
     return () => clearInterval(t)
   }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_KEY, navCollapsed ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [navCollapsed])
 
   // Load current floor zone from SKUMS roster for the logged-in staff member
   useEffect(() => {
@@ -68,7 +91,6 @@ export function PosShell() {
         setRosterZoneLabel(null)
         return
       }
-      // Demo users: map to sample seed refs when available
       const staffRef =
         posUser.staffMemberId ||
         (posUser.id === 'u-cashier'
@@ -89,7 +111,6 @@ export function PosShell() {
         if (cancelled) return
         setRosterZoneLabel(assignment?.zone?.name || null)
       } catch {
-        // Soft-fail: POS still works without roster
         if (!cancelled) setRosterZoneLabel(null)
       }
     }
@@ -121,7 +142,11 @@ export function PosShell() {
       const overlayHost = document.getElementById('fran-overlay-root')
       const overlayOpen = Number(overlayHost?.dataset.openCount || '0') > 0
       const anyDialog = document.querySelector('[role="dialog"]')
-      if (overlayOpen || anyDialog) {
+      if (overlayOpen || anyDialog || mobileNavOpen) {
+        if (mobileNavOpen) {
+          setMobileNavOpen(false)
+          return
+        }
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
         return
       }
@@ -139,10 +164,9 @@ export function PosShell() {
       removed = true
       void handle?.remove()
     }
-  }, [])
+  }, [mobileNavOpen])
 
   if (!posUser) return <Navigate to="/pos/login" replace />
-
 
   const syncLabel = now.toLocaleString('en-SG', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
   const s700Label =
@@ -150,11 +174,39 @@ export function PosShell() {
   const s700Class =
     s700Status === 'online' ? 'text-success' : s700Status === 'checking' ? 'text-muted-foreground' : 'text-warning'
 
-  const renderStatusPanel = (opts?: { compact?: boolean }) => (
-    <div className={cn('space-y-2', opts?.compact && 'px-1')}>
-      <div className="flex items-center gap-2 text-xs text-success">
+  const store = getActiveStore()
+  const companyLine = company?.name ?? (accountUser && mode === 'demo' ? 'Account demo' : null)
+
+  const renderBrandBlock = (opts?: { collapsed?: boolean; showClose?: boolean; onClose?: () => void }) => (
+    <div className={cn('flex items-start gap-2 border-b border-line', opts?.collapsed ? 'justify-center px-1 py-3' : 'px-3 py-3')}>
+      <BrandMark size={opts?.collapsed ? 'sm' : 'md'} />
+      {!opts?.collapsed && (
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate font-display text-[15px] font-bold tracking-tight">{store.name}</p>
+          {companyLine && <p className="truncate text-xs font-medium text-foreground">{companyLine}</p>}
+          <p className="truncate text-xs text-muted-foreground">
+            Store {store.code} · Register 01
+          </p>
+        </div>
+      )}
+      {opts?.showClose && (
+        <button
+          type="button"
+          aria-label="Close POS menu"
+          onClick={opts.onClose}
+          className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white transition-colors hover:bg-surface-sunken"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
+
+  const renderStatusPanel = (opts?: { collapsed?: boolean }) => (
+    <div className={cn('space-y-2', opts?.collapsed && 'flex flex-col items-center px-0')}>
+      <div className="flex items-center gap-2 text-xs text-success" title="Online">
         <Wifi className="h-3.5 w-3.5 shrink-0" />
-        <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>Online</span>
+        {!opts?.collapsed && <span>Online</span>}
       </div>
       {s700Label && (
         <div
@@ -162,27 +214,35 @@ export function PosShell() {
           title="Galaxy Tab talks to this S700 over Stripe. Cards are taken on the reader, not on the tablet."
         >
           <Nfc className="h-3.5 w-3.5 shrink-0" />
-          <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>{s700Label}</span>
+          {!opts?.collapsed && <span>{s700Label}</span>}
         </div>
       )}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground" title="Cloud synced">
         <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
-        <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>Cloud synced</span>
+        {!opts?.collapsed && <span>Cloud synced</span>}
       </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground" title={syncLabel}>
         <Clock className="h-3.5 w-3.5 shrink-0" />
-        <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>{syncLabel}</span>
+        {!opts?.collapsed && <span>{syncLabel}</span>}
       </div>
       {rosterZoneLabel && (
-        <div className="flex items-center gap-2 rounded-full border border-line bg-yellow-soft px-2 py-1 text-[11px] font-medium text-brown">
+        <div
+          className={cn(
+            'flex items-center gap-2 rounded-full border border-line bg-yellow-soft text-[11px] font-medium text-brown',
+            opts?.collapsed ? 'p-1.5' : 'px-2 py-1',
+          )}
+          title={rosterZoneLabel}
+        >
           <MapPin className="h-3.5 w-3.5 shrink-0" />
-          <span className={cn('truncate', opts?.compact && 'sr-only lg:not-sr-only')}>{rosterZoneLabel}</span>
+          {!opts?.collapsed && <span className="truncate">{rosterZoneLabel}</span>}
         </div>
       )}
-      <div className={cn('border-t border-line pt-2', opts?.compact && 'hidden lg:block')}>
-        <p className="truncate text-sm font-medium">{posUser.name}</p>
-        <p className="text-xs capitalize text-muted-foreground">{posUser.role}</p>
-      </div>
+      {!opts?.collapsed && (
+        <div className="border-t border-line pt-2">
+          <p className="truncate text-sm font-medium">{posUser.name}</p>
+          <p className="text-xs capitalize text-muted-foreground">{posUser.role}</p>
+        </div>
+      )}
     </div>
   )
 
@@ -192,36 +252,43 @@ export function PosShell() {
     navigate('/pos/login')
   }
 
+  const renderNavLinks = (opts: { collapsed?: boolean; onNavigate?: () => void }) =>
+    navItems.map((item) => (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        aria-label={item.label}
+        title={item.label}
+        onClick={opts.onNavigate}
+        className={({ isActive }) =>
+          cn(
+            'press flex items-center gap-3 rounded-sm px-2 py-2.5 text-sm font-medium transition-colors',
+            opts?.collapsed ? 'justify-center px-2' : 'px-3',
+            isActive
+              ? 'bg-yellow font-semibold text-brown'
+              : 'text-ink-soft hover:bg-surface-sunken hover:text-ink',
+          )
+        }
+      >
+        <item.icon className="h-5 w-5 shrink-0" />
+        {!opts?.collapsed && <span className="truncate">{item.label}</span>}
+      </NavLink>
+    ))
+
   return (
     // Safe-area padding keeps the register clear of the status bar, notch, and
     // gesture/dock bars on edge-to-edge Android 15+ and iPhone. env() reads 0
     // on desktop browsers and when the native shell already insets the WebView.
     <div className="relative flex h-screen flex-col overflow-hidden bg-cream text-foreground pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-      {/* Top bar */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-white px-2 shadow-warm-xs sm:px-4">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            aria-label="Open POS menu"
-            onClick={() => setMobileNavOpen(true)}
-            className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white transition-colors hover:bg-surface-sunken md:hidden"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
-          <BrandMark />
-          <div className="min-w-0 leading-tight">
-            <p className="truncate font-display text-[17px] font-bold tracking-tight">{getActiveStore().name}</p>
-            {(company || (accountUser && mode === 'demo')) && (
-              <p className="truncate text-xs font-medium text-foreground">{company?.name ?? 'Account demo'}</p>
-            )}
-            <p className="truncate text-xs text-muted-foreground">
-              Store {getActiveStore().code} · Register 01
-            </p>
-          </div>
-        </div>
-
-
-      </header>
+      {/* Mobile-only floating hamburger — no full top bar so sale keeps vertical space */}
+      <button
+        type="button"
+        aria-label="Open POS menu"
+        onClick={() => setMobileNavOpen(true)}
+        className="press absolute left-[max(0.5rem,env(safe-area-inset-left))] top-[max(0.5rem,env(safe-area-inset-top))] z-40 flex h-10 w-10 items-center justify-center rounded-full border border-line bg-white shadow-warm-xs transition-colors hover:bg-surface-sunken md:hidden"
+      >
+        <Menu className="h-4 w-4" />
+      </button>
 
       {mobileNavOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
@@ -235,44 +302,11 @@ export function PosShell() {
             role="dialog"
             aria-modal="true"
             aria-label="POS menu"
-            // fixed overlay escapes the root's safe-area padding, so re-apply it
-            // here: without it the close button sits under the status bar and
-            // taps never reach the app (Android 15 edge-to-edge).
             className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-nav pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
           >
-            <div className="flex items-center justify-between border-b px-3 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{getActiveStore().name}</p>
-                <p className="text-xs text-muted-foreground">Register navigation</p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close POS menu"
-                onClick={() => setMobileNavOpen(false)}
-                className="press flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white transition-colors hover:bg-surface-sunken"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            {renderBrandBlock({ showClose: true, onClose: () => setMobileNavOpen(false) })}
             <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMobileNavOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'press flex items-center gap-3 rounded-sm px-3 py-3 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-yellow font-semibold text-brown'
-                        : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
-                    )
-                  }
-                >
-                  <item.icon className="h-5 w-5 shrink-0" />
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
+              {renderNavLinks({ onNavigate: () => setMobileNavOpen(false) })}
             </nav>
             <div className="space-y-3 border-t p-3">
               {renderStatusPanel()}
@@ -293,45 +327,47 @@ export function PosShell() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        {/* Left nav */}
-        <nav className="hidden w-16 shrink-0 flex-col border-r border-line bg-white py-3 md:flex lg:w-44 lg:px-3">
-          <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto lg:items-stretch">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                aria-label={item.label}
-                title={item.label}
-                className={({ isActive }) =>
-                  cn(
-                    'press flex flex-col items-center gap-1 rounded-sm px-2 py-2.5 text-xs font-medium transition-colors lg:flex-row lg:gap-3 lg:px-3 lg:text-sm',
-                    isActive
-                      ? 'bg-yellow font-semibold text-brown'
-                      : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
-                  )
-                }
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                <span className="hidden text-center leading-tight lg:inline lg:text-left">{item.label}</span>
-              </NavLink>
-            ))}
+        {/* Desktop / tablet left nav — collapsible icon rail */}
+        <nav
+          className={cn(
+            'hidden shrink-0 flex-col border-r border-line bg-white transition-[width] duration-200 md:flex',
+            navCollapsed ? 'w-16' : 'w-52',
+          )}
+        >
+          {renderBrandBlock({ collapsed: navCollapsed })}
+          <div className={cn('flex shrink-0 items-center border-b border-line px-2 py-1.5', navCollapsed ? 'justify-center' : 'justify-end')}>
+            <button
+              type="button"
+              aria-label={navCollapsed ? 'Expand POS menu' : 'Collapse POS menu'}
+              title={navCollapsed ? 'Expand menu' : 'Collapse menu'}
+              onClick={() => setNavCollapsed((v) => !v)}
+              className="press flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white transition-colors hover:bg-surface-sunken"
+            >
+              {navCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+            </button>
           </div>
-          <div className="mt-2 space-y-2 border-t border-line px-2 pt-3 lg:px-0">
-            {renderStatusPanel({ compact: true })}
+          <div className={cn('flex flex-1 flex-col gap-1 overflow-y-auto py-2', navCollapsed ? 'px-1' : 'px-2')}>
+            {renderNavLinks({ collapsed: navCollapsed })}
+          </div>
+          <div className={cn('mt-auto space-y-2 border-t border-line py-3', navCollapsed ? 'px-1' : 'px-3')}>
+            {renderStatusPanel({ collapsed: navCollapsed })}
             <button
               type="button"
               onClick={lockTerminal}
               title="Lock terminal"
-              className="press flex w-full items-center justify-center gap-2 rounded-full border-[1.5px] border-brown bg-white px-2 py-2 text-xs font-semibold transition-colors hover:bg-surface-sunken lg:px-3 lg:text-sm"
+              className={cn(
+                'press flex w-full items-center gap-2 rounded-full border-[1.5px] border-brown bg-white py-2 text-xs font-semibold transition-colors hover:bg-surface-sunken',
+                navCollapsed ? 'justify-center px-2' : 'justify-center px-3 text-sm',
+              )}
             >
               <LockKeyhole className="h-4 w-4 shrink-0" />
-              <span className="hidden lg:inline">Lock</span>
+              {!navCollapsed && <span>Lock</span>}
             </button>
           </div>
         </nav>
 
-        {/* Page */}
-        <main className="min-w-0 flex-1 overflow-hidden">
+        {/* Page — full height; no top bar */}
+        <main className="relative min-w-0 flex-1 overflow-hidden">
           <Outlet />
         </main>
       </div>
