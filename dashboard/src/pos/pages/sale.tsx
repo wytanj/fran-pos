@@ -235,7 +235,7 @@ function toPosProduct(item: SkumsPosCatalogItem): Product {
     mdPrice: item.unit_price !== item.list_price ? item.unit_price : undefined,
     qtyOnHand: item.track_inventory ? item.stock_quantity : 999,
     returnable: true,
-    emoji: 'P',
+    emoji: '',
     skums: {
       product_identity_id: item.product_identity_id,
       trade_unit_id: item.trade_unit_id,
@@ -272,7 +272,7 @@ function toLiveProduct(product: DbProduct): Product {
     price: Number(product.price) || 0,
     qtyOnHand: product.track_inventory ? product.inventory_count : 999,
     returnable: true,
-    emoji: 'P',
+    emoji: '',
     skums: skumsRefsFromMetadata(product.metadata),
   }
 }
@@ -577,8 +577,8 @@ export default function SalePage() {
   const cameraLastAcceptedRef = useRef<{ value: string; at: number } | null>(null)
   const cameraSubmitRef = useRef<(value: string) => Promise<void>>(async () => {})
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
-    if (typeof window === 'undefined') return 'grid'
-    return localStorage.getItem('pos_catalog_view') === 'list' ? 'list' : 'grid'
+    if (typeof window === 'undefined') return 'list'
+    return localStorage.getItem('pos_catalog_view') === 'grid' ? 'grid' : 'list'
   })
 
   // Line action (discount / override) + the manager-auth gate it routes through.
@@ -1066,7 +1066,7 @@ export default function SalePage() {
       price: unitPrice,
       qtyOnHand: 999,
       returnable: true,
-      emoji: 'P',
+      emoji: '',
       skums: {
         product_identity_id: match.product_identity_id,
         trade_unit_id: match.trade_unit_id,
@@ -2524,10 +2524,13 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
         out && 'cursor-not-allowed opacity-50'
       )}
     >
-      <div className="mb-2 flex items-start justify-between">
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-2xl">
-          {product.emoji}
-        </div>
+      <div className="mb-2 flex items-start justify-between">{product.emoji ? (
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-2xl">
+            {product.emoji}
+          </div>
+        ) : (
+          <div />
+        )}
         <div className="flex flex-col items-end gap-1">
           {product.mdPrice != null && <Badge variant="warning">MD / SSS</Badge>}
           {!product.returnable && <Badge variant="outline" className="text-[10px]">Non-returnable</Badge>}
@@ -2567,13 +2570,10 @@ function ProductListRow({ product, onAdd }: { product: Product; onAdd: () => voi
       onClick={onAdd}
       disabled={out}
       className={cn(
-        'group flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary hover:bg-accent/40 active:scale-[0.997] cursor-pointer',
+        'group flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left shadow-sm transition-colors hover:border-primary hover:bg-accent/40 active:scale-[0.997] cursor-pointer',
         out && 'cursor-not-allowed opacity-50'
       )}
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary text-xl">
-        {product.emoji}
-      </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate text-sm font-medium">{product.name}</p>
@@ -2581,8 +2581,10 @@ function ProductListRow({ product, onAdd }: { product: Product; onAdd: () => voi
           {!product.returnable && <Badge variant="outline" className="shrink-0 text-[10px]">Non-returnable</Badge>}
         </div>
         <p className="truncate text-xs text-muted-foreground">
-          {product.sku} - {product.category}
-          {product.storeLocationCode ? ` - Loc ${product.storeLocationCode}` : ''}
+          {product.sku}
+          {Array.isArray(product.barcodes) && product.barcodes[0] ? ` · ${product.barcodes[0]}` : ''}
+          {' · '}{product.category}
+          {product.storeLocationCode ? ` · Loc ${product.storeLocationCode}` : ''}
         </p>
       </div>
       <div className="w-24 shrink-0 text-right">
