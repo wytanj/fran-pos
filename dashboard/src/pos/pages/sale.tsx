@@ -545,7 +545,6 @@ export default function SalePage() {
   const [voidingSale, setVoidingSale] = useState(false)
   const [promoDismissed, setPromoDismissed] = useState(false)
   const [catalog, setCatalog] = useState<Product[]>(PRODUCTS)
-  const [, setCatalogSource] = useState<'mock' | 'live' | 'skums'>('mock')
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [catalogRefreshToken, setCatalogRefreshToken] = useState(0)
