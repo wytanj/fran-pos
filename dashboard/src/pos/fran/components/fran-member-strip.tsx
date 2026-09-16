@@ -73,7 +73,7 @@ function CompactSalesTypeIcons({
           <button
             key={s.value}
             type="button"
-            title={`${s.label}${s.requiresManager ? ' (manager)' : ''} — ${s.hint}`}
+            title={`${s.label}${s.requiresManager ? ' (manager)' : ''} - ${s.hint}`}
             aria-label={s.label}
             aria-pressed={selected}
             onClick={() => onChooseSalesType(s.value)}
