@@ -17,10 +17,74 @@ function readBearer(req: VercelRequest) {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : header.trim()
 }
 
-async function requireUser(req: VercelRequest) {
-  const token = readBearer(req)
-  if (!token) throw new Error('Sign in to use Stripe Terminal')
+function looksLikeJwt(token: string) {
+  return token.split('.').length === 3
+}
 
+function readDeviceTokenHeader(req: VercelRequest) {
+  const raw = req.headers['x-pos-device-token'] || req.headers['X-Pos-Device-Token']
+  return typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? String(raw[0] || '').trim() : ''
+}
+
+async function assertRegisterDevice(deviceToken: string) {
+  if (deviceToken.length < 8) throw new Error('Register device token is missing or too short')
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NUXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '')
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
+  if (!supabaseUrl || (!serviceKey && !anonKey)) {
+    throw new Error('Supabase is not configured for register device auth')
+  }
+  const key = serviceKey || anonKey
+  const rpcRes = await fetch(`${supabaseUrl}/rest/v1/rpc/get_pos_register_company_context`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ p_device_token: deviceToken }),
+  })
+  const text = await rpcRes.text()
+  let parsed: any = null
+  try {
+    parsed = text ? JSON.parse(text) : null
+  } catch {
+    parsed = null
+  }
+  if (rpcRes.ok && parsed && typeof parsed === 'object' && (parsed.company_id || parsed.company?.id)) {
+    return {
+      kind: 'device' as const,
+      device_token: deviceToken,
+      company_id: String(parsed.company_id || parsed.company.id),
+      store_code: parsed.store_code ? String(parsed.store_code) : null,
+    }
+  }
+
+  if (serviceKey) {
+    const deviceRes = await fetch(
+      `${supabaseUrl}/rest/v1/pos_register_devices?device_token=eq.${encodeURIComponent(deviceToken)}&revoked_at=is.null&select=device_token,store_code,register_id,company_id&limit=1`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+    )
+    const rows = (await deviceRes.json().catch(() => [])) as any[]
+    const row = Array.isArray(rows) ? rows[0] : null
+    if (deviceRes.ok && row?.company_id) {
+      return {
+        kind: 'device' as const,
+        device_token: deviceToken,
+        company_id: String(row.company_id),
+        store_code: row.store_code ? String(row.store_code) : null,
+      }
+    }
+  }
+
+  throw new Error(
+    (parsed && (parsed.message || parsed.error || parsed.hint)) ||
+      text ||
+      'Unknown or revoked register device. Re-bind this tablet.',
+  )
+}
+
+async function requireGoogleUser(token: string) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NUXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   if (!supabaseUrl || !supabaseKey) throw new Error('Supabase auth is not configured for Stripe Terminal')
@@ -47,7 +111,24 @@ async function requireUser(req: VercelRequest) {
   if (!response.ok) throw new Error('Stripe Terminal session is not valid. Sign out and Continue with Google again.')
   const user = await response.json()
   if (!user?.id) throw new Error('Stripe Terminal session is not valid. Sign out and Continue with Google again.')
-  return user as { id: string; email?: string }
+  return { kind: 'user' as const, id: String(user.id), email: user.email ? String(user.email) : undefined }
+}
+
+/** Google JWT (HQ web) or bound register device_token (PIN-only S10). */
+async function requireAuth(req: VercelRequest) {
+  const bearer = readBearer(req)
+  const headerDevice = readDeviceTokenHeader(req)
+  const deviceToken = headerDevice || (bearer && !looksLikeJwt(bearer) ? bearer : '')
+
+  if (deviceToken) {
+    return assertRegisterDevice(deviceToken)
+  }
+
+  if (bearer && looksLikeJwt(bearer)) {
+    return requireGoogleUser(bearer)
+  }
+
+  throw new Error('Unlock with a bound register PIN, or Continue with Google, to use Stripe Terminal')
 }
 
 function publicErrorMessage(error: unknown) {
@@ -117,7 +198,7 @@ function mapReader(input: Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, x-pos-device-token')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return json(res, 405, { error: 'Use POST' })
@@ -142,7 +223,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    await requireUser(req)
+    await requireAuth(req)
     const stripe = getStripe()
 
     if (action === 'connection_token') {
