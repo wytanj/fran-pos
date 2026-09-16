@@ -9,7 +9,9 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/providers/auth-provider'
 import { BrandMark } from '@/components/brand-mark'
 import {
+  HRM_POS_PIN_DIGITS,
   clearRegisterBinding,
+  isHrmManagerPlus,
   loadRegisterBinding,
   pairRegisterDevice,
   verifyHrmPosPin,
@@ -123,15 +125,11 @@ export default function PosLogin() {
         pin,
         binding,
       })
-      // Hydrate Auth company/settings from register binding (SKUMS + stripe_terminal / S700).
       await hydrateRegisterCompany(binding)
       if (!staff?.role) {
         throw new Error('HRM verify returned no staff role')
       }
-      const posRole: PosRole =
-        staff.role === 'cashier' || staff.role === 'staff' || staff.role === 'supervisor'
-          ? 'cashier'
-          : 'manager'
+      const posRole: PosRole = isHrmManagerPlus(staff.role) ? 'manager' : 'cashier'
       setPin('')
       setMode('live')
       setUser({
@@ -145,6 +143,7 @@ export default function PosLogin() {
         employmentType: staff.employment_type,
         hrmEmployeeId: staff.id,
         employeeCode: staff.employee_code,
+        hrmRole: staff.role,
         registerId: binding.register_id,
         storeCode: binding.store_code,
       })
@@ -280,7 +279,7 @@ export default function PosLogin() {
                 <Button
                   className="h-12 w-full text-base"
                   onClick={() => void openLiveWithHrmPin()}
-                  disabled={employeeCode.length < 1 || pin.length !== 8 || unlocking}
+                  disabled={employeeCode.length < 1 || pin.length !== HRM_POS_PIN_DIGITS || unlocking}
                 >
                   <ShoppingBag className="h-4 w-4" />
                   {unlocking ? 'Checking…' : 'Unlock'}
@@ -294,10 +293,10 @@ export default function PosLogin() {
               <div className="flex min-h-[22rem] flex-col rounded-lg bg-secondary p-4 sm:min-h-0 sm:p-5">
                 <div className="mb-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <KeyRound className="h-4 w-4" />
-                  8-digit PIN
+                  {HRM_POS_PIN_DIGITS}-digit PIN
                 </div>
                 <div className="mb-4 flex justify-center gap-2.5">
-                  {Array.from({ length: 8 }).map((_, i) => (
+                  {Array.from({ length: HRM_POS_PIN_DIGITS }).map((_, i) => (
                     <div
                       key={i}
                       className={cn(
@@ -317,7 +316,7 @@ export default function PosLogin() {
                   className="min-h-0 flex-1"
                   onPress={(k) => {
                     setError(false)
-                    setPin((p) => (p.length < 8 ? p + k : p))
+                    setPin((p) => (p.length < HRM_POS_PIN_DIGITS ? p + k : p))
                   }}
                   onBackspace={() => {
                     setError(false)
