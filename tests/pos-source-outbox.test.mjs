@@ -98,6 +98,13 @@ test('POS outbox persists to Supabase with local fallback and idempotent retry',
   assert.match(outbox, /export async function retryPendingPosOutboxEvents/)
 })
 
+test('open amount lines flag HQ review on the sale payload and require manager auth by default', () => {
+  assert.match(salePage, /OPEN_AMOUNT_REQUIRES_MANAGER = true/)
+  assert.match(salePage, /lineKind: 'open_amount'/)
+  assert.match(salePage, /Authorise open amount/)
+  assert.match(outbox, /needs_hq_review: line\.lineKind === 'open_amount'/)
+})
+
 test('sale and return completion paths persist POS source events without blocking checkout', () => {
   assert.match(salePage, /buildPosOutboxEventsForCompletedSale/)
   assert.match(salePage, /persistPosOutboxEvents/)

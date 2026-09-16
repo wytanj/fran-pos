@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   Loader2,
   Camera,
+  ChevronDown,
+  CircleDollarSign,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +43,7 @@ import {
 import { usePos, type CartLine, type CompletedSale, type PosSaleSyncState } from '@/pos/lib/pos-context'
 import { LineActionModal, type LineActionMode } from '@/pos/components/line-action-modal'
 import { ManagerAuthModal } from '@/pos/components/manager-auth-modal'
+import { Numpad } from '@/pos/components/numpad'
 import { PaymentModal } from '@/pos/components/payment-modal'
 import { SaleCompleteModal } from '@/pos/components/sale-complete-modal'
 import { FranCounterProfileCard } from '@/pos/fran/components/fran-counter-profile-card'
@@ -147,6 +150,29 @@ const CAMERA_BARCODE_FORMATS = [
   'itf',
   'data_matrix',
 ]
+
+const OPEN_AMOUNT_REQUIRES_MANAGER = true
+const OPEN_AMOUNT_SKU = 'OPEN'
+
+function isOpenAmountLine(line: Pick<CartLine, 'lineKind'>) {
+  return line.lineKind === 'open_amount'
+}
+
+function openAmountLabel(scannedCode?: string | null) {
+  const code = scannedCode?.trim()
+  return code ? `Open · ${code}` : 'Open'
+}
+
+function openAmountSku(scannedCode?: string | null) {
+  const code = scannedCode?.trim()
+  return code || OPEN_AMOUNT_SKU
+}
+
+function unmatchedOpenScan(raw: string, catalogHit: boolean) {
+  const code = raw.trim()
+  if (!code || catalogHit) return null
+  return code
+}
 
 const ZXING_1D_BARCODE_FORMATS = [
   BarcodeFormat.EAN_13,
@@ -334,6 +360,7 @@ function restrictedFlagsForLine(line: CartLine, product: Product | undefined) {
   const flags: string[] = []
   if (!line.returnable || product?.returnable === false) flags.push('final_sale')
   if (line.lineKind && line.lineKind !== 'product') flags.push(line.lineKind)
+  if (isOpenAmountLine(line)) flags.push('needs_hq_review')
   return flags
 }
 
@@ -399,6 +426,7 @@ function toSkumsBasketQuoteLine(line: CartLine, product?: Product): SkumsPosBask
       local_discount_label: line.discountLabel ?? null,
       overridden: line.overridden ?? false,
       override_reason: line.overrideReason ?? null,
+      needs_hq_review: isOpenAmountLine(line),
     },
   }
 }
@@ -543,6 +571,9 @@ export default function SalePage() {
   const [franVoucherScans, setFranVoucherScans] = useState<FranVoucherScan[]>([])
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [cartOverrideOpen, setCartOverrideOpen] = useState(false)
+  const [openAmountOpen, setOpenAmountOpen] = useState(false)
+  const [openAmountScan, setOpenAmountScan] = useState<string | null>(null)
+  const [totalsExpanded, setTotalsExpanded] = useState(false)
   const [completedOpen, setCompletedOpen] = useState(false)
   const [voidingSale, setVoidingSale] = useState(false)
   const [promoDismissed, setPromoDismissed] = useState(false)
@@ -1112,7 +1143,10 @@ export default function SalePage() {
     }
 
     if (mode !== 'live' || !skumsConnector) {
-      setScanMessage({ tone: 'warning', text: 'No local product matched this product code.' })
+      setScanMessage({
+        tone: 'warning',
+        text: 'No local product matched this product code. Use Open amount to charge it.',
+      })
       focusProductEntry({ select: true })
       return
     }
@@ -1138,7 +1172,10 @@ export default function SalePage() {
         })))
         setScanMessage({ tone: 'info', text: 'Multiple SKUMS matches found. Select the correct item.' })
       } else {
-        setScanMessage({ tone: 'warning', text: 'No SKUMS match found. Back office will review the scan.' })
+        setScanMessage({
+          tone: 'warning',
+          text: 'No SKUMS match found. Back office will review the scan. Use Open amount to charge this code.',
+        })
         focusProductEntry({ select: true })
       }
     } catch (err) {
@@ -1388,6 +1425,37 @@ export default function SalePage() {
     }
   }
 
+  const beginOpenAmount = () => {
+    const needle = search.trim()
+    const catalogHit = Boolean(needle && catalogProductByCode.get(needle.toLowerCase()))
+    setOpenAmountScan(unmatchedOpenScan(needle, catalogHit))
+    setOpenAmountOpen(true)
+  }
+
+  const commitOpenAmount = (input: { amount: number; note: string }) => {
+    const scannedCode = openAmountScan
+    const run = () => {
+      addAdjustmentLine({
+        sku: openAmountSku(scannedCode),
+        name: openAmountLabel(scannedCode),
+        amount: input.amount,
+        lineKind: 'open_amount',
+        note: input.note.trim() || undefined,
+      })
+      setSearch('')
+      setScanMessage(null)
+      focusProductEntry()
+    }
+    if (OPEN_AMOUNT_REQUIRES_MANAGER) {
+      setPendingAuth({
+        label: `Authorise open amount ${formatCurrency(input.amount, STORE.currency)}`,
+        run,
+      })
+      return
+    }
+    run()
+  }
+
   const flashBasketNotice = (message: string) => {
     setBasketNotice(message)
     window.setTimeout(() => setBasketNotice(null), 3200)
@@ -1434,6 +1502,9 @@ export default function SalePage() {
     setSearch('')
     setPromoDismissed(false)
     setPaymentOpen(false)
+    setOpenAmountOpen(false)
+    setOpenAmountScan(null)
+    setTotalsExpanded(false)
     setCompletedOpen(false)
     setSaleSync(null)
     focusProductEntry()
@@ -2067,7 +2138,7 @@ export default function SalePage() {
         <div className="shrink-0 bg-card px-3 pb-3">
           <div
             className={cn(
-              'flex items-start gap-2 rounded-md border px-3 py-2 text-sm',
+              'flex flex-wrap items-start gap-2 rounded-md border px-3 py-2 text-sm',
               scanMessage.tone === 'success' && 'border-transparent bg-success-soft text-success',
               scanMessage.tone === 'info' && 'border-line bg-yellow-soft text-brown',
               scanMessage.tone === 'warning' && 'border-warning/30 bg-warning-soft text-warning',
@@ -2075,7 +2146,16 @@ export default function SalePage() {
             )}
           >
             {scanMessage.tone === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
-            <span>{scanMessage.text}</span>
+            <span className="flex-1">{scanMessage.text}</span>
+            {scanMessage.tone === 'warning' && (
+              <button
+                type="button"
+                onClick={beginOpenAmount}
+                className="shrink-0 text-xs font-semibold underline underline-offset-2"
+              >
+                Open amount
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -2218,22 +2298,41 @@ export default function SalePage() {
         {/* Totals + actions */}
         <div className="border-t p-3">
           <div className="space-y-1 text-sm">
-            <Row label={`Subtotal (${totals.itemCount} item${Math.abs(totals.itemCount) === 1 ? '' : 's'})`} value={formatCurrency(totals.subtotal, STORE.currency)} />
-            {totals.discountTotal > 0 && (
-              <Row label="Discounts" value={`-${formatCurrency(totals.discountTotal, STORE.currency)}`} muted />
+            {totalsExpanded && (
+              <>
+                <Row label={`Subtotal (${totals.itemCount} item${Math.abs(totals.itemCount) === 1 ? '' : 's'})`} value={formatCurrency(totals.subtotal, STORE.currency)} />
+                {totals.discountTotal > 0 && (
+                  <Row label="Discounts" value={`-${formatCurrency(totals.discountTotal, STORE.currency)}`} muted />
+                )}
+                {cartPriceOverride && (
+                  <Row
+                    label={`Cart override (${cartPriceOverride.reason})`}
+                    value={formatSignedCurrency(totals.cartAdjustment)}
+                    muted
+                  />
+                )}
+                <Row label="GST 9% (incl.)" value={formatCurrency(totals.taxIncluded, STORE.currency)} muted />
+              </>
             )}
-            {cartPriceOverride && (
-              <Row
-                label={`Cart override (${cartPriceOverride.reason})`}
-                value={formatSignedCurrency(totals.cartAdjustment)}
-                muted
-              />
-            )}
-            <Row label="GST 9% (incl.)" value={formatCurrency(totals.taxIncluded, STORE.currency)} muted />
-            <div className="flex items-center justify-between pt-1 font-display text-[28px] font-bold tracking-tight">
-              <span>Total</span>
+            <button
+              type="button"
+              aria-expanded={totalsExpanded}
+              aria-label={totalsExpanded ? 'Collapse sale totals' : 'Expand sale totals'}
+              onClick={() => setTotalsExpanded((open) => !open)}
+              className="flex w-full items-center justify-between pt-1 font-display text-[28px] font-bold tracking-tight cursor-pointer"
+            >
+              <span className="flex items-center gap-1">
+                Total
+                <ChevronDown
+                  className={cn('h-5 w-5 text-muted-foreground transition-transform', totalsExpanded && 'rotate-180')}
+                  aria-hidden
+                />
+              </span>
               <span className="tabular-nums">{formatCurrency(totals.total, STORE.currency)}</span>
-            </div>
+            </button>
+            <p className="text-xs text-muted-foreground">
+              {Math.abs(totals.itemCount)} item{Math.abs(totals.itemCount) === 1 ? '' : 's'}
+            </p>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -2243,7 +2342,10 @@ export default function SalePage() {
             <Button variant="outline" onClick={() => setCartOverrideOpen(true)} disabled={cart.length === 0}>
               <Pencil className="h-4 w-4" /> Override total
             </Button>
-            <Button variant="outline" className="col-span-2" onClick={handleClearBasket} disabled={cart.length === 0}>
+            <Button variant="outline" onClick={beginOpenAmount}>
+              <CircleDollarSign className="h-4 w-4" /> Open amount
+            </Button>
+            <Button variant="outline" onClick={handleClearBasket} disabled={cart.length === 0}>
               <Trash2 className="h-4 w-4" /> Clear
             </Button>
           </div>
@@ -2426,6 +2528,17 @@ export default function SalePage() {
             label: 'Authorise removing cart total override',
             run: clearCartPriceOverride,
           })
+        }}
+      />
+
+      <OpenAmountModal
+        key={openAmountOpen ? `open:${openAmountScan ?? ''}` : 'closed'}
+        open={openAmountOpen}
+        scannedCode={openAmountScan}
+        onClose={() => setOpenAmountOpen(false)}
+        onApply={(amount, note) => {
+          setOpenAmountOpen(false)
+          commitOpenAmount({ amount, note })
         }}
       />
 
@@ -2622,24 +2735,30 @@ function CartRow({
   const net = cartLineNet(line)
   const isReturn = line.qty < 0
   const isFranLine = isFranAdjustmentLine(line)
+  const isOpenLine = isOpenAmountLine(line)
   return (
     <div
       className={cn(
         'border-b border-line px-2.5 py-2',
         isReturn && 'bg-destructive/5',
-        isFranLine && 'bg-success-soft'
+        isFranLine && 'bg-success-soft',
+        isOpenLine && 'bg-warning-soft'
       )}
     >
       <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0 flex-1 overflow-hidden">
           <p className="truncate text-sm font-medium leading-snug">{line.name}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {line.sku} · {formatCurrency(line.unitPrice, STORE.currency)}
+            {isOpenLine ? 'Open amount' : line.sku} · {formatCurrency(line.unitPrice, STORE.currency)}
             {line.isMarkdown && <span className="ml-1 text-warning">MD</span>}
             {line.overridden && <span className="ml-1 text-brown">ovr</span>}
             {isFranLine && <span className="ml-1 text-success">Fran</span>}
+            {isOpenLine && <span className="ml-1 text-warning">No SKUMS</span>}
             {line.storeLocationCode && <span className="ml-1 text-primary">Loc {line.storeLocationCode}</span>}
           </p>
+          {isOpenLine && (
+            <p className="truncate text-xs text-warning">Back office will review</p>
+          )}
           {line.lineDiscount > 0 && (
             <p className="truncate text-xs text-success">
               {line.discountLabel}: -{formatCurrency(line.lineDiscount, STORE.currency)}
@@ -2647,6 +2766,9 @@ function CartRow({
           )}
           {line.overridden && line.overrideReason && (
             <p className="truncate text-xs text-brown">Override: {line.overrideReason}</p>
+          )}
+          {line.note && !line.overridden && (
+            <p className="truncate text-xs text-muted-foreground">{line.note}</p>
           )}
           {line.franDecisionRef && (
             <p className="truncate text-xs text-success">Decision {line.franDecisionRef}</p>
@@ -2795,6 +2917,89 @@ function CartOverrideModal({
               Continue to authorisation
             </Button>
           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function OpenAmountModal({
+  open,
+  scannedCode,
+  onClose,
+  onApply,
+}: {
+  open: boolean
+  scannedCode: string | null
+  onClose: () => void
+  onApply: (amount: number, note: string) => void
+}) {
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+
+  const amountNum = Number(amount)
+  const validAmount = amount !== '' && Number.isFinite(amountNum) && amountNum > 0
+
+  const submit = () => {
+    if (!validAmount) return
+    onApply(amountNum, note)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-sm" onClose={onClose}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CircleDollarSign className="h-5 w-5" />
+            Open amount
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-2 rounded-lg border bg-muted/40 p-3 text-sm">
+          <p className="font-medium">{openAmountLabel(scannedCode)}</p>
+          <p className="text-xs text-muted-foreground">
+            {scannedCode
+              ? 'No SKUMS match. Back office will review this line.'
+              : 'Manual charge with no catalog item. Back office will review this line.'}
+          </p>
+        </div>
+
+        <div className="mt-3 rounded-lg border bg-muted/40 p-3 text-right text-3xl font-bold tabular-nums">
+          {formatCurrency(validAmount ? amountNum : 0, STORE.currency)}
+        </div>
+
+        <Numpad
+          className="mt-3 w-full"
+          decimal
+          onPress={(key) => {
+            if (key === '.' && amount.includes('.')) return
+            setAmount((current) => current + key)
+          }}
+          onBackspace={() => setAmount((current) => current.slice(0, -1))}
+        />
+
+        <div className="mt-3">
+          <Label htmlFor="open-amount-note">Note (optional)</Label>
+          <Input
+            id="open-amount-note"
+            className="mt-1 h-9"
+            maxLength={80}
+            placeholder="Short note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        </div>
+
+        {OPEN_AMOUNT_REQUIRES_MANAGER && (
+          <p className="mt-3 text-xs text-muted-foreground">Requires manager authorisation to add.</p>
+        )}
+        <div className="mt-2 flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button className="flex-1" onClick={submit} disabled={!validAmount}>
+            {OPEN_AMOUNT_REQUIRES_MANAGER ? 'Continue to authorisation' : 'Add open amount'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

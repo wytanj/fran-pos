@@ -77,6 +77,7 @@ export function toSkumsPosSaleInput(sale: CompletedSale): SkumsPosSaleInput {
         markdown: line.isMarkdown,
         overridden: line.overridden ?? false,
         override_reason: line.overrideReason ?? null,
+        needs_hq_review: line.lineKind === 'open_amount',
         store_location_code: line.storeLocationCode ?? null,
         source_receipt_no: 'sourceReceiptNo' in line ? line.sourceReceiptNo : null,
         original_qty: 'originalQty' in line ? line.originalQty : null,
