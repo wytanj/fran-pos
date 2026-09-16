@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserMultiFormatOneDReader, BrowserQRCodeReader } from '@zxing/browser'
 import { BarcodeFormat, ChecksumException, DecodeHintType, FormatException, NotFoundException } from '@zxing/library'
 import {
@@ -430,7 +430,7 @@ export default function SalePage() {
     completeSale,
     updateLastSale,
   } = pos
-  // Target: loyalty via SKUMS workspace key (POS → SKUMS → CRM).
+  // Target: loyalty via SKUMS workspace key (POS â†’ SKUMS â†’ CRM).
   // Fallback: legacy direct CRM URL. Else mock.
   const franCrm = useMemo(() => {
     if (skumsConnector) {
@@ -545,7 +545,7 @@ export default function SalePage() {
   const [voidingSale, setVoidingSale] = useState(false)
   const [promoDismissed, setPromoDismissed] = useState(false)
   const [catalog, setCatalog] = useState<Product[]>(PRODUCTS)
-  const [catalogSource, setCatalogSource] = useState<'mock' | 'live' | 'skums'>('mock')
+  const [, setCatalogSource] = useState<'mock' | 'live' | 'skums'>('mock')
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [catalogRefreshToken, setCatalogRefreshToken] = useState(0)
@@ -558,7 +558,7 @@ export default function SalePage() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraStatus, setCameraStatus] = useState<CameraScanStatus>('idle')
   const [cameraMessage, setCameraMessage] = useState(
-    'Open the camera — scanning stays on and the first recognized barcode or QR is added automatically.'
+    'Open the camera â€” scanning stays on and the first recognized barcode or QR is added automatically.'
   )
   const [cameraLastValue, setCameraLastValue] = useState<string | null>(null)
   const [saleSync, setSaleSync] = useState<PosSaleSyncState | null>(null)
@@ -820,19 +820,16 @@ export default function SalePage() {
     let cancelled = false
     if (mode === 'demo') {
       setCatalog(PRODUCTS)
-      setCatalogSource('mock')
       setCatalogError(null)
       setCatalogLoading(false)
       return
     }
 
     setCatalogLoading(true)
-    setCatalogSource((prev) => (prev === 'mock' ? 'live' : prev))
 
     async function loadLiveCatalog() {
       if (!company) {
         setCatalog([])
-        setCatalogSource('live')
         setCatalogError('Bind register and unlock with HRM PIN to load live products')
         return
       }
@@ -844,18 +841,15 @@ export default function SalePage() {
           const skumsProducts = res.data.map(toPosProduct)
           if (skumsProducts.length > 0) {
             setCatalog(skumsProducts)
-            setCatalogSource('skums')
             setCategory('All')
             setCatalogError(null)
             return
           }
           setCatalog([])
-          setCatalogSource('skums')
           setCatalogError('No SKUMS products available for POS')
           return
         } catch (err) {
           setCatalog([])
-          setCatalogSource('skums')
           setCatalogError(err instanceof Error ? err.message : 'Failed to load SKUMS catalog')
           return
         }
@@ -873,21 +867,18 @@ export default function SalePage() {
       const liveProducts = ((data || []) as DbProduct[]).map(toLiveProduct)
       if (liveProducts.length > 0) {
         setCatalog(liveProducts)
-        setCatalogSource('live')
         setCategory('All')
         setCatalogError(null)
         return
       }
 
       setCatalog([])
-      setCatalogSource('live')
       setCatalogError('No live products yet. Create products manually or add a SKUMS connector.')
     }
 
     loadLiveCatalog()
       .catch((err) => {
         if (!cancelled) {
-          setCatalogSource((prev) => (prev === 'mock' ? 'live' : prev))
           setCatalogError(err instanceof Error ? err.message : 'Failed to load live catalog')
         }
       })
@@ -1021,7 +1012,7 @@ export default function SalePage() {
       if (franCustomerOpenRef.current) return
       productEntryRef.current?.focus()
       // Select the leftover text after a miss so the next scan or keystroke
-      // replaces it — hardware scanners type into whatever is selected.
+      // replaces it â€” hardware scanners type into whatever is selected.
       if (options?.select) productEntryRef.current?.select()
     }, 0)
   }, [])
@@ -1244,7 +1235,7 @@ export default function SalePage() {
         setCameraMessage(
           detector
             ? 'Scanning stays on. The first recognized barcode or QR is added automatically.'
-            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback — first recognized code is added automatically.'
+            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback â€” first recognized code is added automatically.'
         )
 
         const scheduleRescan = () => {
@@ -1490,7 +1481,7 @@ export default function SalePage() {
         })
         return next
       })
-      // Dens redeem → open points reward quote for cashier confirm
+      // Dens redeem â†’ open points reward quote for cashier confirm
       if (res.kind === 'points_redeem' && res.pointsCost > 0 && franPreview) {
         const densReward: FranRewardDecision = {
           id: 'fran-points-redemption',
@@ -1588,7 +1579,7 @@ export default function SalePage() {
     const redeemDiscountAmount = appliedReward?.quote.amount ?? 0
     const idempotencyKey = `fran:${sale.receiptNo}:loyalty-execution:${preview.policyVersionId ?? preview.previewId}`
 
-    // L-pos: commit_sale to CRM ledger (earn + redeem) — non-blocking; outbox is replay-safe.
+    // L-pos: commit_sale to CRM ledger (earn + redeem) â€” non-blocking; outbox is replay-safe.
     void franCrm
       .commitSale({
         saleId: sale.idempotencyKey,
@@ -1931,9 +1922,9 @@ export default function SalePage() {
             ? `SKUMS capabilities: ${posCapabilitiesError}`
             : posCapabilities
               ? posCapabilities.ready_for_member_loyalty
-                ? `Live · SKUMS + loyalty linked (${posCapabilities.loyalty.status}) — member FWB via workspace key`
-                : `Live · SKUMS OK · loyalty ${posCapabilities.loyalty.status}: ${posCapabilities.loyalty.message}`
-              : 'Checking SKUMS + loyalty capabilities…'}
+                ? `Live Â· SKUMS + loyalty linked (${posCapabilities.loyalty.status}) â€” member FWB via workspace key`
+                : `Live Â· SKUMS OK Â· loyalty ${posCapabilities.loyalty.status}: ${posCapabilities.loyalty.message}`
+              : 'Checking SKUMS + loyalty capabilitiesâ€¦'}
         </div>
       )}
       <form
@@ -2131,7 +2122,7 @@ export default function SalePage() {
         {renderProductCatalogue(addProduct)}
       </div>
 
-      {/* RIGHT — cart */}
+      {/* RIGHT â€” cart */}
       <div className="flex min-h-0 w-full flex-1 flex-col bg-card md:w-[380px] md:shrink-0 md:border-l">
         {savedBaskets.length > 0 && (
           <div className="border-b bg-secondary/30 p-3">
@@ -2177,7 +2168,7 @@ export default function SalePage() {
           </div>
         )}
 
-        {/* Sales type — labeled chips on wide / landscape. Portrait uses icons in FranMemberStrip. */}
+        {/* Sales type â€” labeled chips on wide / landscape. Portrait uses icons in FranMemberStrip. */}
         <div className="hidden border-b px-3 py-2 lg:block">
           <div className="flex flex-wrap gap-1.5">
             {SALES_TYPES.map((s) => (
@@ -2192,7 +2183,7 @@ export default function SalePage() {
                 )}
               >
                 {s.label}
-                {s.requiresManager && ' 🔒'}
+                {s.requiresManager && ' ðŸ”’'}
               </button>
             ))}
           </div>
@@ -2644,7 +2635,7 @@ function CartRow({
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{line.name}</p>
           <p className="text-xs text-muted-foreground">
-            {line.sku} · {formatCurrency(line.unitPrice, STORE.currency)}
+            {line.sku} Â· {formatCurrency(line.unitPrice, STORE.currency)}
             {line.isMarkdown && <span className="ml-1 text-warning">MD</span>}
             {line.overridden && <span className="ml-1 text-brown">overridden</span>}
             {isFranLine && <span className="ml-1 text-success">Fran CRM</span>}
