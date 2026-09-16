@@ -18,7 +18,7 @@ import {
 
 export default function PosLogin() {
   const { mode, setMode, setUser } = usePos()
-  const { user, company, signInWithGoogle, signOut } = useAuth()
+  const { user, company, signInWithGoogle, signOut, hydrateRegisterCompany } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [role, setRole] = useState<PosRole>('cashier')
@@ -123,6 +123,8 @@ export default function PosLogin() {
         pin,
         binding,
       })
+      // Hydrate Auth company/settings from register binding (SKUMS + stripe_terminal / S700).
+      await hydrateRegisterCompany(binding)
       if (!staff?.role) {
         throw new Error('HRM verify returned no staff role')
       }

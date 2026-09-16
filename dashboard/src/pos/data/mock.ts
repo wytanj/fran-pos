@@ -117,22 +117,22 @@ export function storeLocationCodeForSku(sku: string | null | undefined) {
 }
 
 export const PRODUCTS: Product[] = [
-  { id: 'p1', sku: 'SKN-1001', name: 'Hydra Veil Gel Cleanser', category: 'Skincare', price: 38.0, qtyOnHand: 36, returnable: true, emoji: '🧴' },
-  { id: 'p2', sku: 'SKN-1002', name: 'Barrier Calm Serum', category: 'Skincare', price: 78.0, qtyOnHand: 24, returnable: true, emoji: '💧' },
-  { id: 'p3', sku: 'SKN-1003', name: 'Bright C Renewal Essence', category: 'Skincare', price: 96.0, mdPrice: 72.0, qtyOnHand: 14, returnable: false, emoji: '✨' },
-  { id: 'p4', sku: 'SKN-1004', name: 'Squalane Cloud Moisturiser', category: 'Skincare', price: 64.0, qtyOnHand: 31, returnable: true, emoji: '🧴' },
-  { id: 'p5', sku: 'SKN-1005', name: 'Mineral Silk Sunscreen SPF50', category: 'Skincare', price: 52.0, qtyOnHand: 42, returnable: true, emoji: '☀️' },
-  { id: 'p6', sku: 'SKN-1006', name: 'Overnight Repair Mask', category: 'Skincare', price: 88.0, mdPrice: 66.0, qtyOnHand: 8, returnable: false, emoji: '🌙' },
-  { id: 'p7', sku: 'SKN-1007', name: 'Peptide Eye Cream', category: 'Skincare', price: 74.0, qtyOnHand: 19, returnable: true, emoji: '👁️' },
-  { id: 'p8', sku: 'MKP-2001', name: 'Cushion Skin Tint', category: 'Makeup', price: 58.0, qtyOnHand: 28, returnable: true, emoji: '🪞' },
-  { id: 'p9', sku: 'MKP-2002', name: 'Lip Tint Balm', category: 'Makeup', price: 32.0, mdPrice: 24.0, qtyOnHand: 56, returnable: false, emoji: '💄' },
-  { id: 'p10', sku: 'MKP-2003', name: 'Brow Shape Gel', category: 'Makeup', price: 34.0, qtyOnHand: 33, returnable: true, emoji: '🪄' },
-  { id: 'p11', sku: 'HAI-3001', name: 'Scalp Reset Shampoo', category: 'Haircare', price: 42.0, qtyOnHand: 27, returnable: true, emoji: '🫧' },
-  { id: 'p12', sku: 'HAI-3002', name: 'Gloss Repair Conditioner', category: 'Haircare', price: 44.0, qtyOnHand: 25, returnable: true, emoji: '🫧' },
-  { id: 'p13', sku: 'HAI-3003', name: 'Camellia Hair Oil', category: 'Haircare', price: 48.0, qtyOnHand: 18, returnable: true, emoji: '💧' },
-  { id: 'p14', sku: 'FRG-4001', name: 'Neroli Eau de Parfum', category: 'Fragrance', price: 128.0, qtyOnHand: 12, returnable: true, emoji: '🌸' },
-  { id: 'p15', sku: 'FRG-4002', name: 'Refillable Travel Atomizer', category: 'Fragrance', price: 28.0, qtyOnHand: 44, returnable: true, emoji: '🧪' },
-  { id: 'p16', sku: 'TOL-5001', name: 'Facial Cleansing Brush', category: 'Tools', price: 36.0, mdPrice: 29.0, qtyOnHand: 16, returnable: false, emoji: '🪥' },
+  { id: 'p1', sku: 'SKN-1001', name: 'Hydra Veil Gel Cleanser', category: 'Skincare', price: 38.0, qtyOnHand: 36, returnable: true, emoji: 'ðŸ§´' },
+  { id: 'p2', sku: 'SKN-1002', name: 'Barrier Calm Serum', category: 'Skincare', price: 78.0, qtyOnHand: 24, returnable: true, emoji: 'ðŸ’§' },
+  { id: 'p3', sku: 'SKN-1003', name: 'Bright C Renewal Essence', category: 'Skincare', price: 96.0, mdPrice: 72.0, qtyOnHand: 14, returnable: false, emoji: 'âœ¨' },
+  { id: 'p4', sku: 'SKN-1004', name: 'Squalane Cloud Moisturiser', category: 'Skincare', price: 64.0, qtyOnHand: 31, returnable: true, emoji: 'ðŸ§´' },
+  { id: 'p5', sku: 'SKN-1005', name: 'Mineral Silk Sunscreen SPF50', category: 'Skincare', price: 52.0, qtyOnHand: 42, returnable: true, emoji: 'â˜€ï¸' },
+  { id: 'p6', sku: 'SKN-1006', name: 'Overnight Repair Mask', category: 'Skincare', price: 88.0, mdPrice: 66.0, qtyOnHand: 8, returnable: false, emoji: 'ðŸŒ™' },
+  { id: 'p7', sku: 'SKN-1007', name: 'Peptide Eye Cream', category: 'Skincare', price: 74.0, qtyOnHand: 19, returnable: true, emoji: 'ðŸ‘ï¸' },
+  { id: 'p8', sku: 'MKP-2001', name: 'Cushion Skin Tint', category: 'Makeup', price: 58.0, qtyOnHand: 28, returnable: true, emoji: 'ðŸªž' },
+  { id: 'p9', sku: 'MKP-2002', name: 'Lip Tint Balm', category: 'Makeup', price: 32.0, mdPrice: 24.0, qtyOnHand: 56, returnable: false, emoji: 'ðŸ’„' },
+  { id: 'p10', sku: 'MKP-2003', name: 'Brow Shape Gel', category: 'Makeup', price: 34.0, qtyOnHand: 33, returnable: true, emoji: 'ðŸª„' },
+  { id: 'p11', sku: 'HAI-3001', name: 'Scalp Reset Shampoo', category: 'Haircare', price: 42.0, qtyOnHand: 27, returnable: true, emoji: 'ðŸ«§' },
+  { id: 'p12', sku: 'HAI-3002', name: 'Gloss Repair Conditioner', category: 'Haircare', price: 44.0, qtyOnHand: 25, returnable: true, emoji: 'ðŸ«§' },
+  { id: 'p13', sku: 'HAI-3003', name: 'Camellia Hair Oil', category: 'Haircare', price: 48.0, qtyOnHand: 18, returnable: true, emoji: 'ðŸ’§' },
+  { id: 'p14', sku: 'FRG-4001', name: 'Neroli Eau de Parfum', category: 'Fragrance', price: 128.0, qtyOnHand: 12, returnable: true, emoji: 'ðŸŒ¸' },
+  { id: 'p15', sku: 'FRG-4002', name: 'Refillable Travel Atomizer', category: 'Fragrance', price: 28.0, qtyOnHand: 44, returnable: true, emoji: 'ðŸ§ª' },
+  { id: 'p16', sku: 'TOL-5001', name: 'Facial Cleansing Brush', category: 'Tools', price: 36.0, mdPrice: 29.0, qtyOnHand: 16, returnable: false, emoji: 'ðŸª¥' },
 ].map((product) => ({
   ...product,
   storeLocationCode: storeLocationCodeForSku(product.sku),
@@ -233,56 +233,7 @@ export interface PastTransaction {
   returnable: boolean
 }
 
-export const PAST_TRANSACTIONS: PastTransaction[] = [
-  {
-    receiptNo: 'FRAN01-000482',
-    date: '2026-05-21 11:42',
-    cashier: 'Tiffany',
-    customer: 'Wei Ling Tan',
-    type: 'Sale',
-    total: 138.0,
-    payment: 'Visa ****4421',
-    returnable: true,
-    items: [
-      { sku: 'SKN-1002', name: 'Barrier Calm Serum', qty: 1, price: 78.0 },
-      { sku: 'SKN-1005', name: 'Mineral Silk Sunscreen SPF50', qty: 1, price: 52.0 },
-    ],
-  },
-  {
-    receiptNo: 'FRAN01-000481',
-    date: '2026-05-21 10:18',
-    cashier: 'Tiffany',
-    type: 'Sale',
-    total: 24.0,
-    payment: 'Cash',
-    returnable: true,
-    items: [{ sku: 'MKP-2002', name: 'Lip Tint Balm', qty: 1, price: 24.0 }],
-  },
-  {
-    receiptNo: 'FRAN01-000480',
-    date: '2026-05-20 17:55',
-    cashier: 'Daniel Wong',
-    customer: 'Priya Nair',
-    type: 'Sale',
-    total: 200.0,
-    payment: 'Mastercard ****8830 + Gift Card',
-    returnable: true,
-    items: [
-      { sku: 'FRG-4001', name: 'Neroli Eau de Parfum', qty: 1, price: 128.0 },
-      { sku: 'SKN-1003', name: 'Bright C Renewal Essence', qty: 1, price: 72.0 },
-    ],
-  },
-  {
-    receiptNo: 'FRAN01-000478',
-    date: '2026-05-20 14:09',
-    cashier: 'Tiffany',
-    type: 'Refund',
-    total: -42.0,
-    payment: 'Cash refund',
-    returnable: false,
-    items: [{ sku: 'HAI-3001', name: 'Scalp Reset Shampoo', qty: -1, price: 42.0 }],
-  },
-]
+export const PAST_TRANSACTIONS: PastTransaction[] = []
 
 export interface Transfer {
   id: string
@@ -297,48 +248,7 @@ export interface Transfer {
   lines: { sku: string; name: string; qty: number }[]
 }
 
-export const TRANSFERS: Transfer[] = [
-  {
-    id: 't1',
-    type: 'inbound',
-    ref: 'STN-INB-20514',
-    fromStoreCode: 'WH01',
-    toStoreCode: STORE.code,
-    from: 'Central Fulfilment (WH01)',
-    to: 'Fran Beauty Bugis+ (FRAN01)',
-    status: 'Pending Receipt',
-    created: '2026-05-20',
-    lines: [
-      { sku: 'SKN-1004', name: 'Squalane Cloud Moisturiser', qty: 12 },
-      { sku: 'SKN-1005', name: 'Mineral Silk Sunscreen SPF50', qty: 18 },
-      { sku: 'FRG-4001', name: 'Neroli Eau de Parfum', qty: 6 },
-    ],
-  },
-  {
-    id: 't2',
-    type: 'inbound',
-    ref: 'STN-INB-20498',
-    fromStoreCode: 'FRAN02',
-    toStoreCode: STORE.code,
-    from: 'Fran Beauty Vivocity (FRAN02)',
-    to: 'Fran Beauty Bugis+ (FRAN01)',
-    status: 'In Transit',
-    created: '2026-05-19',
-    lines: [{ sku: 'TOL-5001', name: 'Facial Cleansing Brush', qty: 8 }],
-  },
-  {
-    id: 't3',
-    type: 'outbound',
-    ref: 'ITR-OUT-30221',
-    fromStoreCode: STORE.code,
-    toStoreCode: 'WH01',
-    from: 'Fran Beauty Bugis+ (FRAN01)',
-    to: 'Central Fulfilment (WH01)',
-    status: 'Sent',
-    created: '2026-05-18',
-    lines: [{ sku: 'SKN-1002', name: 'Barrier Calm Serum', qty: 3 }],
-  },
-]
+export const TRANSFERS: Transfer[] = []
 
 export const INTEGRATIONS = [
   { from: 'POS', to: 'Receipt printer', flow: 'Thermal receipt printing', status: 'Coming soon', lastSync: 'Planned' },

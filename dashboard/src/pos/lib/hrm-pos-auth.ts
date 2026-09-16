@@ -135,3 +135,71 @@ export async function verifyHrmPosPin(input: {
   }
   return { staff }
 }
+
+export type RegisterCompanyContext = {
+  company_id: string
+  company: {
+    id: string
+    name: string
+    slug: string
+    owner_id: string
+    business_type: string
+    is_active: boolean
+    created_at: string
+    updated_at: string
+  }
+  settings: Record<string, unknown> | null
+  store_code?: string
+  register_id?: string
+  label?: string | null
+}
+
+function registerContextUrl() {
+  if (Capacitor.isNativePlatform()) return `${POS_API_ORIGIN}/api/pos-register-context`
+  return '/api/pos-register-context'
+}
+
+/**
+ * Load Auth company + company_settings for a bound register (no Google).
+ * Tries Supabase RPC first; falls back to POS API (service role / RPC proxy).
+ */
+export async function loadRegisterCompanyContext(binding: RegisterBinding): Promise<RegisterCompanyContext> {
+  const token = binding.device_token?.trim()
+  if (!token) throw new Error('Register is not bound')
+
+  const { data, error } = await supabase.rpc('get_pos_register_company_context', {
+    p_device_token: token,
+  })
+  if (!error && data && typeof data === 'object' && (data as any).company) {
+    const row = data as any
+    return {
+      company_id: row.company_id || row.company.id,
+      company: row.company,
+      settings: row.settings ?? null,
+      store_code: row.store_code,
+      register_id: row.register_id,
+      label: row.label,
+    }
+  }
+
+  const res = await fetch(registerContextUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ device_token: token }),
+  })
+  const body = (await res.json().catch(() => ({}))) as Record<string, any>
+  if (!res.ok) {
+    throw new Error(body?.message || body?.error || error?.message || 'Failed to load register company')
+  }
+  if (!body?.company?.id) {
+    throw new Error('Register company context missing company')
+  }
+  return {
+    company_id: body.company_id || body.company.id,
+    company: body.company,
+    settings: body.settings ?? null,
+    store_code: body.store_code,
+    register_id: body.register_id,
+    label: body.label,
+  }
+}
