@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserMultiFormatOneDReader, BrowserQRCodeReader } from '@zxing/browser'
 import { BarcodeFormat, ChecksumException, DecodeHintType, FormatException, NotFoundException } from '@zxing/library'
 import {
@@ -8,6 +8,7 @@ import {
   Trash2,
   Tag,
   Pencil,
+  Lock,
   Sparkles,
   X,
   ShoppingBag,
@@ -431,7 +432,7 @@ export default function SalePage() {
     completeSale,
     updateLastSale,
   } = pos
-  // Target: loyalty via SKUMS workspace key (POS â†’ SKUMS â†’ CRM).
+  // Target: loyalty via SKUMS workspace key (POS  ->  SKUMS  ->  CRM).
   // Fallback: legacy direct CRM URL. Else mock.
   const franCrm = useMemo(() => {
     if (skumsConnector) {
@@ -558,7 +559,7 @@ export default function SalePage() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraStatus, setCameraStatus] = useState<CameraScanStatus>('idle')
   const [cameraMessage, setCameraMessage] = useState(
-    'Open the camera â€” scanning stays on and the first recognized barcode or QR is added automatically.'
+    'Open the camera  -  scanning stays on and the first recognized barcode or QR is added automatically.'
   )
   const [cameraLastValue, setCameraLastValue] = useState<string | null>(null)
   const [saleSync, setSaleSync] = useState<PosSaleSyncState | null>(null)
@@ -1012,7 +1013,7 @@ export default function SalePage() {
       if (franCustomerOpenRef.current) return
       productEntryRef.current?.focus()
       // Select the leftover text after a miss so the next scan or keystroke
-      // replaces it â€” hardware scanners type into whatever is selected.
+      // replaces it  -  hardware scanners type into whatever is selected.
       if (options?.select) productEntryRef.current?.select()
     }, 0)
   }, [])
@@ -1235,7 +1236,7 @@ export default function SalePage() {
         setCameraMessage(
           detector
             ? 'Scanning stays on. The first recognized barcode or QR is added automatically.'
-            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback â€” first recognized code is added automatically.'
+            : 'Native barcode detection is unavailable here. Using the compatible scanner fallback  -  first recognized code is added automatically.'
         )
 
         const scheduleRescan = () => {
@@ -1481,7 +1482,7 @@ export default function SalePage() {
         })
         return next
       })
-      // Dens redeem â†’ open points reward quote for cashier confirm
+      // Dens redeem  ->  open points reward quote for cashier confirm
       if (res.kind === 'points_redeem' && res.pointsCost > 0 && franPreview) {
         const densReward: FranRewardDecision = {
           id: 'fran-points-redemption',
@@ -1579,7 +1580,7 @@ export default function SalePage() {
     const redeemDiscountAmount = appliedReward?.quote.amount ?? 0
     const idempotencyKey = `fran:${sale.receiptNo}:loyalty-execution:${preview.policyVersionId ?? preview.previewId}`
 
-    // L-pos: commit_sale to CRM ledger (earn + redeem) â€” non-blocking; outbox is replay-safe.
+    // L-pos: commit_sale to CRM ledger (earn + redeem)  -  non-blocking; outbox is replay-safe.
     void franCrm
       .commitSale({
         saleId: sale.idempotencyKey,
@@ -2102,7 +2103,7 @@ export default function SalePage() {
         {renderProductCatalogue(addProduct)}
       </div>
 
-      {/* RIGHT â€” cart */}
+      {/* RIGHT  -  cart */}
       <div className="flex min-h-0 w-full flex-1 flex-col bg-card md:w-[380px] md:shrink-0 md:border-l">
         {savedBaskets.length > 0 && (
           <div className="border-b bg-secondary/30 p-3">
@@ -2148,7 +2149,7 @@ export default function SalePage() {
           </div>
         )}
 
-        {/* Sales type â€” labeled chips on wide / landscape. Portrait uses icons in FranMemberStrip. */}
+        {/* Sales type  -  labeled chips on wide / landscape. Portrait uses icons in FranMemberStrip. */}
         <div className="hidden border-b px-3 py-2 lg:block">
           <div className="flex flex-wrap gap-1.5">
             {SALES_TYPES.map((s) => (
@@ -2163,7 +2164,9 @@ export default function SalePage() {
                 )}
               >
                 {s.label}
-                {s.requiresManager && ' ðŸ”’'}
+                {s.requiresManager && (
+                  <Lock className="ml-1 inline h-3 w-3 shrink-0 align-[-2px]" aria-hidden />
+                )}
               </button>
             ))}
           </div>
