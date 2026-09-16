@@ -143,6 +143,49 @@ export function PosShell() {
 
   if (!posUser) return <Navigate to="/pos/login" replace />
 
+
+  const syncLabel = now.toLocaleString('en-SG', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
+  const s700Label =
+    s700Status === 'online' ? 'S700 ready' : s700Status === 'checking' ? 'S700…' : s700Status === 'idle' ? null : 'S700 offline'
+  const s700Class =
+    s700Status === 'online' ? 'text-success' : s700Status === 'checking' ? 'text-muted-foreground' : 'text-warning'
+
+  const renderStatusPanel = (opts?: { compact?: boolean }) => (
+    <div className={cn('space-y-2', opts?.compact && 'px-1')}>
+      <div className="flex items-center gap-2 text-xs text-success">
+        <Wifi className="h-3.5 w-3.5 shrink-0" />
+        <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>Online</span>
+      </div>
+      {s700Label && (
+        <div
+          className={cn('flex items-center gap-2 text-xs', s700Class)}
+          title="Galaxy Tab talks to this S700 over Stripe. Cards are taken on the reader, not on the tablet."
+        >
+          <Nfc className="h-3.5 w-3.5 shrink-0" />
+          <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>{s700Label}</span>
+        </div>
+      )}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+        <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>Cloud synced</span>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Clock className="h-3.5 w-3.5 shrink-0" />
+        <span className={cn(opts?.compact && 'sr-only lg:not-sr-only')}>{syncLabel}</span>
+      </div>
+      {rosterZoneLabel && (
+        <div className="flex items-center gap-2 rounded-full border border-line bg-yellow-soft px-2 py-1 text-[11px] font-medium text-brown">
+          <MapPin className="h-3.5 w-3.5 shrink-0" />
+          <span className={cn('truncate', opts?.compact && 'sr-only lg:not-sr-only')}>{rosterZoneLabel}</span>
+        </div>
+      )}
+      <div className={cn('border-t border-line pt-2', opts?.compact && 'hidden lg:block')}>
+        <p className="truncate text-sm font-medium">{posUser.name}</p>
+        <p className="text-xs capitalize text-muted-foreground">{posUser.role}</p>
+      </div>
+    </div>
+  )
+
   const lockTerminal = () => {
     clearSale()
     setUser(null)
@@ -177,56 +220,7 @@ export function PosShell() {
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 text-sm sm:gap-4">
-          <span className="hidden items-center gap-1.5 text-success sm:flex">
-            <Wifi className="h-4 w-4" /> Online
-          </span>
-          {s700Status !== 'idle' && (
-            <span
-              className={cn(
-                'hidden items-center gap-1.5 md:flex',
-                s700Status === 'online' ? 'text-success' : s700Status === 'checking' ? 'text-muted-foreground' : 'text-warning',
-              )}
-              title="Galaxy Tab talks to this S700 over Stripe. Cards are taken on the reader, not on the tablet."
-            >
-              <Nfc className="h-4 w-4" />
-              {s700Status === 'online' ? 'S700 ready' : s700Status === 'checking' ? 'S700…' : 'S700 offline'}
-            </span>
-          )}
-          <span className="hidden items-center gap-1.5 text-muted-foreground md:flex">
-            <CheckCircle2 className="h-4 w-4 text-success" /> Cloud synced
-          </span>
-          <span className="hidden items-center gap-1.5 text-muted-foreground min-[380px]:flex">
-            <Clock className="h-4 w-4" />
-            {now.toLocaleString('en-SG', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
-          </span>
-          {rosterZoneLabel && (
-            <span className="hidden items-center gap-1.5 rounded-full border border-line bg-yellow-soft px-2.5 py-1 text-xs font-medium text-brown sm:flex">
-              <MapPin className="h-3.5 w-3.5 text-brown" />
-              {rosterZoneLabel}
-            </span>
-          )}
-          <div className="flex items-center gap-2 border-l pl-2 sm:pl-4">
-            <div className="hidden text-right leading-tight min-[380px]:block">
-              <p className="text-sm font-medium">{posUser.name}</p>
-              <p className="text-xs capitalize text-muted-foreground">
-                {posUser.role}
-                {rosterZoneLabel && (
-                  <span className="ml-1 font-medium normal-case text-primary sm:hidden">
-                    · {rosterZoneLabel}
-                  </span>
-                )}
-              </p>
-            </div>
-            <button
-              onClick={lockTerminal}
-              title="Lock terminal"
-              className="press flex h-9 w-9 items-center justify-center rounded-full border border-brown bg-white transition-colors hover:bg-surface-sunken cursor-pointer"
-            >
-              <LockKeyhole className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+
       </header>
 
       {mobileNavOpen && (
@@ -280,7 +274,8 @@ export function PosShell() {
                 </NavLink>
               ))}
             </nav>
-            <div className="border-t p-3">
+            <div className="space-y-3 border-t p-3">
+              {renderStatusPanel()}
               <button
                 type="button"
                 onClick={() => {
@@ -299,26 +294,40 @@ export function PosShell() {
 
       <div className="flex min-h-0 flex-1">
         {/* Left nav */}
-        <nav className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-line bg-white py-3 md:flex lg:w-44 lg:items-stretch lg:px-3">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              aria-label={item.label}
-              title={item.label}
-              className={({ isActive }) =>
-                cn(
-                  'press flex flex-col items-center gap-1 rounded-sm px-2 py-2.5 text-xs font-medium transition-colors lg:flex-row lg:gap-3 lg:px-3 lg:text-sm',
-                  isActive
-                    ? 'bg-yellow font-semibold text-brown'
-                    : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
-                )
-              }
+        <nav className="hidden w-16 shrink-0 flex-col border-r border-line bg-white py-3 md:flex lg:w-44 lg:px-3">
+          <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto lg:items-stretch">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                aria-label={item.label}
+                title={item.label}
+                className={({ isActive }) =>
+                  cn(
+                    'press flex flex-col items-center gap-1 rounded-sm px-2 py-2.5 text-xs font-medium transition-colors lg:flex-row lg:gap-3 lg:px-3 lg:text-sm',
+                    isActive
+                      ? 'bg-yellow font-semibold text-brown'
+                      : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
+                  )
+                }
+              >
+                <item.icon className="h-5 w-5 shrink-0" />
+                <span className="hidden text-center leading-tight lg:inline lg:text-left">{item.label}</span>
+              </NavLink>
+            ))}
+          </div>
+          <div className="mt-2 space-y-2 border-t border-line px-2 pt-3 lg:px-0">
+            {renderStatusPanel({ compact: true })}
+            <button
+              type="button"
+              onClick={lockTerminal}
+              title="Lock terminal"
+              className="press flex w-full items-center justify-center gap-2 rounded-full border-[1.5px] border-brown bg-white px-2 py-2 text-xs font-semibold transition-colors hover:bg-surface-sunken lg:px-3 lg:text-sm"
             >
-              <item.icon className="h-5 w-5 shrink-0" />
-              <span className="hidden text-center leading-tight lg:inline lg:text-left">{item.label}</span>
-            </NavLink>
-          ))}
+              <LockKeyhole className="h-4 w-4 shrink-0" />
+              <span className="hidden lg:inline">Lock</span>
+            </button>
+          </div>
         </nav>
 
         {/* Page */}

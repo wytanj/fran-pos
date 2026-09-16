@@ -1906,26 +1906,6 @@ export default function SalePage() {
         inert={franCustomerOpen || undefined}
         aria-hidden={franCustomerOpen || undefined}
       >
-      {skumsConnector && (
-        <div
-          className={cn(
-            'shrink-0 border-b px-3 py-1.5 text-xs',
-            posCapabilitiesError
-              ? 'bg-warning-soft text-warning'
-              : posCapabilities?.ready_for_member_loyalty
-                ? 'bg-success-soft text-success'
-                : 'bg-yellow-soft text-brown',
-          )}
-        >
-          {posCapabilitiesError
-            ? `SKUMS capabilities: ${posCapabilitiesError}`
-            : posCapabilities
-              ? posCapabilities.ready_for_member_loyalty
-                ? `Live Â· SKUMS + loyalty linked (${posCapabilities.loyalty.status}) â€” member FWB via workspace key`
-                : `Live Â· SKUMS OK Â· loyalty ${posCapabilities.loyalty.status}: ${posCapabilities.loyalty.message}`
-              : 'Checking SKUMS + loyalty capabilitiesâ€¦'}
-        </div>
-      )}
       <form
         className="flex shrink-0 flex-col gap-2 border-b bg-card p-3 md:flex-row md:items-center"
         onSubmit={(event) => {
