@@ -33,6 +33,18 @@ function hrmPosVerifyUrl() {
   return '/api/hrm-pos-verify'
 }
 
+function asJsonRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+function jsonString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key]
+  return typeof value === 'string' && value ? value : undefined
+}
+
 export function loadRegisterBinding(): RegisterBinding | null {
   try {
     const raw = localStorage.getItem(BINDING_KEY)
@@ -101,6 +113,40 @@ export async function refreshRegisterBinding(token?: string): Promise<RegisterBi
   return binding
 }
 
+export const HRM_POS_PIN_DIGITS = 8
+
+export const HRM_MANAGER_PLUS_ROLES = [
+  'manager',
+  'admin',
+  'hq_admin',
+  'owner',
+  'store_manager',
+  'area_manager',
+] as const
+
+export function isHrmManagerPlus(role: string | null | undefined): boolean {
+  if (!role) return false
+  return (HRM_MANAGER_PLUS_ROLES as readonly string[]).includes(role)
+}
+
+export async function verifyHrmManagerPin(input: {
+  employeeCode: string
+  pin: string
+  binding: RegisterBinding
+}): Promise<{ staff: HrmPosStaff }> {
+  const { staff } = await verifyHrmPosPin(input)
+  if (!isHrmManagerPlus(staff.role)) {
+    const err = new Error('This employee is not a manager, admin, HQ admin, or owner') as Error & {
+      reason?: string
+      status?: number
+    }
+    err.reason = 'not_manager'
+    err.status = 403
+    throw err
+  }
+  return { staff }
+}
+
 export async function verifyHrmPosPin(input: {
   employeeCode: string
   pin: string
@@ -117,15 +163,16 @@ export async function verifyHrmPosPin(input: {
       device_token: input.binding.device_token,
     }),
   })
-  const body = (await res.json().catch(() => ({}))) as Record<string, any>
+  const body = asJsonRecord(await res.json().catch(() => ({})))
   if (!res.ok) {
-    const msg = body?.message || body?.error || res.statusText || 'Verify failed'
+    const nested = asJsonRecord(body.data)
+    const msg = jsonString(body, 'message') || jsonString(body, 'error') || res.statusText || 'Verify failed'
     const err = new Error(msg) as Error & { reason?: string; status?: number }
-    err.reason = body?.reason || body?.data?.reason
+    err.reason = jsonString(body, 'reason') || jsonString(nested, 'reason')
     err.status = res.status
     throw err
   }
-  const staff = (body?.staff || body?.data?.staff) as HrmPosStaff | undefined
+  const staff = (body.staff || asJsonRecord(body.data).staff) as HrmPosStaff | undefined
   if (!staff?.id || !staff?.role) {
     throw new Error(
       Capacitor.isNativePlatform()
@@ -159,10 +206,6 @@ function registerContextUrl() {
   return '/api/pos-register-context'
 }
 
-/**
- * Load Auth company + company_settings for a bound register (no Google).
- * Tries Supabase RPC first; falls back to POS API (service role / RPC proxy).
- */
 export async function loadRegisterCompanyContext(binding: RegisterBinding): Promise<RegisterCompanyContext> {
   const token = binding.device_token?.trim()
   if (!token) throw new Error('Register is not bound')
@@ -170,15 +213,16 @@ export async function loadRegisterCompanyContext(binding: RegisterBinding): Prom
   const { data, error } = await supabase.rpc('get_pos_register_company_context', {
     p_device_token: token,
   })
-  if (!error && data && typeof data === 'object' && (data as any).company) {
-    const row = data as any
+  const rpcRow = asJsonRecord(data)
+  const rpcCompany = asJsonRecord(rpcRow.company)
+  if (!error && jsonString(rpcCompany, 'id')) {
     return {
-      company_id: row.company_id || row.company.id,
-      company: row.company,
-      settings: row.settings ?? null,
-      store_code: row.store_code,
-      register_id: row.register_id,
-      label: row.label,
+      company_id: jsonString(rpcRow, 'company_id') || jsonString(rpcCompany, 'id') || '',
+      company: rpcCompany as RegisterCompanyContext['company'],
+      settings: (rpcRow.settings as Record<string, unknown> | null) ?? null,
+      store_code: jsonString(rpcRow, 'store_code'),
+      register_id: jsonString(rpcRow, 'register_id'),
+      label: jsonString(rpcRow, 'label') ?? null,
     }
   }
 
@@ -187,19 +231,20 @@ export async function loadRegisterCompanyContext(binding: RegisterBinding): Prom
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ device_token: token }),
   })
-  const body = (await res.json().catch(() => ({}))) as Record<string, any>
+  const body = asJsonRecord(await res.json().catch(() => ({})))
   if (!res.ok) {
-    throw new Error(body?.message || body?.error || error?.message || 'Failed to load register company')
+    throw new Error(jsonString(body, 'message') || jsonString(body, 'error') || error?.message || 'Failed to load register company')
   }
-  if (!body?.company?.id) {
+  const company = asJsonRecord(body.company)
+  if (!jsonString(company, 'id')) {
     throw new Error('Register company context missing company')
   }
   return {
-    company_id: body.company_id || body.company.id,
-    company: body.company,
-    settings: body.settings ?? null,
-    store_code: body.store_code,
-    register_id: body.register_id,
-    label: body.label,
+    company_id: jsonString(body, 'company_id') || jsonString(company, 'id') || '',
+    company: company as RegisterCompanyContext['company'],
+    settings: (body.settings as Record<string, unknown> | null) ?? null,
+    store_code: jsonString(body, 'store_code'),
+    register_id: jsonString(body, 'register_id'),
+    label: jsonString(body, 'label') ?? null,
   }
 }

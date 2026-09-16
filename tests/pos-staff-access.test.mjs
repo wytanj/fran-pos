@@ -37,10 +37,15 @@ test('POS staff API is source-neutral for future external sync', () => {
   assert.match(staffSettings, /source_provider/)
 })
 
-test('Live POS login and manager authorization use staff sessions', () => {
-  assert.match(posLogin, /useStartPosStaffSession/)
-  assert.match(posLogin, /staffMemberId: result\.staff\.id/)
-  assert.match(posLogin, /sessionId: result\.session\.id/)
-  assert.match(managerAuth, /useAuthorizePosAction/)
-  assert.match(managerAuth, /sessionId: user\.sessionId/)
+test('Live POS unlock uses HRM employee code + PIN', () => {
+  assert.match(posLogin, /verifyHrmPosPin/)
+  assert.match(posLogin, /employeeCode: staff\.employee_code/)
+  assert.match(posLogin, /hrmRole: staff\.role/)
+  assert.doesNotMatch(posLogin, /useStartPosStaffSession/)
+})
+
+test('Live manager authorization uses HRM PIN, not POS staff passcodes', () => {
+  assert.match(managerAuth, /verifyHrmManagerPin/)
+  assert.doesNotMatch(managerAuth, /useAuthorizePosAction/)
+  assert.doesNotMatch(managerAuth, /authorize_pos_action/)
 })
