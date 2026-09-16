@@ -35,6 +35,11 @@ const config: CapacitorConfig = {
         androidScheme: 'https',
         allowNavigation,
       },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
   android: {
     allowMixedContent: false,
     backgroundColor: '#FFFEF5',
@@ -52,3 +57,4 @@ const config: CapacitorConfig = {
 }
 
 export default config
+
