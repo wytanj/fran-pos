@@ -2002,9 +2002,6 @@ export default function SalePage() {
           </Button>
         </div>
         <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
-          <Badge variant="secondary" className="shrink-0">
-            {mode === 'demo' || catalogSource === 'mock' ? (mode === 'live' ? 'Loading catalog' : 'Demo catalog') : catalogSource === 'skums' ? 'SKUMS catalog' : 'Live catalog'}
-          </Badge>
           {renderCatalogViewToggle()}
         </div>
       </form>
@@ -2325,10 +2322,7 @@ export default function SalePage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-              <Badge variant="secondary" className="shrink-0">
-                {mode === 'demo' || catalogSource === 'mock' ? (mode === 'live' ? 'Loading catalog' : 'Demo catalog') : catalogSource === 'skums' ? 'SKUMS catalog' : 'Live catalog'}
-              </Badge>
+            <div className="flex items-center justify-end gap-2 border-b px-3 py-2">
               {renderCatalogViewToggle()}
             </div>
             {renderCategoryStrip()}
