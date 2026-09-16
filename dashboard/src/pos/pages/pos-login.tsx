@@ -60,7 +60,6 @@ export default function PosLogin() {
   const selected = USERS.find((u) => u.role === role)
 
   const handleGoogleSignIn = async () => {
-    // HQ / dashboard Google — not used for Live register unlock (P0).
     setGoogleLoading(true)
     try {
       await signInWithGoogle('/')
@@ -124,6 +123,9 @@ export default function PosLogin() {
         pin,
         binding,
       })
+      if (!staff?.role) {
+        throw new Error('HRM verify returned no staff role')
+      }
       const posRole: PosRole =
         staff.role === 'cashier' || staff.role === 'staff' || staff.role === 'supervisor'
           ? 'cashier'
@@ -154,268 +156,300 @@ export default function PosLogin() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-cream p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <div className="w-full max-w-3xl rounded-xl border border-line bg-white p-4 shadow-warm-md sm:p-6">
-        <div className="mb-3 flex flex-col items-center text-center">
-          <BrandMark size="sm" className="mb-1.5" />
-          <p className="eyebrow">Register</p>
-          <h1 className="h1-display leading-tight">Fran POS</h1>
-          <p className="text-sm text-muted-foreground">
-            {binding ? `${binding.store_code} · ${binding.register_id}` : `${STORE.name} - Store ${STORE.code}`}
-          </p>
-        </div>
-
-        <div className="mb-3 grid grid-cols-2 gap-2 rounded-sm bg-surface-sunken p-1">
-          <button
-            type="button"
-            onClick={() => setMode('demo')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              mode === 'demo' ? 'bg-white font-semibold text-brown shadow-warm-xs' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Demo mode
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('live')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-              mode === 'live' ? 'bg-white font-semibold text-brown shadow-warm-xs' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Live mode
-          </button>
+    <div className="flex min-h-dvh flex-col bg-cream p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col rounded-xl border border-line bg-white p-3 shadow-warm-md sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <BrandMark size="sm" />
+            <div>
+              <p className="eyebrow">Register</p>
+              <h1 className="h1-display text-2xl leading-tight sm:text-3xl">Fran POS</h1>
+              <p className="text-sm text-muted-foreground">
+                {binding
+                  ? `${binding.store_code} · ${binding.register_id}${binding.label ? ` · ${binding.label}` : ''}`
+                  : `${STORE.name} - Store ${STORE.code}`}
+              </p>
+            </div>
+          </div>
+          <div className="grid w-full max-w-xs grid-cols-2 gap-1 rounded-sm bg-surface-sunken p-1 sm:w-64">
+            <button
+              type="button"
+              onClick={() => setMode('demo')}
+              className={cn(
+                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                mode === 'demo'
+                  ? 'bg-white font-semibold text-brown shadow-warm-xs'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Demo mode
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('live')}
+              className={cn(
+                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                mode === 'live'
+                  ? 'bg-white font-semibold text-brown shadow-warm-xs'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Live mode
+            </button>
+          </div>
         </div>
 
         {mode === 'live' ? (
-          <div className="space-y-3">
-            {!binding ? (
-              <div className="space-y-3 rounded-lg border p-4">
-                <div className="text-center">
-                  <Tablet className="mx-auto mb-3 h-8 w-8 text-primary" />
-                  <h2 className="font-semibold">Bind this register</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Enter the store code and pair code from HRM / ops. No Google on the register.
-                  </p>
-                </div>
-                <label className="block text-sm">
-                  <span className="text-muted-foreground">Store code</span>
-                  <input
-                    className="mt-1 w-full rounded-md border px-3 py-2 font-mono uppercase"
-                    value={storeCode}
-                    onChange={(e) => setStoreCode(e.target.value.toUpperCase())}
-                    placeholder="FRAN01"
-                    autoCapitalize="characters"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <span className="text-muted-foreground">Pair code</span>
-                  <input
-                    className="mt-1 w-full rounded-md border px-3 py-2 font-mono uppercase tracking-widest"
-                    value={pairCode}
-                    onChange={(e) => setPairCode(e.target.value.toUpperCase())}
-                    placeholder="A1B2C3"
-                    autoCapitalize="characters"
-                  />
-                </label>
-                {error && (
-                  <div className="flex items-center justify-center gap-1.5 text-sm text-destructive">
-                    <AlertCircle className="h-4 w-4" /> {errorMessage || 'Pair failed'}
-                  </div>
-                )}
-                <Button
-                  className="w-full"
-                  onClick={() => void handlePair()}
-                  disabled={storeCode.length < 2 || pairCode.length < 4 || pairing}
-                >
-                  {pairing ? 'Binding…' : 'Bind register'}
-                </Button>
-                <p className="text-center text-xs text-muted-foreground">
-                  HQ web login stays on the dashboard — not on Live POS.
+          !binding ? (
+            <div className="mx-auto w-full max-w-xl space-y-4 rounded-lg border p-5">
+              <div className="text-center">
+                <Tablet className="mx-auto mb-3 h-8 w-8 text-primary" />
+                <h2 className="text-lg font-semibold">Bind this register</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Enter the store code and pair code from HRM / ops. No Google on the register.
                 </p>
               </div>
-            ) : (
-              <div className="space-y-4 rounded-lg border p-3">
-                <div className="flex items-start justify-between gap-4">
+              <label className="block text-sm">
+                <span className="text-muted-foreground">Store code</span>
+                <input
+                  className="mt-1.5 w-full rounded-md border px-4 py-3.5 font-mono text-lg uppercase"
+                  value={storeCode}
+                  onChange={(e) => setStoreCode(e.target.value.toUpperCase())}
+                  placeholder="FRAN01"
+                  autoCapitalize="characters"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-muted-foreground">Pair code</span>
+                <input
+                  className="mt-1.5 w-full rounded-md border px-4 py-3.5 font-mono text-lg uppercase tracking-widest"
+                  value={pairCode}
+                  onChange={(e) => setPairCode(e.target.value.toUpperCase())}
+                  placeholder="A1B2C3"
+                  autoCapitalize="characters"
+                />
+              </label>
+              {error && (
+                <div className="flex items-center justify-center gap-1.5 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" /> {errorMessage || 'Pair failed'}
+                </div>
+              )}
+              <Button
+                className="h-12 w-full text-base"
+                onClick={() => void handlePair()}
+                disabled={storeCode.length < 2 || pairCode.length < 4 || pairing}
+              >
+                {pairing ? 'Binding…' : 'Bind register'}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                HQ web login stays on the dashboard — not on Live POS.
+              </p>
+            </div>
+          ) : (
+            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+              <div className="flex flex-col gap-4 rounded-lg border p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold">Unlock register</h2>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
+                    <h2 className="text-lg font-semibold">Unlock register</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       Employee code + 8-digit PIN from fran-hrm.
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Bound · {binding.store_code} / {binding.register_id}
-                      {binding.label ? ` · ${binding.label}` : ''}
-                    </p>
                   </div>
-                  <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">Live</span>
+                  <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">
+                    Live
+                  </span>
                 </div>
 
-                <label className="block text-sm">
-                  <span className="text-muted-foreground">Employee code</span>
+                <label className="block flex-1">
+                  <span className="text-sm text-muted-foreground">Employee code</span>
                   <input
-                    className="mt-1 w-full rounded-md border px-3 py-2 font-mono uppercase"
+                    className="mt-2 w-full rounded-lg border px-4 py-5 font-mono text-2xl uppercase tracking-wide sm:py-6 sm:text-3xl"
                     value={employeeCode}
                     onChange={(e) => {
                       setEmployeeCode(e.target.value.toUpperCase())
                       setError(false)
                     }}
-                    placeholder="E12345"
+                    placeholder="ADM-AD26"
                     autoCapitalize="characters"
+                    autoComplete="off"
                   />
                 </label>
 
-                <div className="rounded-lg bg-secondary p-3">
-                  <div className="mb-2 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <KeyRound className="h-4 w-4" />
-                    8-digit PIN
-                  </div>
-                  <div className="mb-2 flex justify-center gap-2">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                      <div key={i} className={cn('h-3.5 w-3.5 rounded-full', i < pin.length ? 'bg-primary' : 'bg-muted')} />
-                    ))}
-                  </div>
-                  {error && (
-                    <div className="mb-3 flex items-center justify-center gap-1.5 text-sm text-destructive">
-                      <AlertCircle className="h-4 w-4" /> {errorMessage || 'Incorrect or locked PIN'}
-                    </div>
-                  )}
-                  <Numpad
-                    dense
-                    onPress={(k) => {
-                      setError(false)
-                      setPin((p) => (p.length < 8 ? p + k : p))
-                    }}
-                    onBackspace={() => {
-                      setError(false)
-                      setPin((p) => p.slice(0, -1))
-                    }}
-                  />
-                  <Button
-                    className="mt-3 h-10 w-full text-base"
-                    onClick={() => void openLiveWithHrmPin()}
-                    disabled={employeeCode.length < 1 || pin.length !== 8 || unlocking}
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                    {unlocking ? 'Checking…' : 'Unlock'}
-                  </Button>
-                </div>
-
-                <Button variant="outline" className="h-9 w-full" onClick={handleUnbind}>
+                <Button
+                  className="h-12 w-full text-base"
+                  onClick={() => void openLiveWithHrmPin()}
+                  disabled={employeeCode.length < 1 || pin.length !== 8 || unlocking}
+                >
+                  <ShoppingBag className="h-4 w-4" />
+                  {unlocking ? 'Checking…' : 'Unlock'}
+                </Button>
+                <Button variant="outline" className="h-11 w-full" onClick={handleUnbind}>
                   <LogOut className="h-4 w-4" />
                   Unbind this tablet
                 </Button>
               </div>
-            )}
-          </div>
-        ) : (
-          <>
-            {user ? (
-              <div className="mb-4 rounded-lg border bg-muted/40 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">Connected demo account</p>
-                    <p className="truncate text-xs text-muted-foreground">{connectedAccountLabel}</p>
+
+              <div className="flex min-h-[22rem] flex-col rounded-lg bg-secondary p-4 sm:min-h-0 sm:p-5">
+                <div className="mb-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <KeyRound className="h-4 w-4" />
+                  8-digit PIN
+                </div>
+                <div className="mb-4 flex justify-center gap-2.5">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        'h-4 w-4 rounded-full sm:h-5 sm:w-5',
+                        i < pin.length ? 'bg-primary' : 'bg-muted',
+                      )}
+                    />
+                  ))}
+                </div>
+                {error && (
+                  <div className="mb-3 flex items-center justify-center gap-1.5 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" /> {errorMessage || 'Incorrect or locked PIN'}
                   </div>
-                  <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">Demo</span>
-                </div>
-                {!company && (
-                  <Link to="/onboarding" className="mt-2 inline-block text-xs font-medium text-primary underline">
-                    Finish company setup
-                  </Link>
                 )}
-                <Button
-                  variant="outline"
-                  className="mt-2 h-9 w-full"
-                  onClick={() => void handleGoogleSignOut()}
-                  disabled={signingOut}
-                >
-                  <LogOut className="h-4 w-4" />
-                  {signingOut ? 'Signing out...' : 'Use another Google account'}
-                </Button>
-              </div>
-            ) : (
-              <div className="mb-4 flex flex-col gap-3 rounded-lg border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium">Standalone cashier demo</p>
-                  <p className="text-xs text-muted-foreground">Optional: connect a Google account for demo extras.</p>
-                </div>
-                <Button variant="outline" onClick={handleDemoAccountSignIn} disabled={googleLoading}>
-                  {googleLoading ? 'Connecting...' : 'Connect Account'}
-                </Button>
-              </div>
-            )}
-
-            <div className="mb-4 grid grid-cols-2 gap-2">
-              {(
-                [
-                  { role: 'cashier' as const, icon: User, label: 'Cashier' },
-                  { role: 'manager' as const, icon: Shield, label: 'Manager' },
-                ]
-              ).map((r) => (
-                <button
-                  key={r.role}
-                  onClick={() => {
-                    setRole(r.role)
-                    setPin('')
+                <Numpad
+                  fill
+                  className="min-h-0 flex-1"
+                  onPress={(k) => {
                     setError(false)
+                    setPin((p) => (p.length < 8 ? p + k : p))
                   }}
-                  className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer',
-                    role === r.role ? 'border-yellow bg-yellow font-semibold text-brown' : 'hover:bg-surface-sunken'
-                  )}
-                >
-                  <r.icon className="h-4 w-4" />
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            <p className="mb-2 text-center text-sm text-muted-foreground">
-              Enter PIN for <span className="font-medium text-foreground">{selected?.name}</span>
-            </p>
-
-            <div className="mb-2 flex justify-center gap-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className={cn('h-3.5 w-3.5 rounded-full', i < pin.length ? 'bg-primary' : 'bg-muted')} />
-              ))}
-            </div>
-
-            {error && (
-              <div className="mb-3 flex items-center justify-center gap-1.5 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" /> Incorrect PIN, try again
+                  onBackspace={() => {
+                    setError(false)
+                    setPin((p) => p.slice(0, -1))
+                  }}
+                />
               </div>
-            )}
+            </div>
+          )
+        ) : (
+          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+            <div className="flex flex-col gap-4">
+              {user ? (
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">Connected demo account</p>
+                      <p className="truncate text-xs text-muted-foreground">{connectedAccountLabel}</p>
+                    </div>
+                    <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
+                      Demo
+                    </span>
+                  </div>
+                  {!company && (
+                    <Link to="/onboarding" className="mt-2 inline-block text-xs font-medium text-primary underline">
+                      Finish company setup
+                    </Link>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="mt-3 h-10 w-full"
+                    onClick={() => void handleGoogleSignOut()}
+                    disabled={signingOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {signingOut ? 'Signing out...' : 'Use another Google account'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Standalone cashier demo</p>
+                    <p className="text-xs text-muted-foreground">Optional: connect a Google account for demo extras.</p>
+                  </div>
+                  <Button variant="outline" onClick={handleDemoAccountSignIn} disabled={googleLoading}>
+                    {googleLoading ? 'Connecting...' : 'Connect Account'}
+                  </Button>
+                </div>
+              )}
 
-            <Numpad
-              dense
-              onPress={(k) => {
-                setError(false)
-                setPin((p) => (p.length < 4 ? p + k : p))
-              }}
-              onBackspace={() => {
-                setError(false)
-                setPin((p) => p.slice(0, -1))
-              }}
-            />
+              <div className="grid grid-cols-2 gap-3">
+                {(
+                  [
+                    { role: 'cashier' as const, icon: User, label: 'Cashier' },
+                    { role: 'manager' as const, icon: Shield, label: 'Manager' },
+                  ]
+                ).map((r) => (
+                  <button
+                    key={r.role}
+                    type="button"
+                    onClick={() => {
+                      setRole(r.role)
+                      setPin('')
+                      setError(false)
+                    }}
+                    className={cn(
+                      'flex flex-col items-center gap-2 rounded-lg border px-3 py-5 text-base font-medium transition-colors cursor-pointer',
+                      role === r.role
+                        ? 'border-yellow bg-yellow font-semibold text-brown'
+                        : 'hover:bg-surface-sunken',
+                    )}
+                  >
+                    <r.icon className="h-6 w-6" />
+                    {r.label}
+                  </button>
+                ))}
+              </div>
 
-            <Button className="mt-3 h-10 w-full text-base" onClick={submit} disabled={pin.length < 4}>
-              Sign In
-            </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Enter PIN for <span className="font-medium text-foreground">{selected?.name}</span>
+              </p>
+              <p className="text-center text-xs text-muted-foreground">
+                Demo PINs — Cashier: <span className="font-mono">1111</span> — Manager:{' '}
+                <span className="font-mono">9999</span>
+              </p>
 
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              Demo PINs - Cashier: <span className="font-mono">1111</span> - Manager:{' '}
-              <span className="font-mono">9999</span>
-            </p>
-
-            {/* HQ Google remains available off Live — e.g. open dashboard */}
-            {!user && (
-              <Button variant="ghost" className="mt-2 w-full text-xs text-muted-foreground" onClick={() => void handleGoogleSignIn()} disabled={googleLoading}>
-                <Wifi className="h-3 w-3" />
-                HQ dashboard Google sign-in
+              <Button className="mt-auto h-12 w-full text-base" onClick={submit} disabled={pin.length < 4}>
+                Sign In
               </Button>
-            )}
-          </>
+
+              {!user && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-xs text-muted-foreground"
+                  onClick={() => void handleGoogleSignIn()}
+                  disabled={googleLoading}
+                >
+                  <Wifi className="h-3 w-3" />
+                  HQ dashboard Google sign-in
+                </Button>
+              )}
+            </div>
+
+            <div className="flex min-h-[22rem] flex-col rounded-lg bg-secondary p-4 sm:min-h-0 sm:p-5">
+              <div className="mb-4 flex justify-center gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      'h-4 w-4 rounded-full sm:h-5 sm:w-5',
+                      i < pin.length ? 'bg-primary' : 'bg-muted',
+                    )}
+                  />
+                ))}
+              </div>
+              {error && (
+                <div className="mb-3 flex items-center justify-center gap-1.5 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" /> Incorrect PIN, try again
+                </div>
+              )}
+              <Numpad
+                fill
+                className="min-h-0 flex-1"
+                onPress={(k) => {
+                  setError(false)
+                  setPin((p) => (p.length < 4 ? p + k : p))
+                }}
+                onBackspace={() => {
+                  setError(false)
+                  setPin((p) => p.slice(0, -1))
+                }}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
