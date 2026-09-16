@@ -11,6 +11,8 @@ import {
   Sparkles,
   X,
   ShoppingBag,
+  Grid2X2,
+  List,
   BookmarkPlus,
   RotateCcw,
   AlertCircle,
@@ -128,6 +130,8 @@ type NativeBarcodeDetector = { detect: (source: CanvasImageSource) => Promise<Ba
 type NativeBarcodeDetectorConstructor = new (options?: { formats?: string[] }) => NativeBarcodeDetector
 type WindowWithBarcodeDetector = Window & typeof globalThis & { BarcodeDetector?: NativeBarcodeDetectorConstructor }
 type CameraScannerControls = { stop: () => void }
+
+type CatalogViewMode = 'grid' | 'list'
 
 const CAMERA_BARCODE_FORMATS = [
   'qr_code',
@@ -573,6 +577,11 @@ export default function SalePage() {
   const cameraBusyRef = useRef(false)
   const cameraLastAcceptedRef = useRef<{ value: string; at: number } | null>(null)
   const cameraSubmitRef = useRef<(value: string) => Promise<void>>(async () => {})
+  const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
+    if (typeof window === 'undefined') return 'list'
+    return localStorage.getItem('pos_catalog_view') === 'grid' ? 'grid' : 'list'
+  })
+
   // Line action (discount / override) + the manager-auth gate it routes through.
   const [lineAction, setLineAction] = useState<{ mode: LineActionMode; line: CartLine } | null>(null)
   const [pendingAuth, setPendingAuth] = useState<{ label: string; run: () => void } | null>(null)
@@ -1361,6 +1370,11 @@ export default function SalePage() {
     }
   }, [cameraOpen, stopCameraHardware])
 
+  const setCatalogViewMode = (view: CatalogViewMode) => {
+    setCatalogView(view)
+    localStorage.setItem('pos_catalog_view', view)
+  }
+
   const chooseSalesType = (t: SalesType) => {
     const meta = SALES_TYPES.find((s) => s.value === t)!
     if (meta.requiresManager) {
@@ -1793,6 +1807,37 @@ export default function SalePage() {
     focusProductEntry()
   }
 
+  const renderCatalogViewToggle = () => (
+    <div className="flex shrink-0 rounded-md border bg-background p-0.5">
+      <button
+        type="button"
+        onClick={() => setCatalogViewMode('grid')}
+        title="Grid view"
+        aria-label="Grid view"
+        aria-pressed={catalogView === 'grid'}
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
+          catalogView === 'grid' ? 'bg-brown text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        )}
+      >
+        <Grid2X2 className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setCatalogViewMode('list')}
+        title="List view"
+        aria-label="List view"
+        aria-pressed={catalogView === 'list'}
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
+          catalogView === 'list' ? 'bg-brown text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        )}
+      >
+        <List className="h-4 w-4" />
+      </button>
+    </div>
+  )
+
   const renderCategoryStrip = () => (
     <div className="flex gap-1.5 overflow-x-auto border-b bg-card px-3 py-2">
       {categories.map((c) => (
@@ -1812,12 +1857,21 @@ export default function SalePage() {
   )
 
   const renderProductCatalogue = (onProductAdd: (product: Product) => void) => (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      {filtered.map((p) => (
-        <ProductListRow key={p.id} product={p} onAdd={() => onProductAdd(p)} />
-      ))}
+    <div
+      className={cn(
+        'min-h-0 flex-1 overflow-y-auto p-3',
+        catalogView === 'grid'
+          ? 'grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4'
+          : 'space-y-0 p-0'
+      )}
+    >
+      {filtered.map((p) =>
+        catalogView === 'grid'
+          ? <ProductCard key={p.id} product={p} onAdd={() => onProductAdd(p)} />
+          : <ProductListRow key={p.id} product={p} onAdd={() => onProductAdd(p)} />
+      )}
       {filtered.length === 0 && (
-        <p className="px-3 py-10 text-center text-sm text-muted-foreground">
+        <p className="col-span-full px-3 py-10 text-center text-sm text-muted-foreground">
           {catalogLoading ? 'Loading products...' : catalogError || 'No products match.'}
         </p>
       )}
@@ -1917,6 +1971,9 @@ export default function SalePage() {
             <ShoppingBag className="h-4 w-4" />
             <span className="sr-only">Catalog</span>
           </Button>
+        </div>
+        <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
+          {renderCatalogViewToggle()}
         </div>
       </form>
       {cameraOpen && (
@@ -2236,6 +2293,9 @@ export default function SalePage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            <div className="flex items-center justify-end gap-2 border-b px-3 py-2">
+              {renderCatalogViewToggle()}
+            </div>
             {renderCategoryStrip()}
             {renderProductCatalogue(addFromMobileCatalogue)}
           </aside>
@@ -2430,6 +2490,67 @@ export default function SalePage() {
       </Dialog>
       </div>
     </div>
+  )
+}
+
+function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
+  const out = product.qtyOnHand <= 0
+  const price = product.mdPrice ?? product.price
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      disabled={out}
+      className={cn(
+        'group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-primary hover:shadow active:scale-[0.99] cursor-pointer',
+        out && 'cursor-not-allowed opacity-50'
+      )}
+    >
+      <div className="mb-2 flex min-w-0 items-start justify-between gap-2">
+        {product.emoji ? (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-xl">
+            {product.emoji}
+          </div>
+        ) : (
+          <div className="h-10 w-10 shrink-0" />
+        )}
+        <div className="flex min-w-0 flex-wrap items-start justify-end gap-1">
+          {product.mdPrice != null && <Badge variant="warning" className="shrink-0">MD / SSS</Badge>}
+          {!product.returnable && (
+            <Badge variant="outline" className="shrink-0 text-[10px]">Non-returnable</Badge>
+          )}
+        </div>
+      </div>
+      <p className="line-clamp-2 min-w-0 text-sm font-medium leading-tight">{product.name}</p>
+      <p className="mt-0.5 truncate text-xs text-muted-foreground">{product.sku}</p>
+      {product.storeLocationCode && (
+        <p className="mt-0.5 truncate text-[11px] font-medium text-primary">Loc {product.storeLocationCode}</p>
+      )}
+      <div className="mt-auto flex min-w-0 items-end justify-between gap-2 pt-2">
+        <div className="min-w-0 shrink-0 tabular-nums">
+          {product.mdPrice != null ? (
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="text-sm font-semibold leading-none text-destructive">
+                {formatCurrency(product.mdPrice, STORE.currency)}
+              </span>
+              <span className="text-[11px] leading-none text-muted-foreground line-through">
+                {formatCurrency(product.price, STORE.currency)}
+              </span>
+            </div>
+          ) : (
+            <span className="text-sm font-semibold leading-none">{formatCurrency(price, STORE.currency)}</span>
+          )}
+        </div>
+        <span
+          className={cn(
+            'shrink-0 text-right text-xs tabular-nums leading-none',
+            out ? 'font-medium text-destructive' : 'text-muted-foreground',
+          )}
+        >
+          {out ? 'Out' : `${product.qtyOnHand} in stock`}
+        </span>
+      </div>
+    </button>
   )
 }
 
