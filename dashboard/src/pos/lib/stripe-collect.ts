@@ -9,7 +9,7 @@ import {
   waitForS700Action,
   type StripePaymentIntentResult,
 } from './stripe-terminal-api'
-import { cancelTapToPay, collectTapToPay, ensureTapToPayReady } from './stripe-tap-to-pay'
+import { cancelTapToPay, collectTapToPay, ensureTapToPayReady, isTapToPayTerminalReady } from './stripe-tap-to-pay'
 import { stripeCentsToAmount } from './stripe-money'
 
 export type StripeCollectKind = 's700' | 'tap_to_pay'
@@ -34,7 +34,7 @@ export async function collectStripeInPerson(input: {
 
   try {
     if (input.kind === 'tap_to_pay') {
-      input.onStatus?.('1/5 Checking the Google session for Stripe…')
+      input.onStatus?.('1/5 Checking the Google session for Stripeâ€¦')
       const piPromise = createStripePaymentIntent({
         amount: input.amount,
         currency: input.currency,
@@ -43,11 +43,11 @@ export async function collectStripeInPerson(input: {
       })
       piPromise.then((r) => { payment_intent = r?.payment_intent }).catch(() => {})
       await ensureTapToPayReady({ config: input.config, onStatus: input.onStatus })
-      input.onStatus?.('Creating the Stripe test charge…')
+      input.onStatus?.('Creating the Stripe test chargeâ€¦')
       const created = await piPromise
       payment_intent = created?.payment_intent
     } else {
-      input.onStatus?.('Creating the Stripe test charge…')
+      input.onStatus?.('Creating the Stripe test chargeâ€¦')
       const created = await createStripePaymentIntent({
         amount: input.amount,
         currency: input.currency,
@@ -59,17 +59,17 @@ export async function collectStripeInPerson(input: {
     if (!payment_intent?.id) throw new Error('Stripe did not return a PaymentIntent. Check the Google session and try again.')
 
     if (input.kind === 's700') {
-      if (!input.config.s700_reader_id) throw new Error('Register an S700 reader id in Settings → Integrations')
-      input.onStatus?.('Sending the sale to the S700…')
+      if (!input.config.s700_reader_id) throw new Error('Register an S700 reader id in Settings â†’ Integrations')
+      input.onStatus?.('Sending the sale to the S700â€¦')
       await processS700Payment({
         readerId: input.config.s700_reader_id,
         paymentIntentId: payment_intent.id,
       })
       if (input.config.simulated) {
-        input.onStatus?.('Presenting simulated card on the test reader…')
+        input.onStatus?.('Presenting simulated card on the test readerâ€¦')
         await presentSimulatedPaymentMethod(input.config.s700_reader_id)
       } else {
-        input.onStatus?.('Ask the customer to tap, insert, or swipe on the S700…')
+        input.onStatus?.('Ask the customer to tap, insert, or swipe on the S700â€¦')
       }
       await waitForS700Action(input.config.s700_reader_id)
     } else {
@@ -96,7 +96,10 @@ export async function collectStripeInPerson(input: {
     if (input.config.s700_reader_id) {
       await cancelStripeReader(input.config.s700_reader_id).catch(() => {})
     }
-    await cancelTapToPay().catch(() => {})
+    // Never call Capgo disconnectReader for S700 â€” Terminal may never have been init'd.
+    if (input.kind === 'tap_to_pay') {
+      await cancelTapToPay().catch(() => {})
+    }
     if (payment_intent?.id) {
       await cancelStripePaymentIntent(payment_intent.id).catch(() => {})
     }
@@ -105,7 +108,9 @@ export async function collectStripeInPerson(input: {
 }
 
 export async function cancelStripeCollection(config: StripeTerminalConfig | null) {
-  await cancelTapToPay().catch(() => {})
+  if (isTapToPayTerminalReady()) {
+    await cancelTapToPay().catch(() => {})
+  }
   if (config?.s700_reader_id) {
     await cancelStripeReader(config.s700_reader_id).catch(() => {})
   }
@@ -137,7 +142,7 @@ export async function collectS700Qr(input: {
   let payment_intent: StripePaymentIntentResult | undefined
   let displaying = false
   try {
-    input.onStatus?.('Creating the Stripe charge…')
+    input.onStatus?.('Creating the Stripe chargeâ€¦')
     const created = await createStripePaymentIntent({
       amount: input.amount,
       currency: input.currency,
@@ -149,14 +154,14 @@ export async function collectS700Qr(input: {
     if (!payment_intent?.id) throw new S700QrStartError('Stripe did not return a PaymentIntent')
 
     try {
-      input.onStatus?.('Sending the QR to the S700…')
+      input.onStatus?.('Sending the QR to the S700â€¦')
       await processS700Payment({ readerId, paymentIntentId: payment_intent.id })
     } catch (error) {
       throw new S700QrStartError(error instanceof Error ? error.message : 'The S700 could not start the QR payment')
     }
     displaying = true
     input.onDisplaying?.()
-    input.onStatus?.('Ask the customer to scan the QR on the S700…')
+    input.onStatus?.('Ask the customer to scan the QR on the S700â€¦')
     await waitForS700Action(readerId, { timeoutMs: 300_000, shouldStop: input.shouldStop })
 
     const retrieved = await retrieveStripePaymentIntent(payment_intent.id)
