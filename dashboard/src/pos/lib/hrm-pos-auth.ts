@@ -1,7 +1,13 @@
+import { Capacitor } from '@capacitor/core'
 import { supabase } from '@/lib/supabase'
 
 const DEVICE_TOKEN_KEY = 'pos_register_device_token'
 const BINDING_KEY = 'pos_register_binding'
+
+/** Capacitor WebView has no Vercel /api routes — hit prod origin. */
+const POS_API_ORIGIN =
+  (import.meta.env.VITE_POS_API_ORIGIN as string | undefined)?.replace(/\/+$/, '') ||
+  'https://fran-pos.vercel.app'
 
 export type RegisterBinding = {
   device_token: string
@@ -20,6 +26,11 @@ export type HrmPosStaff = {
   home_store_id?: string | null
   pin_expires_at?: string | null
   store_codes?: string[]
+}
+
+function hrmPosVerifyUrl() {
+  if (Capacitor.isNativePlatform()) return `${POS_API_ORIGIN}/api/hrm-pos-verify`
+  return '/api/hrm-pos-verify'
 }
 
 export function loadRegisterBinding(): RegisterBinding | null {
@@ -95,7 +106,7 @@ export async function verifyHrmPosPin(input: {
   pin: string
   binding: RegisterBinding
 }): Promise<{ staff: HrmPosStaff }> {
-  const res = await fetch('/api/hrm-pos-verify', {
+  const res = await fetch(hrmPosVerifyUrl(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -106,7 +117,7 @@ export async function verifyHrmPosPin(input: {
       device_token: input.binding.device_token,
     }),
   })
-  const body = await res.json().catch(() => ({}))
+  const body = (await res.json().catch(() => ({}))) as Record<string, any>
   if (!res.ok) {
     const msg = body?.message || body?.error || res.statusText || 'Verify failed'
     const err = new Error(msg) as Error & { reason?: string; status?: number }
@@ -114,5 +125,13 @@ export async function verifyHrmPosPin(input: {
     err.status = res.status
     throw err
   }
-  return { staff: body.staff as HrmPosStaff }
+  const staff = (body?.staff || body?.data?.staff) as HrmPosStaff | undefined
+  if (!staff?.id || !staff?.role) {
+    throw new Error(
+      Capacitor.isNativePlatform()
+        ? 'HRM verify returned no staff. Check tablet can reach fran-pos.vercel.app'
+        : 'HRM verify returned no staff',
+    )
+  }
+  return { staff }
 }

@@ -4,8 +4,15 @@ function json(res: VercelResponse, status: number, body: Record<string, unknown>
   res.status(status).json(body)
 }
 
+function hrmBaseUrl() {
+  return (process.env.FRAN_HRM_URL || process.env.VITE_FRAN_HRM_URL || '')
+    .trim()
+    .replace(/\\n$/g, '')
+    .replace(/\/+$/, '')
+}
+
 /**
- * Browser → this proxy → fran-hrm /api/v1/pos/verify
+ * Browser / Capacitor → this proxy → fran-hrm /api/v1/pos/verify
  * Keeps FRAN_HRM_API_KEY server-side.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -13,8 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 405, { error: 'Method not allowed' })
   }
 
-  const hrmUrl = (process.env.FRAN_HRM_URL || process.env.VITE_FRAN_HRM_URL || '').replace(/\/+$/, '')
-  const apiKey = process.env.FRAN_HRM_API_KEY || ''
+  const hrmUrl = hrmBaseUrl()
+  const apiKey = (process.env.FRAN_HRM_API_KEY || '').trim()
   if (!hrmUrl || !apiKey) {
     return json(res, 503, {
       error: 'HRM verify is not configured',
@@ -59,7 +66,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reason: parsed.data?.reason || parsed.reason,
       })
     }
-    return json(res, 200, parsed)
+    const staff = parsed?.staff || parsed?.data?.staff
+    if (!staff) {
+      return json(res, 502, {
+        error: 'HRM verify returned no staff',
+        message: 'Unexpected HRM response shape',
+      })
+    }
+    return json(res, 200, { ok: true, staff })
   } catch (e: any) {
     return json(res, 502, { error: 'HRM unreachable', message: e?.message || 'fetch failed' })
   }
