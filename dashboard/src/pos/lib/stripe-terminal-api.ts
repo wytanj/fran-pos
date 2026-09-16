@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { amountToStripeCents, stripeCurrencyCode } from './stripe-money'
+import { loadRegisterBinding } from './hrm-pos-auth'
 
 export type StripeTerminalAction =
   | 'connection_token'
@@ -98,6 +99,14 @@ async function authHeaders() {
     cachedAccessToken = token
     cachedAccessAt = now
     headers.Authorization = `Bearer ${token}`
+    return headers
+  }
+
+  // PIN-only S10: no Google JWT — use bound register device_token.
+  const deviceToken = loadRegisterBinding()?.device_token?.trim() || ''
+  if (deviceToken) {
+    headers.Authorization = `Bearer ${deviceToken}`
+    headers['x-pos-device-token'] = deviceToken
   }
   return headers
 }
@@ -114,7 +123,7 @@ function apiUrl() {
 export async function callStripeTerminal<T>(action: StripeTerminalAction, body: Record<string, unknown> = {}): Promise<T> {
   const headers = await authHeaders()
   if (action !== 'health' && !headers.Authorization) {
-    throw new Error('Google session token is missing for Stripe. Live mode → Use another Google account, then Continue with Google.')
+    throw new Error('No Stripe auth: bind this register and unlock with HRM PIN, or Continue with Google.')
   }
 
   const controller = new AbortController()
