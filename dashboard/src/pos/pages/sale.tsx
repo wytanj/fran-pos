@@ -827,12 +827,38 @@ export default function SalePage() {
     }
 
     setCatalogLoading(true)
+    setCatalogSource((prev) => (prev === 'mock' ? 'live' : prev))
 
     async function loadLiveCatalog() {
       if (!company) {
         setCatalog([])
-        setCatalogError('Sign in to load live products')
+        setCatalogSource('live')
+        setCatalogError('Bind register and unlock with HRM PIN to load live products')
         return
+      }
+
+      // Prefer SKUMS when connector is enabled (JT: SKUMS-first for live registers).
+      if (skumsConnector) {
+        try {
+          const res = await listSkumsPosCatalog({ limit: 250 }, skumsConnector)
+          const skumsProducts = res.data.map(toPosProduct)
+          if (skumsProducts.length > 0) {
+            setCatalog(skumsProducts)
+            setCatalogSource('skums')
+            setCategory('All')
+            setCatalogError(null)
+            return
+          }
+          setCatalog([])
+          setCatalogSource('skums')
+          setCatalogError('No SKUMS products available for POS')
+          return
+        } catch (err) {
+          setCatalog([])
+          setCatalogSource('skums')
+          setCatalogError(err instanceof Error ? err.message : 'Failed to load SKUMS catalog')
+          return
+        }
       }
 
       const { data, error } = await supabase
@@ -853,27 +879,17 @@ export default function SalePage() {
         return
       }
 
-      if (skumsConnector) {
-        const res = await listSkumsPosCatalog({ limit: 250 }, skumsConnector)
-        const skumsProducts = res.data.map(toPosProduct)
-        if (skumsProducts.length > 0) {
-          setCatalog(skumsProducts)
-          setCatalogSource('skums')
-          setCategory('All')
-          setCatalogError(null)
-          return
-        }
-        setCatalogError('No SKUMS products available for POS')
-        return
-      }
-
       setCatalog([])
+      setCatalogSource('live')
       setCatalogError('No live products yet. Create products manually or add a SKUMS connector.')
     }
 
     loadLiveCatalog()
       .catch((err) => {
-        if (!cancelled) setCatalogError(err instanceof Error ? err.message : 'Failed to load live catalog')
+        if (!cancelled) {
+          setCatalogSource((prev) => (prev === 'mock' ? 'live' : prev))
+          setCatalogError(err instanceof Error ? err.message : 'Failed to load live catalog')
+        }
       })
       .finally(() => {
         if (!cancelled) setCatalogLoading(false)
@@ -1987,7 +2003,7 @@ export default function SalePage() {
         </div>
         <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
           <Badge variant="secondary" className="shrink-0">
-            {catalogSource === 'skums' ? 'SKUMS catalog' : catalogSource === 'live' ? 'Live catalog' : 'Demo catalog'}
+            {mode === 'demo' || catalogSource === 'mock' ? (mode === 'live' ? 'Loading catalog' : 'Demo catalog') : catalogSource === 'skums' ? 'SKUMS catalog' : 'Live catalog'}
           </Badge>
           {renderCatalogViewToggle()}
         </div>
@@ -2311,7 +2327,7 @@ export default function SalePage() {
             </div>
             <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
               <Badge variant="secondary" className="shrink-0">
-                {catalogSource === 'skums' ? 'SKUMS catalog' : catalogSource === 'live' ? 'Live catalog' : 'Demo catalog'}
+                {mode === 'demo' || catalogSource === 'mock' ? (mode === 'live' ? 'Loading catalog' : 'Demo catalog') : catalogSource === 'skums' ? 'SKUMS catalog' : 'Live catalog'}
               </Badge>
               {renderCatalogViewToggle()}
             </div>

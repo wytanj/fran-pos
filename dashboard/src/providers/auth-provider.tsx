@@ -4,6 +4,10 @@ import type { Profile, Company, CompanySettings } from '@pos/shared'
 import { supabase } from '@/lib/supabase'
 import { completeNativeOAuth, isNativeApp, oauthRedirectTo } from '@/lib/native-oauth'
 import { clearStripeAuthCache } from '@/pos/lib/stripe-terminal-api'
+import {
+  loadRegisterCompanyContext,
+  type RegisterBinding,
+} from '@/pos/lib/hrm-pos-auth'
 
 interface AuthState {
   user: User | null
@@ -22,6 +26,8 @@ interface AuthContextType extends AuthState {
   createCompanyProfile: (companyName: string, displayName: string) => Promise<void>
   signOut: () => Promise<void>
   switchCompany: (companyId: string) => Promise<void>
+  /** HRM register unlock: hydrate company + settings from binding (no Google). */
+  hydrateRegisterCompany: (binding: RegisterBinding) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -247,6 +253,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }
 
+
+  const hydrateRegisterCompany = async (binding: RegisterBinding) => {
+    const ctx = await loadRegisterCompanyContext(binding)
+    if (binding.company_id && ctx.company_id && binding.company_id !== ctx.company_id) {
+      throw new Error('Register company mismatch')
+    }
+    localStorage.setItem('pos_active_company', ctx.company_id)
+    setState((prev) => ({
+      ...prev,
+      company: ctx.company as Company,
+      settings: (ctx.settings as CompanySettings | null) ?? null,
+      companies: ctx.company ? [ctx.company as Company] : prev.companies,
+      loading: false,
+    }))
+  }
+
   const switchCompany = async (companyId: string) => {
     if (!state.user) return
     localStorage.setItem('pos_active_company', companyId)
@@ -254,7 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signInWithGoogle, signUp, createCompanyProfile, signOut, switchCompany }}>
+    <AuthContext.Provider value={{ ...state, signIn, signInWithGoogle, signUp, createCompanyProfile, signOut, switchCompany, hydrateRegisterCompany }}>
       {children}
     </AuthContext.Provider>
   )

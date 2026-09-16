@@ -4,20 +4,28 @@ import { useAuth } from '@/providers/auth-provider'
 import type { CompanySettings, TaxRate, PaymentMethod } from '@pos/shared'
 
 export function useCompanySettings() {
-  const { company } = useAuth()
+  const { company, settings: authSettings, session } = useAuth()
   return useQuery({
-    queryKey: ['settings', company?.id],
+    queryKey: ['settings', company?.id, session?.user?.id ?? 'register'],
     queryFn: async () => {
       if (!company) return null
+      // HRM register unlock hydrates settings without a Google session (RLS would block).
+      if (!session?.user && authSettings?.company_id === company.id) {
+        return authSettings
+      }
       const { data, error } = await supabase
         .from('company_settings')
         .select('*')
         .eq('company_id', company.id)
         .single()
-      if (error) throw error
+      if (error) {
+        if (authSettings?.company_id === company.id) return authSettings
+        throw error
+      }
       return data as CompanySettings
     },
     enabled: !!company,
+    initialData: authSettings?.company_id === company?.id ? authSettings : undefined,
   })
 }
 
