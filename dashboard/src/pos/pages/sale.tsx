@@ -11,8 +11,6 @@ import {
   Sparkles,
   X,
   ShoppingBag,
-  Grid2X2,
-  List,
   BookmarkPlus,
   RotateCcw,
   AlertCircle,
@@ -123,7 +121,6 @@ function storeLocationCodeFromMetadata(metadata: Record<string, unknown> | null 
   )
 }
 
-type CatalogViewMode = 'grid' | 'list'
 type ScanMessage = { tone: 'info' | 'success' | 'warning' | 'error'; text: string }
 type CameraScanStatus = 'idle' | 'starting' | 'scanning' | 'detected' | 'unsupported' | 'error'
 type BarcodeResult = { rawValue?: string }
@@ -576,11 +573,6 @@ export default function SalePage() {
   const cameraBusyRef = useRef(false)
   const cameraLastAcceptedRef = useRef<{ value: string; at: number } | null>(null)
   const cameraSubmitRef = useRef<(value: string) => Promise<void>>(async () => {})
-  const [catalogView, setCatalogView] = useState<CatalogViewMode>(() => {
-    if (typeof window === 'undefined') return 'list'
-    return localStorage.getItem('pos_catalog_view') === 'grid' ? 'grid' : 'list'
-  })
-
   // Line action (discount / override) + the manager-auth gate it routes through.
   const [lineAction, setLineAction] = useState<{ mode: LineActionMode; line: CartLine } | null>(null)
   const [pendingAuth, setPendingAuth] = useState<{ label: string; run: () => void } | null>(null)
@@ -1369,11 +1361,6 @@ export default function SalePage() {
     }
   }, [cameraOpen, stopCameraHardware])
 
-  const setCatalogViewMode = (view: CatalogViewMode) => {
-    setCatalogView(view)
-    localStorage.setItem('pos_catalog_view', view)
-  }
-
   const chooseSalesType = (t: SalesType) => {
     const meta = SALES_TYPES.find((s) => s.value === t)!
     if (meta.requiresManager) {
@@ -1806,37 +1793,6 @@ export default function SalePage() {
     focusProductEntry()
   }
 
-  const renderCatalogViewToggle = () => (
-    <div className="flex shrink-0 rounded-md border bg-background p-0.5">
-      <button
-        type="button"
-        onClick={() => setCatalogViewMode('grid')}
-        title="Grid view"
-        aria-label="Grid view"
-        aria-pressed={catalogView === 'grid'}
-        className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
-          catalogView === 'grid' ? 'bg-brown text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-        )}
-      >
-        <Grid2X2 className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => setCatalogViewMode('list')}
-        title="List view"
-        aria-label="List view"
-        aria-pressed={catalogView === 'list'}
-        className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-sm transition-colors cursor-pointer',
-          catalogView === 'list' ? 'bg-brown text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-        )}
-      >
-        <List className="h-4 w-4" />
-      </button>
-    </div>
-  )
-
   const renderCategoryStrip = () => (
     <div className="flex gap-1.5 overflow-x-auto border-b bg-card px-3 py-2">
       {categories.map((c) => (
@@ -1856,21 +1812,12 @@ export default function SalePage() {
   )
 
   const renderProductCatalogue = (onProductAdd: (product: Product) => void) => (
-    <div
-      className={cn(
-        'flex-1 overflow-y-auto p-3',
-        catalogView === 'grid'
-          ? 'grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4'
-          : 'space-y-2'
-      )}
-    >
-      {filtered.map((p) =>
-        catalogView === 'grid'
-          ? <ProductCard key={p.id} product={p} onAdd={() => onProductAdd(p)} />
-          : <ProductListRow key={p.id} product={p} onAdd={() => onProductAdd(p)} />
-      )}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      {filtered.map((p) => (
+        <ProductListRow key={p.id} product={p} onAdd={() => onProductAdd(p)} />
+      ))}
       {filtered.length === 0 && (
-        <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
+        <p className="px-3 py-10 text-center text-sm text-muted-foreground">
           {catalogLoading ? 'Loading products...' : catalogError || 'No products match.'}
         </p>
       )}
@@ -1970,9 +1917,6 @@ export default function SalePage() {
             <ShoppingBag className="h-4 w-4" />
             <span className="sr-only">Catalog</span>
           </Button>
-        </div>
-        <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
-          {renderCatalogViewToggle()}
         </div>
       </form>
       {cameraOpen && (
@@ -2191,7 +2135,7 @@ export default function SalePage() {
               <p className="text-xs">Scan or tap a product to begin.</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="min-w-0">
               {cart.map((l) => (
                 <CartRow
                   key={l.lineId}
@@ -2291,9 +2235,6 @@ export default function SalePage() {
               >
                 <X className="h-4 w-4" />
               </button>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-b px-3 py-2">
-              {renderCatalogViewToggle()}
             </div>
             {renderCategoryStrip()}
             {renderProductCatalogue(addFromMobileCatalogue)}
@@ -2492,94 +2433,47 @@ export default function SalePage() {
   )
 }
 
-function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
-  const out = product.qtyOnHand <= 0
-  const price = product.mdPrice ?? product.price
-  return (
-    <button
-      onClick={onAdd}
-      disabled={out}
-      className={cn(
-        'group flex flex-col rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-primary hover:shadow active:scale-[0.99] cursor-pointer',
-        out && 'cursor-not-allowed opacity-50'
-      )}
-    >
-      <div className="mb-2 flex items-start justify-between">{product.emoji ? (
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-2xl">
-            {product.emoji}
-          </div>
-        ) : (
-          <div />
-        )}
-        <div className="flex flex-col items-end gap-1">
-          {product.mdPrice != null && <Badge variant="warning">MD / SSS</Badge>}
-          {!product.returnable && <Badge variant="outline" className="text-[10px]">Non-returnable</Badge>}
-        </div>
-      </div>
-      <p className="line-clamp-2 text-sm font-medium leading-tight">{product.name}</p>
-      <p className="text-xs text-muted-foreground">{product.sku}</p>
-      {product.storeLocationCode && (
-        <p className="mt-0.5 text-[11px] font-medium text-primary">Loc {product.storeLocationCode}</p>
-      )}
-      <div className="mt-2 flex items-end justify-between">
-        <div>
-          {product.mdPrice != null ? (
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-destructive">{formatCurrency(product.mdPrice, STORE.currency)}</span>
-              <span className="text-xs text-muted-foreground line-through">
-                {formatCurrency(product.price, STORE.currency)}
-              </span>
-            </div>
-          ) : (
-            <span className="font-semibold">{formatCurrency(price, STORE.currency)}</span>
-          )}
-        </div>
-        <span className={cn('text-xs', out ? 'font-medium text-destructive' : 'text-muted-foreground')}>
-          {out ? 'Out' : `${product.qtyOnHand} in stock`}
-        </span>
-      </div>
-    </button>
-  )
-}
-
 function ProductListRow({ product, onAdd }: { product: Product; onAdd: () => void }) {
   const out = product.qtyOnHand <= 0
   const price = product.mdPrice ?? product.price
+  const metaBits = [
+    product.sku,
+    Array.isArray(product.barcodes) && product.barcodes[0] ? product.barcodes[0] : null,
+    product.storeLocationCode ? `Loc ${product.storeLocationCode}` : null,
+    product.mdPrice != null ? 'MD' : null,
+    !product.returnable ? 'NR' : null,
+  ].filter(Boolean)
   return (
     <button
+      type="button"
       onClick={onAdd}
       disabled={out}
       className={cn(
-        'group flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left shadow-sm transition-colors hover:border-primary hover:bg-accent/40 active:scale-[0.997] cursor-pointer',
+        'flex w-full min-w-0 items-center gap-3 border-b border-line px-3 py-2 text-left transition-colors hover:bg-accent/40 active:bg-accent/55 cursor-pointer',
         out && 'cursor-not-allowed opacity-50'
       )}
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-sm font-medium">{product.name}</p>
-          {product.mdPrice != null && <Badge variant="warning" className="shrink-0">MD / SSS</Badge>}
-          {!product.returnable && <Badge variant="outline" className="shrink-0 text-[10px]">Non-returnable</Badge>}
-        </div>
-        <p className="truncate text-xs text-muted-foreground">
-          {product.sku}
-          {Array.isArray(product.barcodes) && product.barcodes[0] ? ` · ${product.barcodes[0]}` : ''}
-          {' · '}{product.category}
-          {product.storeLocationCode ? ` · Loc ${product.storeLocationCode}` : ''}
-        </p>
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <p className="line-clamp-2 text-sm font-medium leading-snug">{product.name}</p>
+        <p className="truncate text-xs text-muted-foreground">{metaBits.join(' · ')}</p>
       </div>
-      <div className="w-24 shrink-0 text-right">
+      <div className="flex w-[5.5rem] shrink-0 flex-col items-end justify-center gap-0.5 tabular-nums">
         {product.mdPrice != null ? (
           <>
-            <p className="font-semibold text-destructive">{formatCurrency(product.mdPrice, STORE.currency)}</p>
-            <p className="text-xs text-muted-foreground line-through">{formatCurrency(product.price, STORE.currency)}</p>
+            <span className="text-sm font-semibold leading-none text-destructive">
+              {formatCurrency(product.mdPrice, STORE.currency)}
+            </span>
+            <span className="text-[11px] leading-none text-muted-foreground line-through">
+              {formatCurrency(product.price, STORE.currency)}
+            </span>
           </>
         ) : (
-          <p className="font-semibold">{formatCurrency(price, STORE.currency)}</p>
+          <span className="text-sm font-semibold leading-none">{formatCurrency(price, STORE.currency)}</span>
         )}
+        <span className={cn('text-[11px] leading-none', out ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+          {out ? 'Out' : `${product.qtyOnHand} stk`}
+        </span>
       </div>
-      <span className={cn('w-20 shrink-0 text-right text-xs', out ? 'font-medium text-destructive' : 'text-muted-foreground')}>
-        {out ? 'Out' : `${product.qtyOnHand} stock`}
-      </span>
     </button>
   )
 }
@@ -2607,65 +2501,65 @@ function CartRow({
   return (
     <div
       className={cn(
-        'rounded-lg border p-2.5',
-        isReturn && 'border-destructive/40 bg-destructive/5',
-        isFranLine && 'border-transparent bg-success-soft'
+        'border-b border-line px-2.5 py-2',
+        isReturn && 'bg-destructive/5',
+        isFranLine && 'bg-success-soft'
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{line.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {line.sku} Â· {formatCurrency(line.unitPrice, STORE.currency)}
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="truncate text-sm font-medium leading-snug">{line.name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {line.sku} · {formatCurrency(line.unitPrice, STORE.currency)}
             {line.isMarkdown && <span className="ml-1 text-warning">MD</span>}
-            {line.overridden && <span className="ml-1 text-brown">overridden</span>}
-            {isFranLine && <span className="ml-1 text-success">Fran CRM</span>}
+            {line.overridden && <span className="ml-1 text-brown">ovr</span>}
+            {isFranLine && <span className="ml-1 text-success">Fran</span>}
             {line.storeLocationCode && <span className="ml-1 text-primary">Loc {line.storeLocationCode}</span>}
           </p>
           {line.lineDiscount > 0 && (
-            <p className="text-xs text-success">
+            <p className="truncate text-xs text-success">
               {line.discountLabel}: -{formatCurrency(line.lineDiscount, STORE.currency)}
             </p>
           )}
           {line.overridden && line.overrideReason && (
-            <p className="text-xs text-brown">Price override: {line.overrideReason}</p>
+            <p className="truncate text-xs text-brown">Override: {line.overrideReason}</p>
           )}
           {line.franDecisionRef && (
-            <p className="text-xs text-success">Decision {line.franDecisionRef}</p>
+            <p className="truncate text-xs text-success">Decision {line.franDecisionRef}</p>
           )}
         </div>
         <span className={cn('shrink-0 text-sm font-semibold tabular-nums', isReturn && 'text-destructive')}>
           {formatCurrency(net, STORE.currency)}
         </span>
       </div>
-      <div className="mt-2 flex items-center justify-between">
+      <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2">
         {readOnly ? (
-          <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-medium text-success">
+          <span className="truncate rounded-full bg-white/70 px-2 py-0.5 text-xs font-medium text-success">
             CRM quoted line
           </span>
         ) : (
-          <div className="flex items-center gap-1">
-            <button onClick={onDec} className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
+          <div className="flex shrink-0 items-center gap-1">
+            <button type="button" onClick={onDec} className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
               <Minus className="h-3.5 w-3.5" />
             </button>
             <span className="w-8 text-center text-sm font-medium tabular-nums">{line.qty}</span>
-            <button onClick={onInc} className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
+            <button type="button" onClick={onInc} className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {!readOnly && (
             <>
-              <button onClick={onDiscount} title="Line discount" className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
+              <button type="button" onClick={onDiscount} title="Line discount" className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
                 <Tag className="h-3.5 w-3.5" />
               </button>
-              <button onClick={onOverride} title="Price override" className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
+              <button type="button" onClick={onOverride} title="Price override" className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </>
           )}
-          <button onClick={onRemove} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md border text-destructive hover:bg-destructive/10 cursor-pointer">
+          <button type="button" onClick={onRemove} title="Remove" className="flex h-7 w-7 items-center justify-center rounded-md border text-destructive hover:bg-destructive/10 cursor-pointer">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
