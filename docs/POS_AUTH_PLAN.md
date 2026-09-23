@@ -1,6 +1,6 @@
 ﻿# Fran POS auth plan (fleet + HRM PIN)
 
-Status: **filed in repo 2026-09-15** (rev: 8-digit PIN, 12m rotate, bot disable by SM/area+/HQ via existing HRM scopes) — **P0 build unlocked** (J T 2026-09-15). Implementation on `feat/pos-auth-p0`.
+Status: **filed in repo 2026-09-15** (rev: 8-digit PIN, 12m rotate, **disable/PIN-rotate confirm via fran-bird**) — **P0 build unlocked** (J T 2026-09-15). Implementation on `feat/pos-auth-p0`. Addendum 2026-09-16: fran-bird confirm surface.
 Repo: `wytanj/fran-pos` `docs/POS_AUTH_PLAN.md` (PR #5).  
 Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**; do not conflate).
 
@@ -71,6 +71,15 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 - POS register passcode RPCs / dashboard staff passcode UI: **deprecated â†’ remove after cutover**
 - **Disable (theft / exit):** store manager / area manager / above (existing HRM scopes) informs a bot â†’ bot gates on their permission for that store â†’ **confirm** â†’ system clears `pos_access` + invalidates PIN + ends live POS sessions. Enum confirm only â€” not a multi-field form.
 
+## fran-bird confirm surface (addendum 2026-09-16)
+
+**Disable / PIN rotate confirm** for POS auth runs through **`fran-bird`** (Telegram company OS), not a POS dashboard form and not a one-off ops bot zoo.
+
+- Actor: store manager / area manager / HQ via existing fran-hrm scopes (scope-check store)
+- Bird: enum confirm only → HRM clears `pos_access` / rotates PIN / ends sessions
+- Bird uses scoped HRM API credentials; staff never see admin keys
+- See `fran-hrm` `docs/COMPANY_OS_TELEGRAM.md` P1 and `fran-hq` `docs/FRAN_SENTINELS.md`
+
 ## P0 / P1 / Reject
 
 ### P0 (pilot S10 + small staff set)
@@ -108,7 +117,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 2. Float staff across stores in P0 or P1  
 3. Exact idle minutes (2 vs 3 vs 5)  
 4. Validity **6 vs 12 months** (default **12**)  
-5. Which bot channel for disable confirm (Fran Tech Ops Telegram vs dedicated HR bot) â€” P0 can be Telegram confirm callback wired to HRM disable API, authorizing via **existing** store/area/HQ scopes (no Jarell-only special case)
+5. **Locked 2026-09-16:** disable / PIN rotate confirm goes through **`fran-bird`** (see addendum) — scoped HRM credentials, enum confirm only.
 
 ## Unlock
 
