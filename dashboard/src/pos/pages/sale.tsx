@@ -22,6 +22,7 @@ import {
   Camera,
   ChevronDown,
   CircleDollarSign,
+  MonitorSmartphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -85,6 +86,11 @@ import { useAuth } from '@/providers/auth-provider'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
+import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
+import { getActiveStore } from '@/pos/lib/pos-store-config'
+import { MIRROR_IDLE_PROMOS, buildMirrorSnapshot } from '@/pos/mirror/mirror-snapshot'
+import { mirrorLinkSummary, useMirrorPublisher } from '@/pos/mirror/use-mirror-publisher'
+import { MirrorPairDialog, MirrorStatusDot } from '@/pos/mirror/mirror-pair-dialog'
 import type {
   Product as DbProduct,
   SkumsGraphRefs,
@@ -598,6 +604,23 @@ export default function SalePage() {
   const [retryingSaleWrites, setRetryingSaleWrites] = useState(false)
   const [pendingSourceEvents, setPendingSourceEvents] = useState(0)
   const [retryingSourceEvents, setRetryingSourceEvents] = useState(false)
+  const [mirrorDialogOpen, setMirrorDialogOpen] = useState(false)
+  const mirrorRegisterToken = useMemo(() => loadRegisterBinding()?.device_token ?? null, [])
+  const mirrorSnapshot = useMemo(() => {
+    const store = getActiveStore()
+    return buildMirrorSnapshot({
+      store: { name: store.name, code: store.code, currency: store.currency },
+      cart,
+      totals,
+      paymentOpen,
+      completedOpen,
+      lastSale: pos.lastSale,
+      franSession,
+      franPreview,
+      promos: MIRROR_IDLE_PROMOS,
+    })
+  }, [cart, totals, paymentOpen, completedOpen, pos.lastSale, franSession, franPreview])
+  const mirror = useMirrorPublisher(mirrorSnapshot, mirrorRegisterToken)
   const productEntryRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null)
   const cameraStreamRef = useRef<MediaStream | null>(null)
@@ -2360,6 +2383,20 @@ export default function SalePage() {
           {basketNotice && (
             <p className="mt-2 rounded-md bg-secondary px-3 py-2 text-xs text-muted-foreground">{basketNotice}</p>
           )}
+          <button
+            type="button"
+            onClick={() => setMirrorDialogOpen(true)}
+            className="mt-2 flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+          >
+            <span className="flex items-center gap-1.5">
+              <MonitorSmartphone className="h-3.5 w-3.5" />
+              Customer display
+            </span>
+            <span className="flex items-center gap-1.5">
+              {mirrorLinkSummary(mirror.link).label}
+              <MirrorStatusDot link={mirror.link} />
+            </span>
+          </button>
           <Button
             className="mt-2 h-14 w-full text-lg"
             disabled={cart.length === 0 || totals.total <= 0 || !franSession}
@@ -2550,6 +2587,13 @@ export default function SalePage() {
           pendingAuth?.run()
           setPendingAuth(null)
         }}
+      />
+
+      <MirrorPairDialog
+        open={mirrorDialogOpen}
+        onClose={() => setMirrorDialogOpen(false)}
+        link={mirror.link}
+        openPair={mirror.openPair}
       />
 
       <PaymentModal
