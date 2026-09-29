@@ -101,8 +101,11 @@ export default function MirrorFacePage() {
   }
 
   const codeParam = searchParams.get('code')
+  const consumedCode = useRef<string | null>(null)
   useEffect(() => {
-    if (!codeParam) return
+    // Codes are single use, so a repeated effect run must not join twice.
+    if (!codeParam || consumedCode.current === codeParam) return
+    consumedCode.current = codeParam
     setSearchParams({}, { replace: true })
     joinMirrorStation(codeParam).then(onJoined, onJoinFailed)
   }, [codeParam, onJoined, onJoinFailed, setSearchParams])
