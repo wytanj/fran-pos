@@ -25,7 +25,7 @@ Pick one of these levels. Each level adds protection over the previous one.
 
 ### Level 1. Screen pinning (no admin tools)
 
-1. On the display tablet, open **Settings > Security and privacy > More security settings > Pin app**, and turn it on. Turn on **Ask for PIN before unpinning**.
+1. On the display tablet, open **Settings > Security and privacy > More security settings > Pin app**, and turn it on. Older One UI versions call it **Pin windows**. Turn on **Ask for PIN before unpinning**.
 2. Open Fran POS on the customer display screen.
 3. Open **Recents**, tap the Fran POS icon, and tap **Pin this app**.
 
