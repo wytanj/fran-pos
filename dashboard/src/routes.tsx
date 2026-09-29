@@ -31,6 +31,7 @@ import ReportsPage from '@/pos/pages/reports'
 import RequestStockPage from '@/pos/pages/request-stock'
 import ReceiveDeliveryPage from '@/pos/pages/receive-delivery'
 import RosterPage from '@/pos/pages/roster'
+import MirrorFacePage from '@/pos/pages/mirror-face'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -57,6 +58,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <PosLogin /> },
       { path: 'login', element: <PosLogin /> },
+      { path: 'mirror', element: <MirrorFacePage /> },
       {
         element: <PosShell />,
         children: [

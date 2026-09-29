@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, KeyRound, LogOut, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
+import { AlertCircle, KeyRound, LogOut, MonitorSmartphone, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Numpad } from '@/pos/components/numpad'
 import { usePos } from '@/pos/lib/pos-context'
@@ -452,6 +452,16 @@ export default function PosLogin() {
             </div>
           </div>
         )}
+
+        <div className="mt-3 flex justify-center">
+          <Link
+            to="/pos/mirror"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+          >
+            <MonitorSmartphone className="h-3.5 w-3.5" />
+            Use as customer display
+          </Link>
+        </div>
       </div>
     </div>
   )
