@@ -17,6 +17,15 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/pos/components/page-header'
 import { TRANSFERS, PRODUCTS, STORE, type Transfer } from '@/pos/data/mock'
+import {
+  evaluateShortDateGate,
+  FRAN_WH_DESTINATION,
+  lotWireFields,
+  outboundDestinationLabel,
+  OUTBOUND_TRANSFER_DESTINATIONS,
+  parseLotDate,
+  type LotRecord,
+} from '@/pos/lib/lot-date'
 import { useSkumsConnector } from '@/hooks/use-skums-connector'
 import { useAuth } from '@/providers/auth-provider'
 import { createSkumsPosInventoryEvent } from '@/pos/lib/skums-client'
@@ -31,17 +40,6 @@ const STATUS_VARIANT: Record<Transfer['status'], 'default' | 'secondary' | 'succ
   Received: 'success',
   Draft: 'secondary',
   Sent: 'default',
-}
-
-const TRANSFER_DESTINATIONS = [
-  { code: 'WH01', name: 'Central Fulfilment' },
-  { code: 'FRAN02', name: 'Fran Beauty Vivocity' },
-  { code: 'SG03', name: 'Jewel Changi' },
-] as const
-
-function destinationLabel(code: string) {
-  const destination = TRANSFER_DESTINATIONS.find((item) => item.code === code)
-  return destination ? `${destination.name} (${destination.code})` : code
 }
 
 export default function TransfersPage() {
@@ -142,9 +140,17 @@ export default function TransfersPage() {
       items: t.lines.map((line) => ({
         sku: line.sku,
         quantity: line.qty,
+        batch_code: line.batch_code,
+        expiry_year: line.expiry_year,
+        expiry_month: line.expiry_month,
+        expiry_day: line.expiry_day,
         product: {
           sku: line.sku,
           name: line.name,
+          batch_code: line.batch_code,
+          expiry_year: line.expiry_year,
+          expiry_month: line.expiry_month,
+          expiry_day: line.expiry_day,
         },
       })),
       occurred_at: new Date().toISOString(),
@@ -307,7 +313,15 @@ export default function TransfersPage() {
           </div>
         )}
 
-        {tab === 'out' && <TransferOut onCreate={(ref) => flash(`${ref} created · stock transfer drafted`)} />}
+        {tab === 'out' && (
+          <TransferOut
+            onCreate={(transfer) => {
+              setTransfers((prev) => [transfer, ...prev])
+              const note = transfer.shortDate?.overridden ? ' · short-date override recorded' : ''
+              flash(`${transfer.ref} drafted to ${transfer.toStoreCode}${note}`)
+            }}
+          />
+        )}
 
         {tab === 'records' && (
           <div className="rounded-xl border bg-card">
@@ -356,15 +370,26 @@ export default function TransfersPage() {
   )
 }
 
-function TransferOut({ onCreate }: { onCreate: (ref: string) => void }) {
-  const [destCode, setDestCode] = useState('WH01')
-  const [lines, setLines] = useState<{ sku: string; name: string; qty: number }[]>([])
+type DraftLine = {
+  sku: string
+  name: string
+  qty: number
+  batchCode: string
+  expiryDate: string
+}
+
+function TransferOut({ onCreate }: { onCreate: (transfer: Transfer) => void }) {
+  const [destCode, setDestCode] = useState<string>(FRAN_WH_DESTINATION.code)
+  const [lines, setLines] = useState<DraftLine[]>([])
   const [pick, setPick] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [needsOverride, setNeedsOverride] = useState(false)
 
   const add = (sku: string) => {
-    const p = PRODUCTS.find((x) => x.sku === sku)!
-    if (lines.some((l) => l.sku === sku)) return
-    setLines((prev) => [...prev, { sku: p.sku, name: p.name, qty: 1 }])
+    const product = PRODUCTS.find((item) => item.sku === sku)
+    if (!product || lines.some((line) => line.sku === sku)) return
+    setLines((prev) => [...prev, { sku: product.sku, name: product.name, qty: 1, batchCode: '', expiryDate: '' }])
     setPick('')
   }
 
@@ -377,15 +402,64 @@ function TransferOut({ onCreate }: { onCreate: (ref: string) => void }) {
   ).slice(0, 5)
 
   const submit = () => {
+    setFormError(null)
+    const parsed: Array<DraftLine & { lot: LotRecord }> = []
+    for (const line of lines) {
+      if (!Number.isFinite(line.qty) || line.qty <= 0) {
+        setFormError(`${line.sku} needs a quantity above zero.`)
+        return
+      }
+      const lot = parseLotDate({ batchCode: line.batchCode, expiryDate: line.expiryDate })
+      if (!lot.ok) {
+        setFormError(`${line.sku}: ${lot.error}`)
+        return
+      }
+      parsed.push({ ...line, lot: lot.lot })
+    }
+
+    const gate = evaluateShortDateGate({
+      lines: parsed.map((line) => ({ sku: line.sku, lot: line.lot })),
+      destinationCode: destCode,
+      overrideReason,
+    })
+    if (!gate.ok) {
+      setNeedsOverride(gate.reason === 'short_date')
+      setFormError(gate.message)
+      return
+    }
+
     const ref = `ITR-OUT-${Math.floor(30000 + Math.random() * 9999)}`
-    onCreate(`${ref} to ${destCode}`)
+    onCreate({
+      id: ref,
+      type: 'outbound',
+      ref,
+      fromStoreCode: STORE.code,
+      toStoreCode: destCode,
+      from: `${STORE.name} (${STORE.code})`,
+      to: outboundDestinationLabel(destCode),
+      status: 'Draft',
+      created: new Date().toISOString().slice(0, 10),
+      lines: parsed.map((line) => ({
+        sku: line.sku,
+        name: line.name,
+        qty: line.qty,
+        ...lotWireFields(line.lot),
+      })),
+      shortDate: gate.blocked.length
+        ? { overridden: gate.overridden, min_days: gate.min_days, blocked: gate.blocked }
+        : null,
+    })
     setLines([])
+    setOverrideReason('')
+    setNeedsOverride(false)
   }
 
   return (
     <div className="mx-auto max-w-2xl rounded-xl border bg-card p-4">
       <p className="font-semibold">Create transfer request</p>
-      <p className="text-xs text-muted-foreground">Sender is locked to {STORE.name} ({STORE.code}). A transfer document is created on submit.</p>
+      <p className="text-xs text-muted-foreground">
+        Sender is locked to {STORE.name} ({STORE.code}). Overflow goes to Fran WH (2000 sqft). Loft is not a destination.
+      </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
@@ -399,11 +473,15 @@ function TransferOut({ onCreate }: { onCreate: (ref: string) => void }) {
           <select
             className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3"
             value={destCode}
-            onChange={(e) => setDestCode(e.target.value)}
+            onChange={(e) => {
+              setDestCode(e.target.value)
+              setNeedsOverride(false)
+              setFormError(null)
+            }}
           >
-            {TRANSFER_DESTINATIONS.map((destination) => (
+            {OUTBOUND_TRANSFER_DESTINATIONS.map((destination) => (
               <option key={destination.code} value={destination.code}>
-                {destinationLabel(destination.code)}
+                {outboundDestinationLabel(destination.code)}
               </option>
             ))}
           </select>
@@ -431,29 +509,58 @@ function TransferOut({ onCreate }: { onCreate: (ref: string) => void }) {
 
       {lines.length > 0 && (
         <div className="mt-4 divide-y rounded-lg border">
-          {lines.map((l, i) => (
-            <div key={l.sku} className="flex items-center justify-between p-2.5 text-sm">
-              <span>{l.name} <span className="text-xs text-muted-foreground">· {l.sku}</span></span>
-              <div className="flex items-center gap-2">
+          {lines.map((line, index) => (
+            <div key={line.sku} className="space-y-2 p-2.5 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span>{line.name} <span className="text-xs text-muted-foreground">· {line.sku}</span></span>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    className="h-8 w-16 text-right"
+                    value={line.qty}
+                    onChange={(e) =>
+                      setLines((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, qty: Number(e.target.value) } : item)))
+                    }
+                  />
+                  <button onClick={() => setLines((prev) => prev.filter((_, itemIndex) => itemIndex !== index))} className="text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <Input
-                  type="number"
-                  className="h-8 w-16 text-right"
-                  value={l.qty}
+                  placeholder="Batch / lot code"
+                  value={line.batchCode}
                   onChange={(e) =>
-                    setLines((prev) => prev.map((x, j) => (j === i ? { ...x, qty: Number(e.target.value) } : x)))
+                    setLines((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, batchCode: e.target.value } : item)))
                   }
                 />
-                <button onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))} className="text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <Input
+                  type="date"
+                  value={line.expiryDate}
+                  onChange={(e) =>
+                    setLines((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, expiryDate: e.target.value } : item)))
+                  }
+                />
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {needsOverride && (
+        <div className="mt-4">
+          <label className="text-xs font-medium text-muted-foreground">Reason to send short-dated stock</label>
+          <Input className="mt-1" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
+        </div>
+      )}
+
+      {formError && (
+        <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p>
+      )}
+
       <Button className="mt-4 w-full" disabled={lines.length === 0} onClick={submit}>
-        Submit transfer · create stock transfer
+        Submit transfer
       </Button>
     </div>
   )

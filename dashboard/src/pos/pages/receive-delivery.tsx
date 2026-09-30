@@ -1,11 +1,12 @@
 /**
- * Receive delivery from Loft / HQ order.
+ * Receive an HQ delivery into this store.
  * TODO-LOFT C.3 — report short/damaged/over/wrong; HQ verifies.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { PackageCheck, RefreshCw, AlertTriangle } from 'lucide-react'
 import { usePos } from '@/pos/lib/pos-context'
 import { getActiveStore } from '@/pos/lib/pos-store-config'
+import { lotWireFields, parseLotDate, type LotRecord } from '@/pos/lib/lot-date'
 import {
   listSkumsExpectedDeliveries,
   submitSkumsStoreReceive,
@@ -34,6 +35,8 @@ type LineEdit = {
   damaged_qty: number
   exception_type: '' | 'short' | 'damaged' | 'over' | 'wrong_sku' | 'unexpected_item'
   note: string
+  batchCode: string
+  expiryDate: string
 }
 
 export default function ReceiveDeliveryPage() {
@@ -91,6 +94,8 @@ export default function ReceiveDeliveryPage() {
         damaged_qty: 0,
         exception_type: '',
         note: '',
+        batchCode: '',
+        expiryDate: '',
       })),
     )
   }
@@ -119,6 +124,16 @@ export default function ReceiveDeliveryPage() {
       return
     }
 
+    const ready: Array<{ edit: LineEdit; lot: LotRecord }> = []
+    for (const edit of edits) {
+      const parsed = parseLotDate({ batchCode: edit.batchCode, expiryDate: edit.expiryDate })
+      if (!parsed.ok) {
+        setError(`${edit.sku}: ${parsed.error}`)
+        return
+      }
+      ready.push({ edit, lot: parsed.lot })
+    }
+
     if (mode === 'demo' || !connector) {
       setMessage('Demo: receive would be reported to HQ. Exceptions would show as “reported, not resolved”.')
       return
@@ -126,7 +141,7 @@ export default function ReceiveDeliveryPage() {
 
     setSubmitting(true)
     try {
-      const lines = edits.map(e => {
+      const lines = ready.map(({ edit: e, lot }) => {
         let exception_type = e.exception_type || null
         if (!exception_type && e.damaged_qty > 0) exception_type = 'damaged'
         if (!exception_type && e.received_qty < e.expected_qty) exception_type = 'short'
@@ -140,6 +155,7 @@ export default function ReceiveDeliveryPage() {
           damaged_qty: e.damaged_qty,
           exception_type,
           note: e.note || null,
+          ...lotWireFields(lot),
         }
       })
 
@@ -180,7 +196,7 @@ export default function ReceiveDeliveryPage() {
             Receive delivery
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Confirm quantities from HQ / Loft orders. Report short, damaged, over, or wrong SKU —
+            Confirm quantities from HQ deliveries. Report short, damaged, over, or wrong SKU.
             HQ verifies. Exceptions are <strong>reported</strong>, not closed on POS.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -262,7 +278,7 @@ export default function ReceiveDeliveryPage() {
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={collectorName}
                 onChange={e => setCollectorName(e.target.value)}
-                placeholder="Who collected from Loft?"
+                placeholder="Who collected the delivery?"
               />
             </div>
           )}
@@ -273,6 +289,26 @@ export default function ReceiveDeliveryPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium">{e.sku}</p>
                   <p className="text-xs text-muted-foreground">Expected {e.expected_qty}</p>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label className="text-xs">
+                    Batch / lot code
+                    <input
+                      className="mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                      value={e.batchCode}
+                      placeholder="Optional"
+                      onChange={ev => updateEdit(e.sku, { batchCode: ev.target.value })}
+                    />
+                  </label>
+                  <label className="text-xs">
+                    Expiry date
+                    <input
+                      type="date"
+                      className="mt-1 w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                      value={e.expiryDate}
+                      onChange={ev => updateEdit(e.sku, { expiryDate: ev.target.value })}
+                    />
+                  </label>
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-4">
                   <label className="text-xs">
