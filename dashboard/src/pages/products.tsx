@@ -1,37 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '@/hooks/use-products'
+import { useProducts } from '@/hooks/use-products'
 import { useCategories } from '@/hooks/use-categories'
 import { useSkumsImportJob } from '@/hooks/use-skums-import-job'
 import { useSaveSkumsConnector, useSkumsConnector } from '@/hooks/use-skums-connector'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, ChevronLeft, ChevronRight, KeyRound, PackagePlus, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, KeyRound, RefreshCw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatCurrency } from '@/lib/utils'
 import { SKUMS_CONNECTOR_MISSING_MESSAGE } from '@/pos/lib/skums-connector'
 import type { Product } from '@pos/shared'
-
-const emptyForm = {
-  name: '',
-  description: '',
-  sku: '',
-  barcode: '',
-  price: '',
-  cost_price: '',
-  category_id: '',
-  track_inventory: false,
-  inventory_count: '0',
-  is_active: true,
-}
 
 type ProductStatusFilter = 'all' | 'active' | 'inactive'
 type ProductSourceFilter = 'all' | 'manual' | 'skums'
@@ -61,19 +46,13 @@ export default function ProductsPage() {
   const [pageSize, setPageSize] = useState(25)
   const { data: products = [], isLoading } = useProducts()
   const { data: categories = [] } = useCategories()
-  const createProduct = useCreateProduct()
-  const updateProduct = useUpdateProduct()
-  const deleteProduct = useDeleteProduct()
   const skumsImport = useSkumsImportJob()
   const skumsConnector = useSkumsConnector()
   const saveSkumsConnector = useSaveSkumsConnector()
 
-  const [dialogOpen, setDialogOpen] = useState(false)
   const [connectorDialogOpen, setConnectorDialogOpen] = useState(false)
   const [importWizardOpen, setImportWizardOpen] = useState(false)
   const [pendingImportAfterSave, setPendingImportAfterSave] = useState(false)
-  const [editing, setEditing] = useState<Product | null>(null)
-  const [form, setForm] = useState(emptyForm)
   const [connectorForm, setConnectorForm] = useState({
     api_url: 'https://skums.vercel.app',
     api_key: '',
@@ -108,12 +87,6 @@ export default function ProductsPage() {
   const pageItems = filtered.slice(pageStart, pageStart + pageSize)
   const firstItem = filtered.length === 0 ? 0 : pageStart + 1
   const lastItem = Math.min(pageStart + pageSize, filtered.length)
-
-  const openCreate = () => {
-    setEditing(null)
-    setForm(emptyForm)
-    setDialogOpen(true)
-  }
 
   const openSkumsImportWizard = async () => {
     setImportWizardOpen(true)
@@ -182,72 +155,14 @@ export default function ProductsPage() {
     }
   }
 
-  const openEdit = (product: Product) => {
-    setEditing(product)
-    setForm({
-      name: product.name,
-      description: product.description || '',
-      sku: product.sku || '',
-      barcode: product.barcode || '',
-      price: String(product.price),
-      cost_price: product.cost_price ? String(product.cost_price) : '',
-      category_id: product.category_id || '',
-      track_inventory: product.track_inventory,
-      inventory_count: String(product.inventory_count),
-      is_active: product.is_active,
-    })
-    setDialogOpen(true)
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const input = {
-      name: form.name,
-      description: form.description || undefined,
-      sku: form.sku || undefined,
-      barcode: form.barcode || undefined,
-      price: parseFloat(form.price),
-      cost_price: form.cost_price ? parseFloat(form.cost_price) : undefined,
-      category_id: form.category_id || null,
-      track_inventory: form.track_inventory,
-      inventory_count: parseInt(form.inventory_count) || 0,
-      is_active: form.is_active,
-    }
-    try {
-      if (editing) {
-        await updateProduct.mutateAsync({ id: editing.id, ...input })
-        toast.success('Product updated')
-      } else {
-        await createProduct.mutateAsync(input)
-        toast.success('Product created')
-      }
-      setDialogOpen(false)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save product')
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this product?')) return
-    try {
-      await deleteProduct.mutateAsync(id)
-      toast.success('Product deleted')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete')
-    }
-  }
-
   useEffect(() => {
     if (handledQueryAction.current) return
-    const action = searchParams.get('new') === '1' ? 'new' : searchParams.get('import') === 'skums' ? 'import' : null
-    if (!action) return
+    const wantsImport = searchParams.get('import') === 'skums'
+    const wantsManualCreate = searchParams.get('new') === '1'
+    if (!wantsImport && !wantsManualCreate) return
     handledQueryAction.current = true
     setSearchParams({}, { replace: true })
-    if (action === 'new') {
-      openCreate()
-    } else {
-      void handleImportSkums()
-    }
+    if (wantsImport) void handleImportSkums()
   }, [searchParams, setSearchParams])
 
   useEffect(() => {
@@ -288,9 +203,6 @@ export default function ProductsPage() {
               : skumsImport.job.status === 'syncing'
                 ? 'Syncing…'
                 : 'Sync from SKUMS'}
-          </Button>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" /> Add Product
           </Button>
         </div>
       </div>
@@ -352,28 +264,17 @@ export default function ProductsPage() {
             <p className="text-muted-foreground">Loading...</p>
           ) : filtered.length === 0 ? (
             showSetupChoices ? (
-              <div className="grid gap-4 py-4 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={openCreate}
-                  className="rounded-lg border p-5 text-left transition-colors hover:bg-accent"
-                >
-                  <PackagePlus className="mb-3 h-6 w-6 text-primary" />
-                  <h3 className="font-semibold">Create product manually</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Add a product directly into the live POS company catalog.
-                  </p>
-                </button>
+              <div className="py-4">
                 <button
                   type="button"
                   onClick={handleImportSkums}
                   disabled={skumsImport.job.status === 'estimating'}
-                  className="rounded-lg border p-5 text-left transition-colors hover:bg-accent disabled:opacity-60"
+                  className="w-full rounded-lg border p-5 text-left transition-colors hover:bg-accent disabled:opacity-60"
                 >
                   <RefreshCw className="mb-3 h-6 w-6 text-primary" />
                   <h3 className="font-semibold">Sync from SKUMS</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Create or update POS products from POS-enabled SKUMS catalog items (by SKUMS id / SKU / barcode).
+                    Catalog and stock counts stay in SKUMS. This sync fills the POS display cache from POS-enabled items.
                   </p>
                 </button>
               </div>
@@ -389,7 +290,6 @@ export default function ProductsPage() {
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Price</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -405,16 +305,6 @@ export default function ProductsPage() {
                           {product.is_active ? 'Active' : 'Inactive'}
                         </Badge>
                         {productSource(product) === 'skums' && <Badge variant="outline">SKUMS</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(product)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -451,78 +341,6 @@ export default function ProductsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Product Form Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent onClose={() => setDialogOpen(false)} className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Edit Product' : 'New Product'}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-                  <option value="">No Category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>SKU</Label>
-                <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Barcode</Label>
-                <Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Price</Label>
-                <Input type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Cost Price</Label>
-                <Input type="number" step="0.01" min="0" value={form.cost_price} onChange={(e) => setForm({ ...form, cost_price: e.target.value })} />
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <Switch checked={form.track_inventory} onCheckedChange={(v) => setForm({ ...form, track_inventory: v })} />
-                <Label>Track Inventory</Label>
-              </div>
-              {form.track_inventory && (
-                <div className="space-y-2">
-                  <Label>Stock Count</Label>
-                  <Input type="number" min="0" value={form.inventory_count} onChange={(e) => setForm({ ...form, inventory_count: e.target.value })} className="w-24" />
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
-                <Label>Active</Label>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={createProduct.isPending || updateProduct.isPending}>
-                {editing ? 'Update' : 'Create'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={connectorDialogOpen} onOpenChange={setConnectorDialogOpen}>
         <DialogContent onClose={() => setConnectorDialogOpen(false)} className="max-w-lg">

@@ -905,7 +905,7 @@ export default function SalePage() {
       }
 
       setCatalog([])
-      setCatalogError('No live products yet. Create products manually or add a SKUMS connector.')
+      setCatalogError('No live products yet. Sync the catalog from SKUMS. POS does not create products.')
     }
 
     loadLiveCatalog()

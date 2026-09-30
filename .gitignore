@@ -34,3 +34,5 @@ android/capacitor-cordova-android-plugins/
 *.jks
 *.keystore
 !android/app/debug.keystore
+
+.local/

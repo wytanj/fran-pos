@@ -1,6 +1,6 @@
 /**
- * Receive delivery from Loft / HQ order.
- * TODO-LOFT C.3 — report short/damaged/over/wrong; HQ verifies.
+ * Structured receive for HQ / Fran warehouse deliveries.
+ * Loft accept is retired. This page does not call Loft.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { PackageCheck, RefreshCw, AlertTriangle } from 'lucide-react'
@@ -180,8 +180,8 @@ export default function ReceiveDeliveryPage() {
             Receive delivery
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Confirm quantities from HQ / Loft orders. Report short, damaged, over, or wrong SKU —
-            HQ verifies. Exceptions are <strong>reported</strong>, not closed on POS.
+            Confirm quantities from HQ or Fran 2000sqft warehouse deliveries. Report short, damaged, over, or wrong SKU.
+            HQ verifies. Exceptions are <strong>reported</strong>, not closed on POS. Loft accept is retired.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Store: <span className="font-medium text-foreground">{store.code}</span>
@@ -262,7 +262,7 @@ export default function ReceiveDeliveryPage() {
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={collectorName}
                 onChange={e => setCollectorName(e.target.value)}
-                placeholder="Who collected from Loft?"
+                placeholder="Who collected the delivery?"
               />
             </div>
           )}

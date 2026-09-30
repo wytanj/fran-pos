@@ -1,6 +1,8 @@
 # Fran POS ← SKUMS inventory & store-ops handoff
 
 **Date:** 2026-07-15  
+**Lock 2026-10-01:** Loft is retired. POS does not call Loft, and Send-to-Loft / Loft accept are not destinations. Overflow destination is Fran 2000sqft WH. The stock page has no free-form inbound. Inbound is Receive delivery or Transfers. Floor adjustment reasons are only Damaged, Expired, Tester, and Other. POS does not create, edit, or delete products and does not edit `inventory_count`. SKUMS remains the catalog and stock source of truth. There is no short-date gate in POS. Do not add one aimed at Loft. Older sections below that still say Loft receive or demo free-form inbound are historical.
+
 **Audience:** Fran POS engineers restructuring pages, clients, and local state  
 **SKUMS repo:** `C:\Users\Jeremy Tan\CodeProjects\fran-skums`  
 **Production SKUMS:** `https://fran-skums.vercel.app`  
