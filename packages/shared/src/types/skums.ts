@@ -272,10 +272,17 @@ export type SkumsPosInventoryEventStatus =
   | 'rejected'
   | 'failed';
 
-export interface SkumsPosInventoryEventItemInput {
+export interface SkumsLotExpiryFields {
+  batch_code?: string | null;
+  expiry_year?: number | null;
+  expiry_month?: number | null;
+  expiry_day?: number | null;
+}
+
+export interface SkumsPosInventoryEventItemInput extends SkumsLotExpiryFields {
   sku?: string | null;
   product_id?: string | null;
-  product?: Partial<SkumsGraphRefs> & {
+  product?: Partial<SkumsGraphRefs> & SkumsLotExpiryFields & {
     id?: string | null;
     product_id?: string | null;
     sku?: string | null;
@@ -286,7 +293,7 @@ export interface SkumsPosInventoryEventItemInput {
   quantity?: number;
 }
 
-export interface SkumsPosInventoryEventInput extends Partial<SkumsGraphRefs> {
+export interface SkumsPosInventoryEventInput extends Partial<SkumsGraphRefs>, SkumsLotExpiryFields {
   event_type: SkumsPosInventoryEventType;
   idempotency_key?: string | null;
   source?: 'vantage_pos' | string;
@@ -297,7 +304,7 @@ export interface SkumsPosInventoryEventInput extends Partial<SkumsGraphRefs> {
     name?: string;
     inventory_location_id?: string | null;
   };
-  product?: Partial<SkumsGraphRefs> & {
+  product?: Partial<SkumsGraphRefs> & SkumsLotExpiryFields & {
     id?: string | null;
     product_id?: string | null;
     sku?: string | null;

@@ -1,4 +1,5 @@
 import type { StoreDestination } from '@/pos/data/mock'
+import { lotWireFields, type LotRecord } from '@/pos/lib/lot-date'
 import { getActiveStore } from '@/pos/lib/pos-store-config'
 import type { SkumsGraphRefs, SkumsPosInventoryEventInput, SkumsPosInventoryEventType } from '@pos/shared'
 
@@ -24,6 +25,7 @@ export interface StockInboundInput {
   operatorName: string | null
   occurredAt?: string
   store?: StoreDestination
+  lot?: LotRecord | null
 }
 
 export interface StockInboundPayload {
@@ -50,6 +52,10 @@ export interface StockInboundPayload {
   unit_cost: number | null
   note: string | null
   operator_name: string | null
+  batch_code: string | null
+  expiry_year: number | null
+  expiry_month: number | null
+  expiry_day: number | null
   sync: {
     status: 'pending'
     targets: ['inventory_management_system', 'skums']
@@ -68,11 +74,13 @@ export interface PosInventoryEventInput {
   operatorName: string | null
   occurredAt?: string
   store?: StoreDestination
+  lot?: LotRecord | null
 }
 
 export function createStockInboundPayload(input: StockInboundInput): StockInboundPayload {
   const store = input.store ?? getActiveStore()
   const occurredAt = input.occurredAt ?? new Date().toISOString()
+  const lot = lotWireFields(input.lot)
 
   return {
     event: 'inventory.stock_movement.created',
@@ -98,6 +106,10 @@ export function createStockInboundPayload(input: StockInboundInput): StockInboun
     unit_cost: input.unitCost,
     note: input.note,
     operator_name: input.operatorName,
+    batch_code: lot.batch_code,
+    expiry_year: lot.expiry_year,
+    expiry_month: lot.expiry_month,
+    expiry_day: lot.expiry_day,
     sync: {
       status: 'pending',
       targets: ['inventory_management_system', 'skums'],
@@ -108,6 +120,7 @@ export function createStockInboundPayload(input: StockInboundInput): StockInboun
 export function createPosInventoryEventPayload(input: PosInventoryEventInput): SkumsPosInventoryEventInput {
   const store = input.store ?? getActiveStore()
   const occurredAt = input.occurredAt ?? new Date().toISOString()
+  const lot = lotWireFields(input.lot)
 
   return {
     event_type: input.eventType,
@@ -133,6 +146,10 @@ export function createPosInventoryEventPayload(input: PosInventoryEventInput): S
       product_id: input.product.product_id ?? null,
       variant_id: input.product.variant_id ?? null,
       batch_id: input.product.batch_id ?? null,
+      batch_code: lot.batch_code,
+      expiry_year: lot.expiry_year,
+      expiry_month: lot.expiry_month,
+      expiry_day: lot.expiry_day,
     },
     sku: input.product.sku,
     product_identity_id: input.product.product_identity_id ?? null,
@@ -144,6 +161,10 @@ export function createPosInventoryEventPayload(input: PosInventoryEventInput): S
     product_id: input.product.product_id ?? null,
     variant_id: input.product.variant_id ?? null,
     batch_id: input.product.batch_id ?? null,
+    batch_code: lot.batch_code,
+    expiry_year: lot.expiry_year,
+    expiry_month: lot.expiry_month,
+    expiry_day: lot.expiry_day,
     quantity: input.quantity,
     storage_location_code: input.storageLocationCode,
     reason_code: input.reasonCode,

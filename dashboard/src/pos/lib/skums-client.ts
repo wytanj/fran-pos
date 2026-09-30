@@ -328,6 +328,10 @@ export async function submitSkumsStoreReceive(
       note?: string | null
       replenishment_order_line_id?: string | null
       product_id?: string | null
+      batch_code?: string | null
+      expiry_year?: number | null
+      expiry_month?: number | null
+      expiry_day?: number | null
     }>
   },
   connector?: SkumsConnectorConfig,

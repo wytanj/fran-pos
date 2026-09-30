@@ -29,6 +29,7 @@ import {
 } from '@/pos/data/mock'
 import { usePos } from '@/pos/lib/pos-context'
 import { createSkumsPosInventoryEvent } from '@/pos/lib/skums-client'
+import { parseLotDate } from '@/pos/lib/lot-date'
 import {
   createPosInventoryEventPayload,
   createStockInboundPayload,
@@ -185,6 +186,8 @@ export default function StockPage() {
   const [floorReference, setFloorReference] = useState(`POS-${STORE.code}-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`)
   const [floorReason, setFloorReason] = useState('damaged_on_floor')
   const [unitCost, setUnitCost] = useState('')
+  const [batchCode, setBatchCode] = useState('')
+  const [expiryDate, setExpiryDate] = useState('')
   const [note, setNote] = useState('')
   const [demoAdjustments, setDemoAdjustments] = useState<Record<string, number>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -257,6 +260,11 @@ export default function StockPage() {
       setError('Use a valid shelf location such as A01, A100, or AA01.')
       return
     }
+    const lot = parseLotDate({ batchCode, expiryDate })
+    if (!lot.ok) {
+      setError(lot.error)
+      return
+    }
 
     const payload = createStockInboundPayload({
       companyId: company?.id ?? null,
@@ -282,6 +290,7 @@ export default function StockPage() {
       unitCost: unitCost.trim() ? Number(unitCost) : null,
       note: note.trim() || null,
       operatorName: posUser?.name ?? null,
+      lot: lot.lot,
     })
 
     setSubmitting(true)
@@ -301,6 +310,10 @@ export default function StockPage() {
               balance_after: payload.balance_after,
               reason: payload.reason,
               storage_location_code: payload.location.storage_location_code,
+              batch_code: payload.batch_code,
+              expiry_year: payload.expiry_year,
+              expiry_month: payload.expiry_month,
+              expiry_day: payload.expiry_day,
               occurred_at: payload.occurred_at,
               sync: payload.sync,
             },
@@ -334,6 +347,8 @@ export default function StockPage() {
       }
 
       setQuantity('1')
+      setBatchCode('')
+      setExpiryDate('')
       setNote('')
       flash(`${payload.reference} received - ${payload.quantity} units into ${STORE.code}/${selectedLocationCode}`)
     } catch (err) {
@@ -421,6 +436,11 @@ export default function StockPage() {
       setError('Use a valid shelf location such as A01, A100, or AA01.')
       return
     }
+    const lot = parseLotDate({ batchCode, expiryDate })
+    if (!lot.ok) {
+      setError(lot.error)
+      return
+    }
 
     const payload = createPosInventoryEventPayload({
       eventType: selectedFloorAction.eventType,
@@ -445,6 +465,7 @@ export default function StockPage() {
       reasonCode: floorReason.trim() || selectedFloorAction.value,
       note: note.trim() || null,
       operatorName: posUser?.name ?? null,
+      lot: lot.lot,
     })
 
     setFloorSubmitting(true)
@@ -480,6 +501,8 @@ export default function StockPage() {
         }))
       }
 
+      setBatchCode('')
+      setExpiryDate('')
       setNote('')
       flash(
         liveEnabled
@@ -550,7 +573,7 @@ export default function StockPage() {
             </div>
           </div>
           <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-            Loft / HQ deliveries: use <span className="font-semibold">Receive delivery</span> — not free-form receive.
+            HQ deliveries: use <span className="font-semibold">Receive delivery</span>. Free-form receive does not apply the ledger.
             Damage, found, and cycle count report to SKUMS for approval before ledger apply.
           </div>
 
@@ -622,6 +645,17 @@ export default function StockPage() {
                     </option>
                   ))}
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Batch / lot code</label>
+                <Input className="mt-1" value={batchCode} placeholder="Optional" onChange={(e) => setBatchCode(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Expiry date</label>
+                <Input className="mt-1" type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
               </div>
             </div>
 
@@ -698,7 +732,7 @@ export default function StockPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Free-form “receive stock” no longer applies the SKUMS ledger. Use Receive delivery for Loft, or floor reports above for HQ approval.
+                  Free-form receive does not apply the SKUMS ledger. Use Receive delivery, or floor reports above for HQ approval.
                 </p>
               </div>
             )}

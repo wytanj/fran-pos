@@ -235,6 +235,16 @@ export interface PastTransaction {
 
 export const PAST_TRANSACTIONS: PastTransaction[] = []
 
+export interface TransferLine {
+  sku: string
+  name: string
+  qty: number
+  batch_code: string | null
+  expiry_year: number | null
+  expiry_month: number | null
+  expiry_day: number | null
+}
+
 export interface Transfer {
   id: string
   type: 'inbound' | 'outbound'
@@ -245,7 +255,12 @@ export interface Transfer {
   to: string
   status: 'In Transit' | 'Pending Receipt' | 'Received' | 'Draft' | 'Sent'
   created: string
-  lines: { sku: string; name: string; qty: number }[]
+  lines: TransferLine[]
+  shortDate?: {
+    overridden: boolean
+    min_days: number
+    blocked: { sku: string; days_until_expiry: number; expiry_date: string }[]
+  } | null
 }
 
 export const TRANSFERS: Transfer[] = []
