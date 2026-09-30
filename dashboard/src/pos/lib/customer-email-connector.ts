@@ -1,8 +1,8 @@
 import { STORE } from '@/pos/data/mock'
 import type { CompletedSale } from '@/pos/lib/pos-context'
+import { lineCharge } from '@/pos/lib/paper-bag'
 import {
   buildReceiptRewardRedemptions,
-  cartLineNetValue,
   isFranRewardReceiptLine,
 } from '@/pos/lib/reward-receipt'
 import type { CompanySettings, CustomerEmailConnectorSettings, CustomerEmailReceiptPayload } from '@pos/shared'
@@ -113,7 +113,7 @@ export function buildCustomerEmailReceiptPayload(sale: CompletedSale): CustomerE
     `Cashier ${sale.cashier}`,
     '',
     ...sale.lines.filter((line) => !isFranRewardReceiptLine(line)).map((line) => {
-      const lineTotal = cartLineNetValue(line)
+      const lineTotal = lineCharge(line).lineTotal
       return `${line.qty} x ${line.name} (${line.sku}) ${formatAmount(lineTotal)}`
     }),
     ...rewardReceiptLines,
@@ -163,15 +163,18 @@ export function buildCustomerEmailReceiptPayload(sale: CompletedSale): CustomerE
       net_dollar_value_applied: reward.netDollarValueApplied,
       currency: reward.currency,
     })),
-    lines: sale.lines.filter((line) => !isFranRewardReceiptLine(line)).map((line) => ({
-      sku: line.sku,
-      name: line.name,
-      line_kind: line.lineKind ?? 'product',
-      quantity: line.qty,
-      unit_price: line.unitPrice,
-      line_discount: line.lineDiscount,
-      line_total: cartLineNetValue(line),
-    })),
+    lines: sale.lines.filter((line) => !isFranRewardReceiptLine(line)).map((line) => {
+      const charge = lineCharge(line)
+      return {
+        sku: line.sku,
+        name: line.name,
+        line_kind: line.lineKind ?? 'product',
+        quantity: line.qty,
+        unit_price: charge.unitPrice,
+        line_discount: charge.discountAmount,
+        line_total: charge.lineTotal,
+      }
+    }),
     payments: sale.payments.map((payment) => ({
       method: payment.mode,
       label: payment.label,

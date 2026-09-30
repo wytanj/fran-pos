@@ -12,6 +12,7 @@ import type { SkumsGraphRefs } from '@pos/shared'
 import type { FranSaleContext } from '@/pos/fran/types'
 import { buildSkumsSaleIdempotencyKey, getPosRegisterCode } from './skums-sale-adapter'
 import { getActiveStore } from './pos-store-config'
+import { isPaperBagLine, isPaperBagSku, paperBagProduct } from './paper-bag'
 
 export type PosMode = 'demo' | 'live'
 
@@ -31,7 +32,7 @@ export interface CartLine extends Partial<SkumsGraphRefs> {
   lineId: string
   sku: string
   name: string
-  lineKind?: 'product' | 'fran_reward' | 'fran_points' | 'manual_adjustment' | 'open_amount'
+  lineKind?: 'product' | 'fran_reward' | 'fran_points' | 'manual_adjustment' | 'open_amount' | 'fee'
   unitPrice: number // current selling price (after markdown / overrides)
   listPrice: number // original ticket price
   qty: number // negative for returns/exchanges
@@ -267,10 +268,12 @@ export function PosProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addProduct = (p: Product) => {
-    const price = p.mdPrice ?? p.price
+    const product = isPaperBagSku(p.sku) ? paperBagProduct(p) : p
+    const price = product.mdPrice ?? product.price
+    const fee = isPaperBagSku(product.sku)
     setCartPriceOverride(null)
     setCart((prev) => {
-      const existing = prev.find((l) => l.sku === p.sku && l.qty > 0 && !l.overridden)
+      const existing = prev.find((l) => l.sku === product.sku && l.qty > 0 && !l.overridden)
       if (existing) {
         return prev.map((l) => (l.lineId === existing.lineId ? { ...l, qty: l.qty + 1 } : l))
       }
@@ -278,18 +281,18 @@ export function PosProvider({ children }: { children: ReactNode }) {
         ...prev,
         {
           lineId: nextLineId(),
-          sku: p.sku,
-          name: p.name,
-          lineKind: 'product',
+          sku: product.sku,
+          name: product.name,
+          lineKind: fee ? 'fee' : 'product',
           unitPrice: price,
-          listPrice: p.price,
+          listPrice: product.price,
           qty: 1,
-          returnable: p.returnable,
-          storeLocationCode: p.storeLocationCode ?? storeLocationCodeForSku(p.sku),
-          isMarkdown: p.mdPrice != null,
+          returnable: product.returnable,
+          storeLocationCode: fee ? null : product.storeLocationCode ?? storeLocationCodeForSku(product.sku),
+          isMarkdown: product.mdPrice != null,
           lineDiscount: 0,
           ...emptyGraphRefs(),
-          ...p.skums,
+          ...product.skums,
         },
       ]
     })
@@ -353,7 +356,9 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const setLineDiscount = (lineId: string, discount: number, label: string) => {
     setCartPriceOverride(null)
     setCart((prev) =>
-      prev.map((l) => (l.lineId === lineId ? { ...l, lineDiscount: discount, discountLabel: label } : l))
+      prev.map((l) =>
+        l.lineId === lineId && !isPaperBagLine(l) ? { ...l, lineDiscount: discount, discountLabel: label } : l
+      )
     )
   }
 
@@ -361,7 +366,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     setCartPriceOverride(null)
     setCart((prev) =>
       prev.map((l) =>
-        l.lineId === lineId
+        l.lineId === lineId && !isPaperBagLine(l)
           ? { ...l, unitPrice: roundCurrency(newPrice), overridden: true, overrideReason: reason, note: reason }
           : l
       )

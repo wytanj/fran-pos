@@ -41,6 +41,7 @@ import {
   type SalesType,
 } from '@/pos/data/mock'
 import { usePos, type CartLine, type CompletedSale, type PosSaleSyncState } from '@/pos/lib/pos-context'
+import { isPaperBagLine, isPaperBagSku, lineCharge, paperBagProduct, PAPER_BAG_PRICE } from '@/pos/lib/paper-bag'
 import { LineActionModal, type LineActionMode } from '@/pos/components/line-action-modal'
 import { ManagerAuthModal } from '@/pos/components/manager-auth-modal'
 import { Numpad } from '@/pos/components/numpad'
@@ -262,6 +263,7 @@ function toPosProduct(item: SkumsPosCatalogItem): Product {
     price: item.list_price || item.unit_price || 0,
     mdPrice: item.unit_price !== item.list_price ? item.unit_price : undefined,
     qtyOnHand: item.track_inventory ? item.stock_quantity : 999,
+    trackInventory: item.track_inventory,
     returnable: true,
     emoji: '',
     skums: {
@@ -299,6 +301,7 @@ function toLiveProduct(product: DbProduct): Product {
     storeLocationCode: storeLocationCodeFromMetadata(product.metadata),
     price: Number(product.price) || 0,
     qtyOnHand: product.track_inventory ? product.inventory_count : 999,
+    trackInventory: product.track_inventory,
     returnable: true,
     emoji: '',
     skums: skumsRefsFromMetadata(product.metadata),
@@ -364,8 +367,14 @@ function restrictedFlagsForLine(line: CartLine, product: Product | undefined) {
   return flags
 }
 
+function isQuotedSaleLine(line: CartLine) {
+  return line.qty > 0 && !isFranAdjustmentLine(line) && !isPaperBagLine(line)
+}
+
 function toFranBasketLine(line: CartLine, product?: Product): FranBasketLineInput {
   const availability = availabilityForProduct(product)
+  const charge = lineCharge(line)
+  const earn = !isFranAdjustmentLine(line) && !charge.nonStock
   return {
     lineId: line.lineId,
     skumsProductId: line.product_id ?? product?.skums?.product_id ?? null,
@@ -374,23 +383,24 @@ function toFranBasketLine(line: CartLine, product?: Product): FranBasketLineInpu
     barcode: line.identifier_id ?? null,
     name: line.name,
     quantity: line.qty,
-    unitPrice: line.unitPrice,
-    listPrice: line.listPrice,
-    lineTotal: cartLineNet(line),
+    unitPrice: charge.unitPrice,
+    listPrice: charge.listPrice,
+    lineTotal: charge.lineTotal,
     lineKind: line.lineKind ?? 'product',
     quoteLineId: null,
     priceRevisionId: null,
     category: product?.category ?? null,
     brand: null,
     collection: null,
-    rewardEligible: !isFranAdjustmentLine(line),
-    sampleEligible: !isFranAdjustmentLine(line),
+    rewardEligible: earn,
+    sampleEligible: earn,
     restrictedFlags: restrictedFlagsForLine(line, product),
     availability,
   }
 }
 
 function toSkumsBasketQuoteLine(line: CartLine, product?: Product): SkumsPosBasketQuoteInput['lines'][number] {
+  const charge = lineCharge(line)
   return {
     line_id: line.lineId,
     product_identity_id: line.product_identity_id ?? product?.skums?.product_identity_id ?? null,
@@ -406,17 +416,17 @@ function toSkumsBasketQuoteLine(line: CartLine, product?: Product): SkumsPosBask
     barcode: line.identifier_id ?? null,
     display_name: line.name,
     quantity: line.qty,
-    unit_price: line.unitPrice,
-    list_price: line.listPrice,
-    discount_amount: line.lineDiscount,
-    line_total: cartLineNet(line),
+    unit_price: charge.unitPrice,
+    list_price: charge.listPrice,
+    discount_amount: charge.discountAmount,
+    line_total: charge.lineTotal,
     line_type: line.qty < 0 ? 'return' : 'sale',
     price_revision_id: null,
     category_name: product?.category ?? null,
     brand_name: null,
     collection_name: null,
-    reward_eligible: !isFranAdjustmentLine(line),
-    sample_eligible: !isFranAdjustmentLine(line),
+    reward_eligible: !isFranAdjustmentLine(line) && !charge.nonStock,
+    sample_eligible: !isFranAdjustmentLine(line) && !charge.nonStock,
     restricted_flags: restrictedFlagsForLine(line, product),
     availability: availabilityForProduct(product),
     metadata: {
@@ -427,6 +437,7 @@ function toSkumsBasketQuoteLine(line: CartLine, product?: Product): SkumsPosBask
       overridden: line.overridden ?? false,
       override_reason: line.overrideReason ?? null,
       needs_hq_review: isOpenAmountLine(line),
+      non_stock: charge.nonStock,
     },
   }
 }
@@ -636,7 +647,7 @@ export default function SalePage() {
   }, [catalog])
   const franBasketLines = useMemo(
     () => cart
-      .filter((line) => line.qty > 0 && !isFranAdjustmentLine(line))
+      .filter(isQuotedSaleLine)
       .map((line) => toFranBasketLine(line, catalogProductBySku.get(line.sku))),
     [cart, catalogProductBySku]
   )
@@ -653,12 +664,12 @@ export default function SalePage() {
   )
   const skumsBasketQuoteLines = useMemo(
     () => cart
-      .filter((line) => line.qty > 0 && !isFranAdjustmentLine(line))
+      .filter(isQuotedSaleLine)
       .map((line) => toSkumsBasketQuoteLine(line, catalogProductBySku.get(line.sku))),
     [cart, catalogProductBySku]
   )
   const franBasketTotals = useMemo(() => {
-    const saleLines = cart.filter((line) => line.qty > 0 && !isFranAdjustmentLine(line))
+    const saleLines = cart.filter(isQuotedSaleLine)
     const subtotal = saleLines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0)
     const discountTotal = saleLines.reduce((sum, line) => sum + line.lineDiscount, 0)
     return {
@@ -1423,6 +1434,10 @@ export default function SalePage() {
     } else {
       setSalesType(t)
     }
+  }
+
+  const addPaperBag = () => {
+    addProduct(paperBagProduct(catalog.find((product) => isPaperBagSku(product.sku))))
   }
 
   const beginOpenAmount = () => {
@@ -2335,7 +2350,12 @@ export default function SalePage() {
             </p>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <Button type="button" variant="outline" className="mt-3 w-full" onClick={addPaperBag}>
+            <ShoppingBag className="h-4 w-4" />
+            Paper bag
+            <span className="tabular-nums text-muted-foreground">{formatCurrency(PAPER_BAG_PRICE, STORE.currency)}</span>
+          </Button>
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={handleSaveBasket} disabled={cart.length === 0}>
               <BookmarkPlus className="h-4 w-4" /> Save basket
             </Button>
@@ -2732,10 +2752,12 @@ function CartRow({
   onOverride: () => void
   readOnly?: boolean
 }) {
-  const net = cartLineNet(line)
+  const charge = lineCharge(line)
+  const net = charge.lineTotal
   const isReturn = line.qty < 0
   const isFranLine = isFranAdjustmentLine(line)
   const isOpenLine = isOpenAmountLine(line)
+  const fee = charge.nonStock
   return (
     <div
       className={cn(
@@ -2749,7 +2771,8 @@ function CartRow({
         <div className="min-w-0 flex-1 overflow-hidden">
           <p className="truncate text-sm font-medium leading-snug">{line.name}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {isOpenLine ? 'Open amount' : line.sku} · {formatCurrency(line.unitPrice, STORE.currency)}
+            {isOpenLine ? 'Open amount' : line.sku} · {formatCurrency(charge.unitPrice, STORE.currency)}
+            {fee && <span className="ml-1">Fee</span>}
             {line.isMarkdown && <span className="ml-1 text-warning">MD</span>}
             {line.overridden && <span className="ml-1 text-brown">ovr</span>}
             {isFranLine && <span className="ml-1 text-success">Fran</span>}
@@ -2795,7 +2818,7 @@ function CartRow({
           </div>
         )}
         <div className="flex shrink-0 items-center gap-1">
-          {!readOnly && (
+          {!readOnly && !fee && (
             <>
               <button type="button" onClick={onDiscount} title="Line discount" className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent cursor-pointer">
                 <Tag className="h-3.5 w-3.5" />
