@@ -86,6 +86,7 @@ export interface Product {
   /** Markdown / Stock Sales Specials price. When set, this is the live price. */
   mdPrice?: number
   qtyOnHand: number
+  trackInventory?: boolean
   returnable: boolean
   emoji: string
   skums?: Partial<SkumsGraphRefs>

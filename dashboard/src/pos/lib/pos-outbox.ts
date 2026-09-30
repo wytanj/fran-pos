@@ -2,6 +2,7 @@ import type { PosSourceEventEnvelope, PosSourceEventType } from '@pos/shared'
 import { supabase } from '@/lib/supabase'
 import { STORE } from '@/pos/data/mock'
 import type { CartLine, CompletedSale } from '@/pos/lib/pos-context'
+import { lineCharge } from '@/pos/lib/paper-bag'
 
 export const POS_OUTBOX_SCHEMA_VERSION = 1
 export const pendingPosOutboxStorageKey = 'pos_pending_source_events'
@@ -154,6 +155,7 @@ function returnLineMetadata(line: CartLine): ReturnLineMetadata {
 
 function linePayload(line: CartLine, lineNumber: number) {
   const returnMetadata = returnLineMetadata(line)
+  const charge = lineCharge(line)
   return {
     line_id: line.lineId,
     line_number: lineNumber,
@@ -161,10 +163,10 @@ function linePayload(line: CartLine, lineNumber: number) {
     sku: line.sku,
     display_name: line.name,
     quantity: line.qty,
-    unit_price: line.unitPrice,
-    list_price: line.listPrice,
-    discount_amount: line.lineDiscount,
-    line_total: line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1),
+    unit_price: charge.unitPrice,
+    list_price: charge.listPrice,
+    discount_amount: charge.discountAmount,
+    line_total: charge.lineTotal,
     refs: {
       product_identity_id: line.product_identity_id ?? null,
       trade_unit_id: line.trade_unit_id ?? null,
@@ -213,6 +215,7 @@ function linePayload(line: CartLine, lineNumber: number) {
       discount_label: line.discountLabel ?? null,
       note: line.note ?? null,
       needs_hq_review: line.lineKind === 'open_amount',
+      ...(charge.nonStock ? { non_stock: true } : {}),
     },
   }
 }
