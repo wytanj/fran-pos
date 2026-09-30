@@ -92,26 +92,6 @@ export function skumsCatalogItemToProductInput(item: SkumsPosCatalogItem): Produ
   }
 }
 
-export function useCreateProduct() {
-  const queryClient = useQueryClient()
-  const { company } = useAuth()
-  return useMutation({
-    mutationFn: async (input: ProductInput) => {
-      if (!company) throw new Error('No company selected')
-      const { data, error } = await supabase
-        .from('products')
-        .insert({ ...input, company_id: company.id })
-        .select()
-        .single()
-      if (error) throw error
-      return data
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products', company?.id] })
-    },
-  })
-}
-
 export function useImportSkumsCatalog() {
   const queryClient = useQueryClient()
   const { company } = useAuth()
@@ -201,36 +181,4 @@ export function useImportSkumsCatalog() {
   })
 }
 
-export function useUpdateProduct() {
-  const queryClient = useQueryClient()
-  const { company } = useAuth()
-  return useMutation({
-    mutationFn: async ({ id, ...input }: ProductInput & { id: string }) => {
-      const { data, error } = await supabase
-        .from('products')
-        .update(input)
-        .eq('id', id)
-        .select()
-        .single()
-      if (error) throw error
-      return data
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products', company?.id] })
-    },
-  })
-}
 
-export function useDeleteProduct() {
-  const queryClient = useQueryClient()
-  const { company } = useAuth()
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('products').delete().eq('id', id)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products', company?.id] })
-    },
-  })
-}

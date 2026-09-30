@@ -127,10 +127,10 @@ test('SKUMS sale writes are queued locally and retried with the same idempotency
 })
 
 test('POS stock movement helpers build SKUMS inventory event payloads without treating local product IDs as canonical', () => {
-  assert.match(stockMovement, /export type PosFloorInventoryAction = 'damage' \| 'found_stock'/)
+  assert.match(stockMovement, /export type FloorAdjustmentReason/)
   assert.match(stockMovement, /export function createPosInventoryEventPayload/)
-  assert.match(stockMovement, /event_type: input\.eventType/)
-  assert.match(stockMovement, /idempotency_key: `\$\{store\.code\}-\$\{input\.eventType\}-\$\{input\.product\.sku\}-\$\{occurredAt\}`/)
+  assert.match(stockMovement, /event_type: FLOOR_ADJUSTMENT_EVENT/)
+  assert.match(stockMovement, /idempotency_key: `\$\{store\.code\}-\$\{FLOOR_ADJUSTMENT_EVENT\}-\$\{input\.product\.sku\}-\$\{occurredAt\}`/)
   assert.match(stockMovement, /pos_location_code: store\.code/)
   assert.match(stockMovement, /inventory_location_id: store\.inventoryLocationId/)
   assert.match(stockMovement, /product_id: input\.product\.product_id \?\? null/)

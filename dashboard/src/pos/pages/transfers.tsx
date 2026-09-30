@@ -34,7 +34,7 @@ const STATUS_VARIANT: Record<Transfer['status'], 'default' | 'secondary' | 'succ
 }
 
 const TRANSFER_DESTINATIONS = [
-  { code: 'WH01', name: 'Central Fulfilment' },
+  { code: 'WH-FRAN-2000', name: 'Fran 2000sqft WH' },
   { code: 'FRAN02', name: 'Fran Beauty Vivocity' },
   { code: 'SG03', name: 'Jewel Changi' },
 ] as const
@@ -357,7 +357,7 @@ export default function TransfersPage() {
 }
 
 function TransferOut({ onCreate }: { onCreate: (ref: string) => void }) {
-  const [destCode, setDestCode] = useState('WH01')
+  const [destCode, setDestCode] = useState('WH-FRAN-2000')
   const [lines, setLines] = useState<{ sku: string; name: string; qty: number }[]>([])
   const [pick, setPick] = useState('')
 
@@ -385,7 +385,7 @@ function TransferOut({ onCreate }: { onCreate: (ref: string) => void }) {
   return (
     <div className="mx-auto max-w-2xl rounded-xl border bg-card p-4">
       <p className="font-semibold">Create transfer request</p>
-      <p className="text-xs text-muted-foreground">Sender is locked to {STORE.name} ({STORE.code}). A transfer document is created on submit.</p>
+      <p className="text-xs text-muted-foreground">Sender is locked to {STORE.name} ({STORE.code}). Overflow goes to Fran 2000sqft WH. Loft is not a destination.</p>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>

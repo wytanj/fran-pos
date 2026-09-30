@@ -205,30 +205,18 @@ export default function DashboardPage() {
       {stats.productCount === 0 && (
         <Card className="border-primary/30">
           <CardHeader>
-            <CardTitle>Choose your product source</CardTitle>
+            <CardTitle>Catalog comes from SKUMS</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg border p-4">
-                <PackagePlus className="mb-3 h-6 w-6 text-primary" />
-                <h2 className="font-semibold">Create product manually</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Add the first live POS item directly into this company catalog.
-                </p>
-                <Link to="/products?new=1">
-                  <Button className="mt-4 w-full">Create Product</Button>
-                </Link>
-              </div>
-              <div className="rounded-lg border p-4">
-                <RefreshCw className="mb-3 h-6 w-6 text-primary" />
-                <h2 className="font-semibold">Sync from SKUMS</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Create or update POS products from POS-enabled SKUMS catalog items.
-                </p>
-                <Link to="/products?import=skums">
-                  <Button variant="outline" className="mt-4 w-full">Sync from SKUMS</Button>
-                </Link>
-              </div>
+            <div className="rounded-lg border p-4">
+              <RefreshCw className="mb-3 h-6 w-6 text-primary" />
+              <h2 className="font-semibold">Sync from SKUMS</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                POS does not create products or edit stock counts. Sync the display cache from SKUMS.
+              </p>
+              <Link to="/products?import=skums">
+                <Button className="mt-4 w-full">Sync from SKUMS</Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -420,7 +408,7 @@ function IntegrationsTab() {
           <ActionPanel
             icon={PackagePlus}
             title="Catalog Imports"
-            body="Start SKUMS imports or create a manual product source for first-run live mode."
+            body="Sync the POS catalog cache from SKUMS. POS does not create products."
             to="/products?import=skums"
             action="Import catalog"
           />

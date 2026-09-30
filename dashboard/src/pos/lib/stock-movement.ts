@@ -1,9 +1,22 @@
 import type { StoreDestination } from '@/pos/data/mock'
 import { getActiveStore } from '@/pos/lib/pos-store-config'
-import type { SkumsGraphRefs, SkumsPosInventoryEventInput, SkumsPosInventoryEventType } from '@pos/shared'
+import type { SkumsGraphRefs, SkumsPosInventoryEventInput } from '@pos/shared'
 
-export type StockInboundReason = 'supplier_delivery' | 'manual_count' | 'transfer_receipt' | 'opening_balance' | 'adjustment'
-export type PosFloorInventoryAction = 'damage' | 'found_stock' | 'cycle_count'
+export const FLOOR_ADJUSTMENT_REASONS = [
+  { code: 'damaged', label: 'Damaged' },
+  { code: 'expired', label: 'Expired' },
+  { code: 'tester', label: 'Tester' },
+  { code: 'other', label: 'Other' },
+] as const
+
+export type FloorAdjustmentReason = (typeof FLOOR_ADJUSTMENT_REASONS)[number]['code']
+
+export const FLOOR_ADJUSTMENT_EVENT = 'inventory.damage.reported' as const
+
+export function parseFloorAdjustmentReason(value: string): FloorAdjustmentReason | null {
+  const match = FLOOR_ADJUSTMENT_REASONS.find((reason) => reason.code === value)
+  return match ? match.code : null
+}
 
 export interface StockMovementProduct extends Partial<SkumsGraphRefs> {
   id: string
@@ -11,98 +24,16 @@ export interface StockMovementProduct extends Partial<SkumsGraphRefs> {
   name: string
 }
 
-export interface StockInboundInput {
-  companyId: string | null
-  product: StockMovementProduct
-  quantity: number
-  currentOnHand: number
-  storageLocationCode: string
-  reference: string
-  reason: StockInboundReason
-  unitCost: number | null
-  note: string | null
-  operatorName: string | null
-  occurredAt?: string
-  store?: StoreDestination
-}
-
-export interface StockInboundPayload {
-  event: 'inventory.stock_movement.created'
-  source: 'vantage_pos'
-  movement_type: 'inbound'
-  company_id: string | null
-  occurred_at: string
-  store: {
-    id: string
-    code: string
-    name: string
-    inventory_location_id: string
-  }
-  product: StockMovementProduct
-  location: {
-    storage_location_code: string
-  }
-  quantity: number
-  balance_before: number
-  balance_after: number
-  reference: string
-  reason: StockInboundReason
-  unit_cost: number | null
-  note: string | null
-  operator_name: string | null
-  sync: {
-    status: 'pending'
-    targets: ['inventory_management_system', 'skums']
-  }
-}
-
 export interface PosInventoryEventInput {
-  eventType: SkumsPosInventoryEventType
   companyId: string | null
   product: StockMovementProduct
   quantity: number
   storageLocationCode: string
   reference: string
-  reasonCode: string
-  note: string | null
+  reasonCode: FloorAdjustmentReason
   operatorName: string | null
   occurredAt?: string
   store?: StoreDestination
-}
-
-export function createStockInboundPayload(input: StockInboundInput): StockInboundPayload {
-  const store = input.store ?? getActiveStore()
-  const occurredAt = input.occurredAt ?? new Date().toISOString()
-
-  return {
-    event: 'inventory.stock_movement.created',
-    source: 'vantage_pos',
-    movement_type: 'inbound',
-    company_id: input.companyId,
-    occurred_at: occurredAt,
-    store: {
-      id: store.id,
-      code: store.code,
-      name: store.name,
-      inventory_location_id: store.inventoryLocationId,
-    },
-    product: input.product,
-    location: {
-      storage_location_code: input.storageLocationCode,
-    },
-    quantity: input.quantity,
-    balance_before: input.currentOnHand,
-    balance_after: input.currentOnHand + input.quantity,
-    reference: input.reference,
-    reason: input.reason,
-    unit_cost: input.unitCost,
-    note: input.note,
-    operator_name: input.operatorName,
-    sync: {
-      status: 'pending',
-      targets: ['inventory_management_system', 'skums'],
-    },
-  }
 }
 
 export function createPosInventoryEventPayload(input: PosInventoryEventInput): SkumsPosInventoryEventInput {
@@ -110,9 +41,9 @@ export function createPosInventoryEventPayload(input: PosInventoryEventInput): S
   const occurredAt = input.occurredAt ?? new Date().toISOString()
 
   return {
-    event_type: input.eventType,
+    event_type: FLOOR_ADJUSTMENT_EVENT,
     source: 'vantage_pos',
-    idempotency_key: `${store.code}-${input.eventType}-${input.product.sku}-${occurredAt}`,
+    idempotency_key: `${store.code}-${FLOOR_ADJUSTMENT_EVENT}-${input.product.sku}-${occurredAt}`,
     pos_location_code: store.code,
     inventory_location_id: store.inventoryLocationId,
     store: {
@@ -148,7 +79,7 @@ export function createPosInventoryEventPayload(input: PosInventoryEventInput): S
     storage_location_code: input.storageLocationCode,
     reason_code: input.reasonCode,
     reference: input.reference,
-    note: input.note,
+    note: null,
     occurred_at: occurredAt,
     metadata: {
       company_id: input.companyId,
