@@ -377,7 +377,7 @@ export async function fetchSkumsNextWave(
   }
 }
 
-/** Signal-only store replenishment request (HQ inbox — never Loft). */
+/** Signal-only store replenishment request (HQ inbox — never a Fran WH order). */
 export async function createSkumsStoreReplenishmentRequest(
   input: {
     idempotency_key: string
