@@ -550,7 +550,7 @@ export default function StockPage() {
             </div>
           </div>
           <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-            Loft / HQ deliveries: use <span className="font-semibold">Receive delivery</span> — not free-form receive.
+            Fran WH / HQ deliveries: use <span className="font-semibold">Receive delivery</span> — not free-form receive.
             Damage, found, and cycle count report to SKUMS for approval before ledger apply.
           </div>
 
@@ -698,7 +698,7 @@ export default function StockPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Free-form “receive stock” no longer applies the SKUMS ledger. Use Receive delivery for Loft, or floor reports above for HQ approval.
+                  Free-form “receive stock” no longer applies the SKUMS ledger. Use Receive delivery for Fran WH, or floor reports above for HQ approval.
                 </p>
               </div>
             )}

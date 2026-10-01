@@ -1,6 +1,6 @@
 /**
  * Store replenishment REQUEST (signal only).
- * TODO-LOFT B.5 — never calls Loft; HQ reviews Mon/Thu wave vs lift.
+ * TODO-LOFT B.5 — never calls warehouse connector; HQ reviews Mon/Thu wave vs lift.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, Plus, Send, Trash2 } from 'lucide-react'
@@ -107,7 +107,7 @@ export default function RequestStockPage() {
 
     if (mode === 'demo' || !skumsConnector) {
       setMessage(
-        'Demo / offline: request would be sent to HQ for Mon/Thu wave review (not sent to Loft).',
+        'Demo / offline: request would be sent to HQ for Mon/Thu wave review (not an order to Fran WH — HQ decides).',
       )
       setLines([])
       return
@@ -135,7 +135,7 @@ export default function RequestStockPage() {
       )
       setMessage(
         result.data.message
-          || 'Request sent to HQ. Reviewed against Mon & Thu replenishment — not an order to Loft.',
+          || 'Request sent to HQ. Reviewed against Mon & Thu replenishment — not an order to Fran WH.',
       )
       setLines([])
       setReason('')
@@ -170,7 +170,7 @@ export default function RequestStockPage() {
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Sends a signal to HQ only. HQ reviews baseline + lift (MCP) and either lifts now or
-            defers to the regular <strong>Monday / Thursday</strong> wave. This does not order Loft.
+            defers to the regular <strong>Monday / Thursday</strong> wave. This does not place a warehouse order.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Store: <span className="font-medium text-foreground">{store.code}</span> · {store.name}

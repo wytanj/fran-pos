@@ -1,5 +1,5 @@
 /**
- * Receive delivery from Loft / HQ order.
+ * Receive delivery from Fran WH / HQ order.
  * TODO-LOFT C.3 — report short/damaged/over/wrong; HQ verifies.
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -180,7 +180,7 @@ export default function ReceiveDeliveryPage() {
             Receive delivery
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Confirm quantities from HQ / Loft orders. Report short, damaged, over, or wrong SKU —
+            Confirm quantities from HQ / Fran WH orders. Report short, damaged, over, or wrong SKU —
             HQ verifies. Exceptions are <strong>reported</strong>, not closed on POS.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -262,7 +262,7 @@ export default function ReceiveDeliveryPage() {
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={collectorName}
                 onChange={e => setCollectorName(e.target.value)}
-                placeholder="Who collected from Loft?"
+                placeholder="Who collected / received?"
               />
             </div>
           )}
