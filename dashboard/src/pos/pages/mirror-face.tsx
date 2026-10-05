@@ -308,20 +308,21 @@ function PairScreen({
           On the cashier tablet, tap Customer display on the sale screen and enter the code shown.
         </p>
       </div>
-      <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
+      <form onSubmit={submit} className="flex w-full max-w-md flex-col gap-4">
         <input
           value={clean}
           onChange={(e) => setCode(e.target.value)}
           inputMode="text"
           autoCapitalize="characters"
           autoComplete="off"
+          autoFocus
           aria-label="Pair code"
           placeholder="ABC123"
-          className="w-full rounded-lg border border-line bg-white px-4 py-4 text-center font-mono text-4xl uppercase tracking-[0.3em]"
+          className="w-full rounded-2xl border border-line bg-white px-4 py-6 text-center font-mono text-5xl uppercase tracking-[0.28em] sm:text-6xl"
         />
         {message && <p className="rounded-md bg-danger-soft px-3 py-2 text-center text-sm text-danger">{message}</p>}
-        <Button type="submit" className="h-14 text-lg" disabled={joining || clean.length !== 6}>
-          {joining ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Join'}
+        <Button type="submit" className="h-16 text-xl" disabled={joining || clean.length !== 6}>
+          {joining ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Pair display'}
         </Button>
       </form>
     </div>

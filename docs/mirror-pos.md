@@ -13,11 +13,12 @@ This file covers pairing a display and locking the tablet into kiosk use. It sup
 
 ## Pair a display
 
-1. On the cashier tablet, open the sale screen and tap **Customer display**.
-2. On the display tablet, open Fran POS and tap **Use as customer display** on the start screen. Enter the 6-character code.
-3. Or scan the QR code with the display tablet's camera. The QR opens `https://fran-pos.vercel.app/pos/mirror?code=<code>` in the browser, which joins at once.
+1. On the cashier tablet, open the sale screen and tap **Customer display**. Read the short code.
+2. On the display tablet, open Fran POS and tap **Use as customer display** on the start screen. Enter that code.
 
 A code works once and expires after 10 minutes. The cashier register must be bound in Live mode first, because the station belongs to the register binding.
+
+A link of the form `/pos/mirror?code=<code>` still joins at once. That link is for repair and automation. Staff pair by typing the code.
 
 ## Lock the display tablet
 

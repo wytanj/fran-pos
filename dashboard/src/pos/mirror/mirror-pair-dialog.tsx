@@ -1,20 +1,10 @@
 import { useEffect, useState } from 'react'
-import QRCode from 'qrcode'
-import { Capacitor } from '@capacitor/core'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { MirrorPairCode } from './mirror-api'
 import { mirrorLinkSummary, type MirrorLink } from './use-mirror-publisher'
-
-const WEB_ORIGIN =
-  (import.meta.env.VITE_POS_API_ORIGIN as string | undefined)?.replace(/\/+$/, '') || 'https://fran-pos.vercel.app'
-
-function joinUrl(code: string) {
-  const origin = Capacitor.isNativePlatform() ? WEB_ORIGIN : window.location.origin
-  return `${origin}/pos/mirror?code=${code}`
-}
 
 export function MirrorStatusDot({ link }: { link: MirrorLink }) {
   const { tone } = mirrorLinkSummary(link)
@@ -33,7 +23,7 @@ export function MirrorStatusDot({ link }: { link: MirrorLink }) {
 
 type PairState =
   | { kind: 'loading' }
-  | { kind: 'ready'; pair: MirrorPairCode; qr: string }
+  | { kind: 'ready'; pair: MirrorPairCode }
   | { kind: 'failed'; error: string }
 
 function secondsLeft(expiresAt: string, now: number) {
@@ -59,18 +49,16 @@ export function MirrorPairDialog({
   useEffect(() => {
     if (!open || unbound) return
     let cancelled = false
-    openPair()
-      .then(async (pair) => ({ pair, qr: await QRCode.toDataURL(joinUrl(pair.pair_code), { margin: 1, width: 320 }) }))
-      .then(
-        ({ pair, qr }) => {
-          if (!cancelled) setState({ kind: 'ready', pair, qr })
-        },
-        (err: unknown) => {
-          if (!cancelled) {
-            setState({ kind: 'failed', error: err instanceof Error ? err.message : 'Could not create a pair code' })
-          }
-        },
-      )
+    openPair().then(
+      (pair) => {
+        if (!cancelled) setState({ kind: 'ready', pair })
+      },
+      (err: unknown) => {
+        if (!cancelled) {
+          setState({ kind: 'failed', error: err instanceof Error ? err.message : 'Could not create a pair code' })
+        }
+      },
+    )
     return () => {
       cancelled = true
     }
@@ -97,12 +85,12 @@ export function MirrorPairDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
-      <DialogContent className="max-w-md" onClose={close}>
+      <DialogContent onClose={close}>
         <DialogHeader>
           <DialogTitle>Customer display</DialogTitle>
           <DialogDescription>
-            On the customer tablet, open Fran POS and tap Use as customer display, then enter this code or scan
-            the QR. Pairing again keeps the current sale.
+            On the customer tablet, open Fran POS, tap Use as customer display, and enter this code. Pairing again
+            keeps the current sale.
           </DialogDescription>
         </DialogHeader>
 
@@ -116,7 +104,7 @@ export function MirrorPairDialog({
             Bind this register in Live mode first. The customer display pairs to this register.
           </p>
         ) : state.kind === 'loading' ? (
-          <div className="mt-6 flex h-64 items-center justify-center">
+          <div className="mt-6 flex h-40 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : state.kind === 'failed' ? (
@@ -127,13 +115,14 @@ export function MirrorPairDialog({
             </Button>
           </div>
         ) : (
-          <div className="mt-4 flex flex-col items-center gap-3">
-            <img
-              src={state.qr}
-              alt={`QR code for pair code ${state.pair.pair_code}`}
-              className={cn('h-56 w-56 rounded-md border border-line', remaining === 0 && 'opacity-30')}
-            />
-            <p className="font-mono text-4xl font-bold tracking-[0.3em]" data-testid="mirror-pair-code">
+          <div className="mt-4 flex flex-col items-center gap-4">
+            <p
+              className={cn(
+                'rounded-2xl bg-secondary px-6 py-8 text-center font-mono text-6xl font-bold tracking-[0.22em] text-brown sm:text-7xl',
+                remaining === 0 && 'opacity-30',
+              )}
+              data-testid="mirror-pair-code"
+            >
               {state.pair.pair_code}
             </p>
             <p className="text-xs text-muted-foreground">
