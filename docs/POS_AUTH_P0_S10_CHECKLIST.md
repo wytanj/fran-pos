@@ -15,9 +15,9 @@ Pilot tablet: Galaxy Tab S10 FE+ (Screen A). Do **not** conflate with Screen B A
 4. Confirm header shows `STORE / REG-…`.
 5. Confirm **no** “Continue with Google” on Live.
 
-## 2. Unlock with 8-digit PIN
+## 2. Unlock with 5-digit PIN
 1. Hire-approve a pilot staff in HRM (or call `POST /api/v1/pos/hire-approve` with `decision: approve`) → save one-time PIN.
-2. On bound register: enter **employee_code** + **8-digit PIN** → Unlock.
+2. On bound register: enter **employee_code** + **5-digit PIN** → Unlock.
 3. Land on `/pos/sale` with staff name.
 4. Confirm `pos_auth_events` has `unlock_ok`.
 

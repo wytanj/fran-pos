@@ -253,7 +253,7 @@ export default function PosLogin() {
                   <div>
                     <h2 className="text-lg font-semibold">Unlock register</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Employee code + 8-digit PIN from fran-hrm.
+                      Employee code + {HRM_POS_PIN_DIGITS}-digit PIN from fran-hrm.
                     </p>
                   </div>
                   <span className="rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success">

@@ -113,7 +113,7 @@ export async function refreshRegisterBinding(token?: string): Promise<RegisterBi
   return binding
 }
 
-export const HRM_POS_PIN_DIGITS = 8
+export const HRM_POS_PIN_DIGITS = 5
 
 export const HRM_MANAGER_PLUS_ROLES = [
   'manager',

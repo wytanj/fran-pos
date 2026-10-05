@@ -1,6 +1,6 @@
 ﻿# Fran POS auth plan (fleet + HRM PIN)
 
-Status: **filed in repo 2026-09-15** (rev: 8-digit PIN, 12m rotate, bot disable by SM/area+/HQ via existing HRM scopes) — **P0 build unlocked** (J T 2026-09-15). Implementation on `feat/pos-auth-p0`.
+Status: **filed in repo 2026-09-15** (rev: 5-digit PIN, 12m rotate, bot disable by SM/area+/HQ via existing HRM scopes) — **P0 build unlocked** (J T 2026-09-15). Implementation on `feat/pos-auth-p0`.
 Repo: `wytanj/fran-pos` `docs/POS_AUTH_PLAN.md` (PR #5).  
 Related: `docs/SCREEN_A_B_PLAN.md` (customer display pair â€” **separate**; do not conflate).
 
@@ -60,7 +60,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 
 ## Defaults (CoS â€” change only if J T overrides)
 
-- PIN: **8 digits**, bcrypt in HRM only  
+- PIN: **5 digits**, bcrypt in HRM only  
 - Validity / rotate: **12 months** (floor was â€œat least 6 months or 1 yearâ€; pick 12m to cut friction â€” override to 6m if wanted). No naggy short rotations.  
 - Lockout: **5 fails â†’ 15 min** (reuse HRM fields if present)  
 - Issuance: **auto on hire approve** + one-time delivery (Telegram preferred)  
@@ -75,7 +75,7 @@ Manager overrides (void/refund) = same PIN path with role gate, not a second sec
 
 ### P0 (pilot S10 + small staff set)
 
-- Written verify API: POS â†’ HRM `employee_code`+**8-digit** PIN â†’ session on bound register  
+- Written verify API: POS â†’ HRM `employee_code`+**5-digit** PIN â†’ session on bound register  
 - Register bind without Google (store pair / device token)  
 - Hire-approve â†’ `pos_access` + PIN issue + one-time delivery  
 - PIN expiry metadata (**12 months** default); verify rejects expired  
