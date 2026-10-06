@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { readFileSync } from 'node:fs'
+
 const {
   MIRROR_DONE_IDLE_MS,
   MIRROR_IDLE_PROMOS,
@@ -8,6 +10,7 @@ const {
   formatMirrorMoney,
   formatTierNudge,
   mirrorAfterDoneIdle,
+  mirrorLineMeta,
   mirrorPayBanner,
   mirrorPayingCopy,
   parseMirrorSnapshot,
@@ -69,7 +72,7 @@ test('cart phase splits products from rewards and keeps nett equal to the regist
   )
   assert.equal(snap.phase, 'cart')
   assert.deepEqual(snap.basket.lines, [
-    { id: 'a', name: 'Item a', qty: 2, net: 75, list: 80, discount: 5 },
+    { id: 'a', name: 'Item a', qty: 2, net: 75, list: 80, offs: [{ label: '', amount: 5 }] },
     { id: 'b', name: 'Item b', qty: 1, net: 25 },
   ])
   assert.deepEqual(snap.basket.rewards.map((r) => [r.id, r.label, r.amount]), [
@@ -93,14 +96,85 @@ test('a labelled discount round-trips, and a line missing list price does not pa
     qty: 2,
     net: 75,
     list: 80,
-    discount: 5,
-    discountLabel: 'Member 5',
+    offs: [{ label: 'Member 5', amount: 5 }],
   })
   const parsed = parseMirrorSnapshot(JSON.parse(JSON.stringify(snap)))
   assert.deepEqual(parsed, snap)
-  const broken = JSON.parse(JSON.stringify(snap))
-  delete broken.basket.lines[0].list
-  assert.equal(parseMirrorSnapshot(broken), null)
+  const missingList = JSON.parse(JSON.stringify(snap))
+  delete missingList.basket.lines[0].list
+  assert.equal(parseMirrorSnapshot(missingList), null)
+  const missingOffs = JSON.parse(JSON.stringify(snap))
+  delete missingOffs.basket.lines[0].offs
+  assert.equal(parseMirrorSnapshot(missingOffs), null)
+})
+
+test('markdown and a line discount use the cashier price face', () => {
+  const snap = buildMirrorSnapshot(input({
+    cart: [{
+      ...product('a', 80, 2, 10),
+      listPrice: 100,
+      isMarkdown: true,
+      discountLabel: 'Staff Discount 15%',
+    }],
+  }))
+  const line = snap.basket.lines[0]
+  assert.deepEqual(line, {
+    id: 'a',
+    name: 'Item a',
+    qty: 2,
+    net: 150,
+    list: 200,
+    offs: [
+      { label: 'MD', amount: 40 },
+      { label: 'Staff Discount 15%', amount: 10 },
+    ],
+  })
+  assert.equal(line.list - line.offs[0].amount - line.offs[1].amount, line.net)
+})
+
+test('brand and upc show when present and drop when blank', () => {
+  const present = buildMirrorSnapshot(input({
+    cart: [{ ...product('a', 40), brand: ' CeraVe ', upc: '012345678905' }],
+  }))
+  assert.deepEqual(present.basket.lines[0], {
+    id: 'a',
+    name: 'Item a',
+    qty: 1,
+    net: 40,
+    brand: 'CeraVe',
+    upc: '012345678905',
+  })
+  const absent = buildMirrorSnapshot(input({
+    cart: [{ ...product('a', 40), brand: '  ', upc: '' }],
+  }))
+  assert.deepEqual(absent.basket.lines[0], { id: 'a', name: 'Item a', qty: 1, net: 40 })
+  assert.equal('brand' in absent.basket.lines[0], false)
+  assert.equal('upc' in absent.basket.lines[0], false)
+  const blank = JSON.parse(JSON.stringify(present))
+  blank.basket.lines[0].brand = ''
+  assert.equal(parseMirrorSnapshot(blank), null)
+})
+
+test('catalog meta prefers UPC, then another barcode, and omits a missing brand', () => {
+  assert.deepEqual(mirrorLineMeta({ brand: ' The Ordinary ', upc: '111', ean: '222', barcode: '333' }), {
+    brand: 'The Ordinary',
+    upc: '111',
+  })
+  assert.deepEqual(mirrorLineMeta({ brand: ' ', ean: ' 5901234123457 ' }), { upc: '5901234123457' })
+  assert.deepEqual(mirrorLineMeta({}), {})
+})
+
+test('the sale publisher sends list price, markdown, brand, and upc', () => {
+  const sale = readFileSync(new URL('../dashboard/src/pos/pages/sale.tsx', import.meta.url), 'utf8')
+  const start = sale.indexOf('const mirrorCart = cart.map')
+  const end = sale.indexOf('return buildMirrorSnapshot')
+  const block = sale.slice(start, end)
+  assert.ok(start >= 0 && end > start)
+  assert.match(block, /listPrice: line\.listPrice/)
+  assert.match(block, /isMarkdown: line\.isMarkdown/)
+  assert.match(block, /mirrorLineMeta\(\{ brand: product\?\.brand, upc: product\?\.upc \}\)/)
+  assert.match(sale, /brand: item\.brand_name/)
+  assert.match(sale, /source_brand/)
 })
 
 test('open amount lines count as products', () => {

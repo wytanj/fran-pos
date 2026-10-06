@@ -91,7 +91,7 @@ import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
 import { getActiveStore } from '@/pos/lib/pos-store-config'
-import { MIRROR_IDLE_PROMOS, buildMirrorSnapshot } from '@/pos/mirror/mirror-snapshot'
+import { MIRROR_IDLE_PROMOS, buildMirrorSnapshot, mirrorLineMeta } from '@/pos/mirror/mirror-snapshot'
 import { mirrorLinkSummary, useMirrorPublisher } from '@/pos/mirror/use-mirror-publisher'
 import { MirrorPairDialog, MirrorStatusDot } from '@/pos/mirror/mirror-pair-dialog'
 import type {
@@ -259,6 +259,17 @@ function formatSignedCurrency(value: number) {
   return `${value > 0 ? '+' : '-'}${formatCurrency(Math.abs(value), STORE.currency)}`
 }
 
+function metadataText(metadata: Record<string, unknown> | null | undefined, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'string' ? value : null
+}
+
+function metadataIdentifiers(metadata: Record<string, unknown> | null | undefined) {
+  const ids = asRecord(metadata?.identifiers)
+  const text = (key: string) => (typeof ids[key] === 'string' ? ids[key] : null)
+  return { upc: text('upc'), ean: text('ean'), gtin: text('gtin') }
+}
+
 function toPosProduct(item: SkumsPosCatalogItem): Product {
   return {
     id: item.id,
@@ -266,6 +277,12 @@ function toPosProduct(item: SkumsPosCatalogItem): Product {
     barcodes: [item.identifiers?.ean, item.identifiers?.upc, item.identifiers?.gtin]
       .filter((code): code is string => Boolean(code)),
     name: item.display_name || item.title,
+    ...mirrorLineMeta({
+      brand: item.brand_name,
+      upc: item.identifiers?.upc,
+      ean: item.identifiers?.ean,
+      gtin: item.identifiers?.gtin,
+    }),
     category: item.category_name || 'Uncategorized',
     storeLocationCode: normalizeStoreStorageLocationCode(item.storage_location_code) ?? storeLocationCodeFromMetadata(item.metadata),
     price: item.list_price || item.unit_price || 0,
@@ -304,6 +321,11 @@ function toLiveProduct(product: DbProduct): Product {
     sku: product.sku || product.barcode || product.id.slice(0, 8),
     barcodes: product.barcode ? [product.barcode] : [],
     name: product.name,
+    ...mirrorLineMeta({
+      brand: metadataText(product.metadata, 'source_brand'),
+      ...metadataIdentifiers(product.metadata),
+      barcode: product.barcode,
+    }),
     category: product.category?.name || 'Uncategorized',
     storeLocationCode: storeLocationCodeFromMetadata(product.metadata),
     price: Number(product.price) || 0,
@@ -619,9 +641,25 @@ export default function SalePage() {
         : { redeemed: giftSettlement.redeemed, remaining: giftSettlement.remaining }
     const stashedMember = pos.lastSale?.fran?.counterSession
     const memberName = stashedMember?.mode === 'member' ? stashedMember.member?.name ?? null : null
+    const bySku = new Map(catalog.map((product) => [product.sku, product]))
+    const mirrorCart = cart.map((line) => {
+      const product = bySku.get(line.sku)
+      return {
+        lineId: line.lineId,
+        name: line.name,
+        qty: line.qty,
+        unitPrice: line.unitPrice,
+        lineDiscount: line.lineDiscount,
+        lineKind: line.lineKind,
+        discountLabel: line.discountLabel,
+        listPrice: line.listPrice,
+        isMarkdown: line.isMarkdown,
+        ...mirrorLineMeta({ brand: product?.brand, upc: product?.upc }),
+      }
+    })
     return buildMirrorSnapshot({
       store: { name: store.name, code: store.code, currency: store.currency },
-      cart,
+      cart: mirrorCart,
       totals,
       paymentOpen,
       completedOpen,
@@ -634,7 +672,7 @@ export default function SalePage() {
       activeTenderMode,
       memberName,
     })
-  }, [cart, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview, activeTenderMode])
+  }, [cart, catalog, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview, activeTenderMode])
   const mirror = useMirrorPublisher(mirrorSnapshot, mirrorRegisterToken)
   const productEntryRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null)

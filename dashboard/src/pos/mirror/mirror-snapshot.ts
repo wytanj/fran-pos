@@ -1,4 +1,5 @@
-// Imported directly by node tests: keep this module free of imports.
+// Node tests import this file. Import only other import-free modules.
+import { cartPriceFace, type CartPriceOff } from '../lib/cart-price-face.ts'
 
 export const MIRROR_SNAPSHOT_VERSION = 1
 
@@ -13,9 +14,10 @@ export interface MirrorLine {
   name: string
   qty: number
   net: number
+  brand?: string
+  upc?: string
   list?: number
-  discount?: number
-  discountLabel?: string
+  offs?: CartPriceOff[]
 }
 
 export interface MirrorReward {
@@ -114,6 +116,10 @@ export interface MirrorCartLineInput {
   lineDiscount: number
   lineKind?: CartLineKind
   discountLabel?: string
+  listPrice?: number
+  isMarkdown?: boolean
+  brand?: string
+  upc?: string
 }
 
 export interface MirrorTotalsInput {
@@ -190,14 +196,41 @@ function lineNet(line: MirrorCartLineInput) {
   return round2(line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1))
 }
 
+export function mirrorLineMeta(source: {
+  brand?: string | null
+  upc?: string | null
+  ean?: string | null
+  gtin?: string | null
+  barcode?: string | null
+}) {
+  const brand = source.brand?.trim()
+  const upc = [source.upc, source.ean, source.gtin, source.barcode]
+    .map((value) => value?.trim() ?? '')
+    .find((value) => value.length > 0)
+  return {
+    ...(brand ? { brand } : {}),
+    ...(upc ? { upc } : {}),
+  }
+}
+
 function toProductLine(line: MirrorCartLineInput): MirrorLine {
-  const net = lineNet(line)
-  const list = round2(line.unitPrice * line.qty)
-  const discount = round2(list - net)
-  const base: MirrorLine = { id: line.lineId, name: line.name, qty: line.qty, net }
-  if (discount === 0) return base
-  const label = line.discountLabel?.trim()
-  return label ? { ...base, list, discount, discountLabel: label } : { ...base, list, discount }
+  const face = cartPriceFace({
+    unitPrice: line.unitPrice,
+    listPrice: line.listPrice ?? line.unitPrice,
+    qty: line.qty,
+    lineDiscount: line.lineDiscount,
+    isMarkdown: line.isMarkdown ?? false,
+    discountLabel: line.discountLabel,
+  })
+  const base: MirrorLine = {
+    id: line.lineId,
+    name: line.name,
+    qty: line.qty,
+    net: face.nett,
+    ...mirrorLineMeta({ brand: line.brand, upc: line.upc }),
+  }
+  if (face.kind === 'nett') return base
+  return { ...base, list: face.list, offs: face.offs }
 }
 
 function toMember(session: MirrorFranSessionInput | null, preview: MirrorFranPreviewInput | null): MirrorMember | null {
@@ -394,13 +427,26 @@ function isStore(value: unknown): value is MirrorStore {
   return isObject(value) && isStr(value.name) && isStr(value.code) && isStr(value.currency)
 }
 
+function isOff(value: unknown): value is CartPriceOff {
+  return isObject(value) && isStr(value.label) && isNum(value.amount)
+}
+
+function isOptionalLabel(value: unknown) {
+  return value == null || (isStr(value) && value.trim().length > 0)
+}
+
 function isLine(value: unknown): value is MirrorLine {
   if (!isObject(value) || !isStr(value.id) || !isStr(value.name) || !isNum(value.qty) || !isNum(value.net)) return false
+  if (!isOptionalLabel(value.brand) || !isOptionalLabel(value.upc)) return false
   const listSet = value.list != null
-  const discountSet = value.discount != null
-  const labelSet = value.discountLabel != null
-  if (!listSet && !discountSet && !labelSet) return true
-  return isNum(value.list) && isNum(value.discount) && (value.discountLabel == null || isStr(value.discountLabel))
+  const offsSet = value.offs != null
+  if (!listSet && !offsSet) return true
+  return (
+    isNum(value.list) &&
+    Array.isArray(value.offs) &&
+    value.offs.length > 0 &&
+    value.offs.every(isOff)
+  )
 }
 
 function isReward(value: unknown): value is MirrorReward {

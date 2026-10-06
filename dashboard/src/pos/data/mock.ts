@@ -80,6 +80,8 @@ export interface Product {
   /** Scannable codes (EAN/UPC/GTIN or the DB barcode) for instant local matching. */
   barcodes?: string[]
   name: string
+  brand?: string
+  upc?: string
   category: string
   storeLocationCode?: string | null
   price: number

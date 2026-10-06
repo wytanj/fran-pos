@@ -56,7 +56,7 @@ const MEMBERSHIP_SCAN_URL =
   'https://fran.sg/m' // placeholder until prod membership URL is wired
 
 const MEMBERSHIP_QR_BOX = 'h-[min(3cm,7.5rem)] w-[min(3cm,7.5rem)] rounded-md'
-const MEMBERSHIP_QR_ENLARGE_BOX = 'h-[62vmin] w-[62vmin]'
+const MEMBERSHIP_QR_ENLARGE_BOX = 'h-[72vmin] w-[72vmin]'
 
 function usePresentedSnapshot(snapshot: MirrorSnapshot | null): MirrorSnapshot | null {
   const [releasedReceipt, setReleasedReceipt] = useState<string | null>(null)
@@ -356,17 +356,26 @@ function BasketView({
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-2xl bg-white px-5 shadow-warm-xs" data-testid="mirror-lines">
         {basket.lines.map((line) => (
-          <li key={line.id} className="flex items-baseline justify-between gap-4 py-8 text-2xl">
-            <span className="min-w-0 flex-1 whitespace-normal break-words">{line.name}</span>
+          <li key={line.id} className="flex items-start justify-between gap-4 py-8 text-2xl">
+            <span className="min-w-0 flex-1">
+              <span className="block whitespace-normal break-words">{line.name}</span>
+              {(line.brand || line.upc) && (
+                <span className="mt-1 block text-base font-normal text-muted-foreground" data-testid="mirror-line-meta">
+                  {[line.brand, line.upc].filter(Boolean).join(' \u00b7 ')}
+                </span>
+              )}
+            </span>
             <span className="shrink-0 text-muted-foreground">{'\u00d7'}{line.qty}</span>
             <span className="shrink-0 text-right tabular-nums">
-              {line.discount != null && line.discount !== 0 && line.list != null && (
+              {line.list != null && line.offs && line.offs.length > 0 && (
                 <>
                   <span className="block text-xl text-muted-foreground line-through">{money(line.list)}</span>
-                  <span className="block text-xl text-success">
-                    {line.discountLabel ? `${line.discountLabel} ` : ''}
-                    {money(-line.discount)}
-                  </span>
+                  {line.offs.map((off, index) => (
+                    <span key={`${index}:${off.label}:${off.amount}`} className="block text-xl text-success">
+                      {off.label ? `${off.label} ` : ''}
+                      {money(-off.amount)}
+                    </span>
+                  ))}
                 </>
               )}
               <span className="block font-semibold">{money(line.net)}</span>
