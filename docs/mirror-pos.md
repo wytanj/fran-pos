@@ -52,5 +52,8 @@ An APK release to store devices is class D. It waits for JT.
 
 ## Orientation and screen
 
-- The cashier tablet stays in landscape. The display tablet runs in portrait. The app does not force orientation per screen. Lock rotation on the display tablet from **Quick settings**, or through the kiosk policy.
+- /pos/mirror forces portrait while that route is open (pairing + live). Cashier routes including /pos/sale stay free to rotate. There is no user-facing rotate control.
+- **Native (S10B APK):** one MainActivity serves both roles. Manifest leaves orientation unset. On /pos/mirror, setRequestedOrientation(SCREEN_ORIENTATION_SENSOR_PORTRAIT); any other path restores SCREEN_ORIENTATION_UNSPECIFIED. The mirror page posts its path over the FranOrientation JS bridge; page-load URL is a backup.
+- **Web:** screen.orientation.lock('portrait' | 'portrait-primary') while on the route; unlock() on leave; re-lock on visibility.
+- **Silent CSS fallback only** (no button): if the lock is refused and the viewport is landscape, [data-mirror-face] width/height-swaps and rotates 90deg so the customer face still reads vertical. Only the mirror page sets data-mirror-face.
 - The display page asks the browser for a screen wake lock. When the WebView refuses, set **Settings > Display > Screen timeout** to the maximum, or turn on **Developer options > Stay awake** while the tablet charges.
