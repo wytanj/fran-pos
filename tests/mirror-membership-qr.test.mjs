@@ -179,3 +179,39 @@ test('branded membership QR decodes the membership URL with the Fran eye', () =>
   assert.equal(renderFranMembershipQr(''), null)
   assert.equal(renderFranMembershipQr('   '), null)
 })
+
+test('tap on the guest membership QR opens a QR-only enlarge modal at least 45vmin', () => {
+  const face = readFileSync(new URL('../dashboard/src/pos/pages/mirror-face.tsx', import.meta.url), 'utf8')
+  const basketStart = face.indexOf('function BasketView')
+  const basketEnd = face.indexOf('function PairScreen')
+  const basket = face.slice(basketStart, basketEnd)
+
+  const box = face.match(/MEMBERSHIP_QR_ENLARGE_BOX = '([^']+)'/)
+  assert.ok(box, 'enlarge box constant')
+  const sides = [...box[1].matchAll(/\b(?:h|w)-\[(\d+(?:\.\d+)?)vmin\]/g)].map((match) => Number(match[1]))
+  assert.equal(sides.length, 2)
+  assert.equal(sides[0], sides[1])
+  for (const side of sides) {
+    assert.ok(side >= 45, `enlarge side ${side}vmin stays at least 45% of the shorter edge`)
+  }
+
+  assert.match(basket, /onClick=\{\(\) => setQrEnlarged\(true\)\}/)
+  assert.match(basket, /if \(!joinQr && qrEnlarged\) setQrEnlarged\(false\)/)
+  assert.match(basket, /<Dialog open=\{qrEnlarged\} onOpenChange=\{setQrEnlarged\}>/)
+  assert.match(basket, /onClose=\{\(\) => setQrEnlarged\(false\)\}/)
+  assert.match(basket, /data-testid="mirror-membership-qr-enlarged"/)
+  assert.match(basket, /\$\{MEMBERSHIP_QR_ENLARGE_BOX\} bg-white/)
+  assert.match(face, /MEMBERSHIP_QR_BOX = 'h-\[min\(3cm,7\.5rem\)\] w-\[min\(3cm,7\.5rem\)\] rounded-md'/)
+
+  const liveStart = face.indexOf("if (state.kind !== 'live')")
+  const live = face.slice(liveStart, face.indexOf('function FaceBody'))
+  assert.match(live, /id="fran-overlay-root"/)
+
+  const modalStart = basket.indexOf('data-testid="mirror-membership-qr-modal"')
+  const modalEnd = basket.indexOf('</Dialog>', modalStart)
+  assert.ok(modalStart >= 0 && modalEnd > modalStart, 'enlarge modal is in the basket')
+  const modal = basket.slice(modalStart, modalEnd)
+  assert.match(modal, /dangerouslySetInnerHTML=\{\{ __html: joinQr \}\}/)
+  assert.equal(modal.includes('Scan to join'), false)
+  assert.equal(/\b(?:navigate|href)\b/.test(modal), false)
+})
