@@ -15,8 +15,12 @@ import {
   type MirrorJoinResult,
 } from '@/pos/mirror/mirror-api'
 import {
+  enterMirrorImmersive,
+  leaveMirrorImmersive,
   lockPortrait,
   postMirrorPath,
+  postMirrorSession,
+  releaseMirrorPath,
   unlockPortrait,
 } from '@/pos/mirror/mirror-orientation'
 import {
@@ -48,12 +52,19 @@ function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   }
 }
 
-function useScreenWakeLock() {
+function useScreenWakeLock(live: boolean) {
   useEffect(() => {
+    if (!live) return
     let lock: { release: () => Promise<void> } | null = null
+    let cancelled = false
     const request = async () => {
       try {
-        lock = (await navigator.wakeLock?.request('screen')) ?? null
+        const next = (await navigator.wakeLock?.request('screen')) ?? null
+        if (cancelled) {
+          void next?.release().catch(() => undefined)
+          return
+        }
+        lock = next
       } catch {
         lock = null
       }
@@ -64,10 +75,18 @@ function useScreenWakeLock() {
     void request()
     document.addEventListener('visibilitychange', onVisible)
     return () => {
+      cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
       void lock?.release().catch(() => undefined)
     }
-  }, [])
+  }, [live])
+}
+
+function useMirrorSession(live: boolean) {
+  useEffect(() => {
+    postMirrorSession(live)
+    return () => postMirrorSession(false)
+  }, [live])
 }
 
 function useMirrorPortraitLock() {
@@ -77,6 +96,9 @@ function useMirrorPortraitLock() {
       postMirrorPath(window.location.href)
       void lockPortrait().then(() => {
         if (cancelled) unlockPortrait()
+      })
+      void enterMirrorImmersive().then(() => {
+        if (cancelled) leaveMirrorImmersive()
       })
     }
     const onVisible = () => {
@@ -88,8 +110,8 @@ function useMirrorPortraitLock() {
       cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
       unlockPortrait()
-      // Release Android SENSOR_PORTRAIT even if href still looks like /pos/mirror during unmount.
-      postMirrorPath('/pos/sale')
+      leaveMirrorImmersive()
+      releaseMirrorPath()
     }
   }, [])
 }
@@ -105,7 +127,9 @@ export default function MirrorFacePage() {
   const [failures, setFailures] = useState(0)
   const seqRef = useRef(0)
 
-  useScreenWakeLock()
+  const live = state.kind === 'live'
+  useScreenWakeLock(live)
+  useMirrorSession(live)
   useMirrorPortraitLock()
 
   const onJoined = useCallback((joined: MirrorJoinResult) => {
@@ -287,10 +311,21 @@ function BasketView({
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-2xl bg-white px-5 shadow-warm-xs" data-testid="mirror-lines">
         {basket.lines.map((line) => (
-          <li key={line.id} className="flex items-baseline justify-between gap-4 py-4 text-2xl">
-            <span className="min-w-0 flex-1 truncate">{line.name}</span>
+          <li key={line.id} className="flex items-baseline justify-between gap-4 py-8 text-2xl">
+            <span className="min-w-0 flex-1 whitespace-normal break-words">{line.name}</span>
             <span className="shrink-0 text-muted-foreground">Ãƒâ€”{line.qty}</span>
-            <span className="w-32 shrink-0 text-right font-semibold tabular-nums">{money(line.net)}</span>
+            <span className="shrink-0 text-right tabular-nums">
+              {line.discount != null && line.discount !== 0 && line.list != null && (
+                <>
+                  <span className="block text-xl text-muted-foreground line-through">{money(line.list)}</span>
+                  <span className="block text-xl text-success">
+                    {line.discountLabel ? `${line.discountLabel} ` : ''}
+                    {money(-line.discount)}
+                  </span>
+                </>
+              )}
+              <span className="block font-semibold">{money(line.net)}</span>
+            </span>
           </li>
         ))}
       </ul>

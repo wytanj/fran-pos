@@ -4,7 +4,11 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -20,8 +24,6 @@ public class MainActivity extends BridgeActivity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    // Galaxy Tab store registers stay awake on the counter next to the S700.
-    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     requestRuntimePermissions();
     attachMirrorOrientation();
   }
@@ -35,9 +37,13 @@ public class MainActivity extends BridgeActivity {
       new WebViewListener() {
         @Override
         public void onPageLoaded(WebView webView) {
-          if (webView != null && mirrorPathRequestsPortrait(webView.getUrl())) {
+          if (webView == null) return;
+          boolean mirror = mirrorPathRequestsPortrait(webView.getUrl());
+          if (mirror) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
           }
+          setMirrorImmersive(mirror);
+          if (!mirror) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
       }
     );
@@ -48,14 +54,50 @@ public class MainActivity extends BridgeActivity {
     public void applyPath(String path) {
       final boolean portrait = mirrorPathRequestsPortrait(path);
       runOnUiThread(
-        () ->
+        () -> {
           setRequestedOrientation(
             portrait
               ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
               : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-          )
+          );
+          setMirrorImmersive(portrait);
+        }
       );
     }
+
+    @JavascriptInterface
+    public void setSession(boolean live) {
+      runOnUiThread(
+        () -> {
+          if (live) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+          else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+      );
+    }
+  }
+
+  @SuppressWarnings("deprecation")
+  private void setMirrorImmersive(boolean immersive) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      WindowInsetsController controller = getWindow().getInsetsController();
+      if (controller == null) return;
+      if (immersive) {
+        controller.hide(WindowInsets.Type.navigationBars());
+        controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+      } else {
+        controller.show(WindowInsets.Type.navigationBars());
+      }
+      return;
+    }
+    View decor = getWindow().getDecorView();
+    decor.setSystemUiVisibility(
+      immersive
+        ? View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+          | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+          | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+          | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        : View.SYSTEM_UI_FLAG_VISIBLE
+    );
   }
 
   static boolean mirrorPathRequestsPortrait(String raw) {

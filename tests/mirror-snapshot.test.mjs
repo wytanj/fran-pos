@@ -64,7 +64,10 @@ test('cart phase splits products from rewards and keeps nett equal to the regist
     input({ cart, total: 90, totals: { itemCount: 5, total: 90, balance: 90, cartAdjustment: 3 } }),
   )
   assert.equal(snap.phase, 'cart')
-  assert.deepEqual(snap.basket.lines.map((l) => [l.id, l.net]), [['a', 75], ['b', 25]])
+  assert.deepEqual(snap.basket.lines, [
+    { id: 'a', name: 'Item a', qty: 2, net: 75, list: 80, discount: 5 },
+    { id: 'b', name: 'Item b', qty: 1, net: 25 },
+  ])
   assert.deepEqual(snap.basket.rewards.map((r) => [r.id, r.label, r.amount]), [
     ['r', 'S$10 birthday reward', -10],
     ['p', 'S$10 birthday reward', -3],
@@ -74,6 +77,26 @@ test('cart phase splits products from rewards and keeps nett equal to the regist
   assert.equal(snap.basket.nett, 90)
   const rewardSum = snap.basket.rewards.reduce((s, r) => s + r.amount, 0)
   assert.equal(Math.round((snap.basket.subtotal + rewardSum) * 100) / 100, snap.basket.nett)
+})
+
+test('a labelled discount round-trips, and a line missing list price does not parse', () => {
+  const line = { ...product('a', 40, 2, 5), discountLabel: ' Member 5 ' }
+  const snap = buildMirrorSnapshot(input({ cart: [line] }))
+  assert.equal(snap.phase, 'cart')
+  assert.deepEqual(snap.basket.lines[0], {
+    id: 'a',
+    name: 'Item a',
+    qty: 2,
+    net: 75,
+    list: 80,
+    discount: 5,
+    discountLabel: 'Member 5',
+  })
+  const parsed = parseMirrorSnapshot(JSON.parse(JSON.stringify(snap)))
+  assert.deepEqual(parsed, snap)
+  const broken = JSON.parse(JSON.stringify(snap))
+  delete broken.basket.lines[0].list
+  assert.equal(parseMirrorSnapshot(broken), null)
 })
 
 test('open amount lines count as products', () => {

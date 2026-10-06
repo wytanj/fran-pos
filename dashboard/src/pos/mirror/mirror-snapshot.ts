@@ -13,6 +13,9 @@ export interface MirrorLine {
   name: string
   qty: number
   net: number
+  list?: number
+  discount?: number
+  discountLabel?: string
 }
 
 export interface MirrorReward {
@@ -163,6 +166,16 @@ function lineNet(line: MirrorCartLineInput) {
   return round2(line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1))
 }
 
+function toProductLine(line: MirrorCartLineInput): MirrorLine {
+  const net = lineNet(line)
+  const list = round2(line.unitPrice * line.qty)
+  const discount = round2(list - net)
+  const base: MirrorLine = { id: line.lineId, name: line.name, qty: line.qty, net }
+  if (discount === 0) return base
+  const label = line.discountLabel?.trim()
+  return label ? { ...base, list, discount, discountLabel: label } : { ...base, list, discount }
+}
+
 function toMember(session: MirrorFranSessionInput | null, preview: MirrorFranPreviewInput | null): MirrorMember | null {
   if (session?.mode !== 'member' || !session.member) return null
   const name = session.member.name.trim()
@@ -194,7 +207,7 @@ function toBasket(input: BuildMirrorSnapshotInput): MirrorBasket {
   const rewards: MirrorReward[] = []
   for (const line of input.cart) {
     if (isProductLine(line)) {
-      lines.push({ id: line.lineId, name: line.name, qty: line.qty, net: lineNet(line) })
+      lines.push(toProductLine(line))
     } else {
       rewards.push({ id: line.lineId, label: line.discountLabel || line.name, amount: lineNet(line) })
     }
@@ -265,7 +278,12 @@ function isStore(value: unknown): value is MirrorStore {
 }
 
 function isLine(value: unknown): value is MirrorLine {
-  return isObject(value) && isStr(value.id) && isStr(value.name) && isNum(value.qty) && isNum(value.net)
+  if (!isObject(value) || !isStr(value.id) || !isStr(value.name) || !isNum(value.qty) || !isNum(value.net)) return false
+  const listSet = value.list != null
+  const discountSet = value.discount != null
+  const labelSet = value.discountLabel != null
+  if (!listSet && !discountSet && !labelSet) return true
+  return isNum(value.list) && isNum(value.discount) && (value.discountLabel == null || isStr(value.discountLabel))
 }
 
 function isReward(value: unknown): value is MirrorReward {
