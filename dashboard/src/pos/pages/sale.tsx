@@ -42,6 +42,8 @@ import {
   type SalesType,
 } from '@/pos/data/mock'
 import { usePos, type CartLine, type CompletedSale, type PosSaleSyncState } from '@/pos/lib/pos-context'
+import { settleGiftCard } from '@/pos/lib/gift-card'
+import { persistGiftCardRedeem } from '@/pos/lib/gift-card-sync'
 import { LineActionModal, type LineActionMode } from '@/pos/components/line-action-modal'
 import { ManagerAuthModal } from '@/pos/components/manager-auth-modal'
 import { Numpad } from '@/pos/components/numpad'
@@ -608,6 +610,11 @@ export default function SalePage() {
   const mirrorRegisterToken = useMemo(() => loadRegisterBinding()?.device_token ?? null, [])
   const mirrorSnapshot = useMemo(() => {
     const store = getActiveStore()
+    const giftSettlement = settleGiftCard(completedOpen && pos.lastSale ? pos.lastSale.payments : pos.payments)
+    const giftCard =
+      giftSettlement?.remaining == null
+        ? null
+        : { redeemed: giftSettlement.redeemed, remaining: giftSettlement.remaining }
     return buildMirrorSnapshot({
       store: { name: store.name, code: store.code, currency: store.currency },
       cart,
@@ -618,8 +625,9 @@ export default function SalePage() {
       franSession,
       franPreview,
       promos: MIRROR_IDLE_PROMOS,
+      giftCard,
     })
-  }, [cart, totals, paymentOpen, completedOpen, pos.lastSale, franSession, franPreview])
+  }, [cart, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview])
   const mirror = useMirrorPublisher(mirrorSnapshot, mirrorRegisterToken)
   const productEntryRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -1853,6 +1861,7 @@ export default function SalePage() {
         fran: buildFranSaleContext(saleReward, finalLoyaltySync),
         pointsEarned: finalPointsEarned,
       })
+      if (mode === 'live') void persistGiftCardRedeem(sale)
       sendFranLoyaltyExecutionEvent(sale, saleReward)
       const outboxEvents = buildPosOutboxEventsForCompletedSale(sale, {
         workspaceId: company?.id ?? 'demo',

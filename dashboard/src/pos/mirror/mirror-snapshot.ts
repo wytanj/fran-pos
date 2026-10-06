@@ -44,10 +44,15 @@ export interface MirrorPromo {
   body: string
 }
 
+export interface MirrorGiftCard {
+  redeemed: number
+  remaining: number
+}
+
 export type MirrorSnapshot =
   | { v: 1; phase: 'idle'; store: MirrorStore; promos: MirrorPromo[] }
   | { v: 1; phase: 'cart'; store: MirrorStore; basket: MirrorBasket }
-  | { v: 1; phase: 'paying'; store: MirrorStore; basket: MirrorBasket; amountDue: number }
+  | { v: 1; phase: 'paying'; store: MirrorStore; basket: MirrorBasket; amountDue: number; giftCard?: MirrorGiftCard }
   | {
       v: 1
       phase: 'done'
@@ -56,6 +61,7 @@ export type MirrorSnapshot =
       nett: number
       memberName: string | null
       pointsEarned: number | null
+      giftCard?: MirrorGiftCard
     }
 
 export type MirrorPhase = MirrorSnapshot['phase']
@@ -134,6 +140,7 @@ export interface BuildMirrorSnapshotInput {
   franSession: MirrorFranSessionInput | null
   franPreview: MirrorFranPreviewInput | null
   promos: MirrorPromo[]
+  giftCard?: MirrorGiftCard | null
 }
 
 function round2(value: number) {
@@ -207,6 +214,11 @@ function toBasket(input: BuildMirrorSnapshotInput): MirrorBasket {
   }
 }
 
+function giftField(giftCard: MirrorGiftCard | null | undefined): { giftCard: MirrorGiftCard } | Record<string, never> {
+  if (!giftCard || !Number.isFinite(giftCard.redeemed) || !Number.isFinite(giftCard.remaining)) return {}
+  return { giftCard: { redeemed: round2(giftCard.redeemed), remaining: round2(giftCard.remaining) } }
+}
+
 export function buildMirrorSnapshot(input: BuildMirrorSnapshotInput): MirrorSnapshot {
   const { store, lastSale } = input
   if (input.completedOpen && lastSale && lastSale.saleStatus !== 'voided') {
@@ -218,12 +230,20 @@ export function buildMirrorSnapshot(input: BuildMirrorSnapshotInput): MirrorSnap
       nett: round2(lastSale.total),
       memberName: toMember(input.franSession, null)?.name ?? null,
       pointsEarned: lastSale.pointsEarned > 0 ? lastSale.pointsEarned : null,
+      ...giftField(input.giftCard),
     }
   }
   if (input.cart.length === 0) return { v: 1, phase: 'idle', store, promos: input.promos }
   const basket = toBasket(input)
   if (input.paymentOpen) {
-    return { v: 1, phase: 'paying', store, basket, amountDue: round2(Math.max(0, input.totals.balance)) }
+    return {
+      v: 1,
+      phase: 'paying',
+      store,
+      basket,
+      amountDue: round2(Math.max(0, input.totals.balance)),
+      ...giftField(input.giftCard),
+    }
   }
   return { v: 1, phase: 'cart', store, basket }
 }
@@ -280,6 +300,15 @@ function isPromo(value: unknown): value is MirrorPromo {
   return isObject(value) && isStr(value.id) && isStr(value.eyebrow) && isStr(value.title) && isStr(value.body)
 }
 
+function isGiftCard(value: unknown): value is MirrorGiftCard {
+  return isObject(value) && isNum(value.redeemed) && isNum(value.remaining)
+}
+
+function giftCardFrom(value: Json): MirrorGiftCard | null | undefined {
+  if (!('giftCard' in value) || value.giftCard == null) return undefined
+  return isGiftCard(value.giftCard) ? value.giftCard : null
+}
+
 export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
   if (!isObject(value) || value.v !== MIRROR_SNAPSHOT_VERSION || !isStore(value.store)) return null
   switch (value.phase) {
@@ -287,15 +316,34 @@ export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
       return Array.isArray(value.promos) && value.promos.every(isPromo) ? (value as MirrorSnapshot) : null
     case 'cart':
       return isBasket(value.basket) ? (value as MirrorSnapshot) : null
-    case 'paying':
-      return isBasket(value.basket) && isNum(value.amountDue) ? (value as MirrorSnapshot) : null
-    case 'done':
-      return isStr(value.receiptNo) &&
-        isNum(value.nett) &&
-        isNullable(value.memberName, isStr) &&
-        isNullable(value.pointsEarned, isNum)
-        ? (value as MirrorSnapshot)
-        : null
+    case 'paying': {
+      const basket = value.basket
+      const amountDue = value.amountDue
+      if (!isBasket(basket) || !isNum(amountDue)) return null
+      const giftCard = giftCardFrom(value)
+      if (giftCard === null) return null
+      const snapshot: MirrorSnapshot = { v: 1, phase: 'paying', store: value.store, basket, amountDue }
+      return giftCard ? { ...snapshot, giftCard } : snapshot
+    }
+    case 'done': {
+      const receiptNo = value.receiptNo
+      const nett = value.nett
+      const memberName = value.memberName === null || isStr(value.memberName) ? value.memberName : undefined
+      const pointsEarned = value.pointsEarned === null || isNum(value.pointsEarned) ? value.pointsEarned : undefined
+      if (!isStr(receiptNo) || !isNum(nett) || memberName === undefined || pointsEarned === undefined) return null
+      const giftCard = giftCardFrom(value)
+      if (giftCard === null) return null
+      const snapshot: MirrorSnapshot = {
+        v: 1,
+        phase: 'done',
+        store: value.store,
+        receiptNo,
+        nett,
+        memberName,
+        pointsEarned,
+      }
+      return giftCard ? { ...snapshot, giftCard } : snapshot
+    }
     default:
       return null
   }

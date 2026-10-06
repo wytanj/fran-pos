@@ -19,6 +19,7 @@ import {
   formatMirrorMoney,
   parseMirrorSnapshot,
   type MirrorBasket,
+  type MirrorGiftCard,
   type MirrorPromo,
   type MirrorSnapshot,
   type MirrorStore,
@@ -182,7 +183,14 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
     case 'cart':
       return <BasketView basket={snapshot.basket} store={snapshot.store} amountDue={null} />
     case 'paying':
-      return <BasketView basket={snapshot.basket} store={snapshot.store} amountDue={snapshot.amountDue} />
+      return (
+        <BasketView
+          basket={snapshot.basket}
+          store={snapshot.store}
+          amountDue={snapshot.amountDue}
+          giftCard={snapshot.giftCard}
+        />
+      )
     case 'done':
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
@@ -190,6 +198,11 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
           <p className="text-2xl text-muted-foreground">
             Paid {formatMirrorMoney(snapshot.nett, snapshot.store.currency)} · Receipt {snapshot.receiptNo}
           </p>
+          {snapshot.giftCard && (
+            <p className="text-2xl">
+              Gift card remaining {formatMirrorMoney(snapshot.giftCard.remaining, snapshot.store.currency)}
+            </p>
+          )}
           {snapshot.pointsEarned !== null && (
             <p className="rounded-full bg-yellow px-6 py-3 text-2xl font-semibold">+{snapshot.pointsEarned} points earned</p>
           )}
@@ -228,7 +241,17 @@ function IdlePromos({ promos, store }: { promos: MirrorPromo[]; store: MirrorSto
   )
 }
 
-function BasketView({ basket, store, amountDue }: { basket: MirrorBasket; store: MirrorStore; amountDue: number | null }) {
+function BasketView({
+  basket,
+  store,
+  amountDue,
+  giftCard,
+}: {
+  basket: MirrorBasket
+  store: MirrorStore
+  amountDue: number | null
+  giftCard?: MirrorGiftCard
+}) {
   const money = (n: number) => formatMirrorMoney(n, store.currency)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 landscape:flex-row">
@@ -278,6 +301,9 @@ function BasketView({ basket, store, amountDue }: { basket: MirrorBasket; store:
             <p className="text-lg">Amount due · pay on the card reader</p>
             <p className="font-display text-5xl font-bold tabular-nums">{money(amountDue)}</p>
           </div>
+        )}
+        {giftCard && (
+          <p className="text-center text-xl">Gift card remaining {money(giftCard.remaining)}</p>
         )}
       </section>
     </div>

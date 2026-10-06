@@ -14,6 +14,7 @@ import {
   splitCustomerFullName,
   toPosCustomer,
 } from '@/pos/lib/customer-profile'
+import { applyDemoGiftBalance } from '@/pos/lib/gift-card'
 import type { Customer as DbCustomer, PosCustomerResolution } from '@pos/shared'
 
 interface CustomerModalProps {
@@ -80,7 +81,9 @@ function loyaltySummary(customer: Customer) {
   const items = []
   if (customer.points > 0) items.push(`${customer.points.toLocaleString()} pts`)
   if (customer.storeCredit > 0) items.push(`${formatCurrency(customer.storeCredit, STORE.currency)} credit`)
-  if (customer.giftCardBalance > 0) items.push(`${formatCurrency(customer.giftCardBalance, STORE.currency)} gift`)
+  if (customer.giftCardNo || customer.giftCardBalance > 0) {
+    items.push(`${formatCurrency(customer.giftCardBalance, STORE.currency)} gift`)
+  }
   return items
 }
 
@@ -107,7 +110,7 @@ export function CustomerModal({ open, mode, onClose, onSelect }: CustomerModalPr
   const results =
     mode === 'live'
       ? resolution.customers.map((customer) => toPosCustomer(customer))
-      : CUSTOMERS.filter((customer) => matchesDemoCustomer(customer, deferredQuery))
+      : CUSTOMERS.map(applyDemoGiftBalance).filter((customer) => matchesDemoCustomer(customer, deferredQuery))
 
   const openAddForm = () => {
     setAddForm(prefillAddForm(query))
@@ -150,7 +153,7 @@ export function CustomerModal({ open, mode, onClose, onSelect }: CustomerModalPr
     setScanning(true)
     setTimeout(() => {
       setScanning(false)
-      onSelect(CUSTOMERS[0])
+      onSelect(applyDemoGiftBalance(CUSTOMERS[0]))
     }, 900)
   }
 
@@ -294,9 +297,10 @@ export function CustomerModal({ open, mode, onClose, onSelect }: CustomerModalPr
                           <Wallet className="h-3 w-3" /> {formatCurrency(customer.storeCredit, STORE.currency)} credit
                         </span>
                       )}
-                      {customer.giftCardBalance > 0 && (
+                      {(customer.giftCardNo || customer.giftCardBalance > 0) && (
                         <span className="flex items-center gap-1">
                           <Gift className="h-3 w-3" /> {formatCurrency(customer.giftCardBalance, STORE.currency)} gift
+                          {customer.giftCardNo ? ` ${customer.giftCardNo}` : ''}
                         </span>
                       )}
                     </div>

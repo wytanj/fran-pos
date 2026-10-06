@@ -12,6 +12,7 @@ import type { SkumsGraphRefs } from '@pos/shared'
 import type { FranSaleContext } from '@/pos/fran/types'
 import { buildSkumsSaleIdempotencyKey, getPosRegisterCode } from './skums-sale-adapter'
 import { getActiveStore } from './pos-store-config'
+import { rememberDemoGiftBalance, settleGiftCard } from './gift-card'
 
 export type PosMode = 'demo' | 'live'
 
@@ -431,6 +432,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     totals,
     user,
     receiptCounter,
+    mode,
   })
   saleSnapshotRef.current = {
     cart,
@@ -441,6 +443,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     totals,
     user,
     receiptCounter,
+    mode,
   }
 
   const completeSale = useCallback((options: CompleteSaleOptions = {}): CompletedSale => {
@@ -450,12 +453,20 @@ export function PosProvider({ children }: { children: ReactNode }) {
     const receiptNo = `${getActiveStore().code}-${String(snapshot.receiptCounter).padStart(6, '0')}`
     const isExchange = snapshot.cart.some((l) => l.qty < 0)
     const idempotencyKey = buildSkumsSaleIdempotencyKey({ receiptNo, completedAtIso })
+    const giftSettlement = settleGiftCard(snapshot.payments)
+    if (snapshot.mode === 'demo' && snapshot.customer && giftSettlement?.remaining != null) {
+      rememberDemoGiftBalance(snapshot.customer.id, giftSettlement.remaining)
+    }
+    const saleCustomer =
+      snapshot.customer && giftSettlement?.remaining != null
+        ? { ...snapshot.customer, giftCardBalance: giftSettlement.remaining }
+        : snapshot.customer
     const sale: CompletedSale = {
       receiptNo,
       saleStatus: 'completed',
       lines: snapshot.cart.map((line) => ({ ...line })),
       cartPriceOverride: snapshot.cartPriceOverride,
-      customer: snapshot.customer,
+      customer: saleCustomer,
       salesType: snapshot.salesType,
       payments: snapshot.payments.map((payment) => ({ ...payment })),
       subtotal: snapshot.totals.subtotal,

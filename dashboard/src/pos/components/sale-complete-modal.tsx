@@ -4,7 +4,9 @@ import { AlertCircle, Ban, CheckCircle2, Clock, Loader2, Mail, Plus, Printer, Re
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ReceiptPreview } from '@/pos/components/receipt-preview'
-import { cn } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
+import { STORE } from '@/pos/data/mock'
+import { settleGiftCard } from '@/pos/lib/gift-card'
 import { useCustomerEmailConnector } from '@/hooks/use-customer-email-connector'
 import {
   buildCustomerEmailReceiptPayload,
@@ -48,6 +50,7 @@ export function SaleCompleteModal({
   if (!sale) return null
   const sync = skumsSync ?? sale.skumsSync
   const pointsSummary = buildFranPointsSummary(sale)
+  const giftCard = settleGiftCard(sale.payments)
   const isVoided = sale.saleStatus === 'voided'
 
   const handleEmail = async () => {
@@ -124,6 +127,12 @@ export function SaleCompleteModal({
         )}
 
         <FranRewardReversalStatus sale={sale} />
+
+        {giftCard?.remaining != null && (
+          <p className="mb-3 text-center text-sm font-medium">
+            Gift card {giftCard.giftCardNo ? `${giftCard.giftCardNo} ` : ''}remaining: {formatCurrency(giftCard.remaining, STORE.currency)}
+          </p>
+        )}
 
         <div className="rounded-lg bg-secondary p-3">
           <ReceiptPreview sale={sale} />

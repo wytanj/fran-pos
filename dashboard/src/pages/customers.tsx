@@ -12,6 +12,7 @@ import { Plus, Search, UserPlus, Mail, Phone, ExternalLink, ShoppingCart, ArrowL
 import { toast } from 'sonner'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { splitCustomerFullName } from '@/pos/lib/customer-profile'
+import { readMetadataGiftCard } from '@/pos/lib/gift-card'
 import { ORDER_STATUSES } from '@pos/shared'
 import type { Customer, Order, OrderStatus } from '@pos/shared'
 
@@ -36,6 +37,13 @@ function customerDisplayName(c: Customer) {
   if (c.email) return c.email
   if (c.phone) return c.phone
   return 'Unnamed Customer'
+}
+
+function giftCardLabel(customer: Customer) {
+  const gift = readMetadataGiftCard(customer.metadata)
+  if (!gift) return null
+  const amount = formatCurrency(gift.balance, 'SGD')
+  return gift.giftCardNo ? `Gift card ${gift.giftCardNo} remaining: ${amount}` : `Gift card remaining: ${amount}`
 }
 
 function customerInitials(c: Customer) {
@@ -222,6 +230,9 @@ export default function CustomersPage() {
                         <Calendar className="h-3 w-3 shrink-0" /> {formatDate(customer.birthday)}
                       </span>
                     )}
+                    {giftCardLabel(customer) && (
+                      <span>{giftCardLabel(customer)}</span>
+                    )}
                   </div>
                 </div>
 
@@ -394,6 +405,9 @@ function CustomerDetail({
             )}
             {!customer.email && !customer.phone && !customer.birthday && (
               <p className="text-muted-foreground">No contact info</p>
+            )}
+            {giftCardLabel(customer) && (
+              <p>{giftCardLabel(customer)}</p>
             )}
             {customer.tags && customer.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 pt-2">

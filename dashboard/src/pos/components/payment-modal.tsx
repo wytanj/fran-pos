@@ -34,6 +34,14 @@ import {
 } from '@/pos/lib/stripe-terminal-api'
 import { stripeCentsToAmount } from '@/pos/lib/stripe-money'
 import { QrPaymentOverlay, type QrPaymentPhase } from '@/pos/components/qr-payment-overlay'
+import {
+  GIFT_CARD_TENDER,
+  nextTenderAmount,
+  remainingAfter,
+  roundMoney,
+  STORE_CREDIT_TENDER,
+  storedValueQuote,
+} from '@/pos/lib/gift-card'
 
 const ICONS: Record<string, typeof Banknote> = {
   cash: Banknote,
@@ -62,6 +70,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const { connector: stripe } = useStripeConnector()
   const [mode, setMode] = useState<PaymentModeId | null>(null)
   const [amount, setAmount] = useState('')
+  const [amountPrefill, setAmountPrefill] = useState(false)
   const [cardType, setCardType] = useState<string>(CARD_TYPES[0])
   const [terminalState, setTerminalState] = useState<'idle' | 'waiting' | 'approved'>('idle')
   const [terminalMessage, setTerminalMessage] = useState('')
@@ -143,8 +152,21 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   }, [open])
   const fullyPaid = remaining <= 0.001
   const paymentLimitReached = payments.length >= MAX_TENDERS_PER_PAYMENT
-  const storeCreditAvail = customer?.storeCredit ?? 0
-  const giftAvail = customer?.giftCardBalance ?? 0
+  const quoteFor = (paymentMode: string) =>
+    storedValueQuote({
+      balance:
+        paymentMode === GIFT_CARD_TENDER
+          ? (customer?.giftCardBalance ?? 0)
+          : paymentMode === STORE_CREDIT_TENDER
+            ? (customer?.storeCredit ?? 0)
+            : 0,
+      tenders: payments,
+      mode: paymentMode,
+      saleRemaining: Math.max(remaining, 0),
+    })
+  const giftQuote = quoteFor(GIFT_CARD_TENDER)
+  const creditQuote = quoteFor(STORE_CREDIT_TENDER)
+  const storedValueMode = mode === GIFT_CARD_TENDER || mode === STORE_CREDIT_TENDER
 
   const reset = () => {
     chargeGen.current += 1
@@ -152,6 +174,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     terminalTimers.current = []
     setMode(null)
     setAmount('')
+    setAmountPrefill(false)
     setTerminalState('idle')
     setTerminalMessage('')
     setTerminalError('')
@@ -201,8 +224,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
 
   const getTenderLimit = (paymentMode: PaymentModeId | null) => {
     if (!paymentMode) return Math.max(remaining, 0)
-    if (paymentMode === 'store-credit') return Math.min(storeCreditAvail, Math.max(remaining, 0))
-    if (paymentMode === 'gift-card') return Math.min(giftAvail, Math.max(remaining, 0))
+    if (paymentMode === STORE_CREDIT_TENDER || paymentMode === GIFT_CARD_TENDER) return quoteFor(paymentMode).maxRedeem
     return Math.max(remaining, 0)
   }
 
@@ -228,6 +250,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const chooseMode = (paymentMode: PaymentModeId) => {
     setMode(paymentMode)
     setAmount(getTenderLimit(paymentMode).toFixed(2))
+    setAmountPrefill(paymentMode === GIFT_CARD_TENDER || paymentMode === STORE_CREDIT_TENDER)
     if (paymentMode === 'paynow' || paymentMode === 'wechat') {
       logTapToPayTrace('qr tile opened: ' + paymentMode)
     }
@@ -527,14 +550,25 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
       }, 1200)
       return
     }
-    if (mode === 'store-credit') {
-      const max = Math.min(customer?.storeCredit ?? 0, remaining)
-      commit('Store Credit', Math.min(amountNum || max, max))
+    if (mode === STORE_CREDIT_TENDER) {
+      const max = creditQuote.maxRedeem
+      if (amountNum <= 0 || amountNum > max + 0.001) return
+      commit('Store Credit', roundMoney(Math.min(amountNum, max)))
       return
     }
-    if (mode === 'gift-card') {
-      const max = Math.min(customer?.giftCardBalance ?? 0, remaining)
-      commit(`Gift Card ${customer?.giftCardNo ?? ''}`.trim(), Math.min(amountNum || max, max))
+    if (mode === GIFT_CARD_TENDER) {
+      const max = giftQuote.maxRedeem
+      if (amountNum <= 0 || amountNum > max + 0.001) return
+      const redeemed = roundMoney(Math.min(amountNum, max))
+      commit(`Gift Card ${customer?.giftCardNo ?? ''}`.trim(), redeemed, undefined, {
+        status: 'captured',
+        providerMetadata: {
+          gift_card_no: customer?.giftCardNo ?? null,
+          balance_before: giftQuote.available,
+          redeemed,
+          balance_after: remainingAfter(giftQuote.available, redeemed),
+        },
+      })
       return
     }
     if (mode === 'paynow' || mode === 'wechat') {
@@ -599,6 +633,11 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                 >
                   <span>
                     {p.label} {p.detail}
+                    {p.mode === GIFT_CARD_TENDER && typeof p.providerMetadata?.balance_after === 'number' && (
+                      <span className="block text-xs opacity-80">
+                        remaining {formatCurrency(p.providerMetadata.balance_after, STORE.currency)}
+                      </span>
+                    )}
                   </span>
                   <span className="flex items-center gap-2 tabular-nums">
                     {formatCurrency(p.amount, STORE.currency)}
@@ -696,15 +735,19 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                 </div>
 
                 {/* Mode-specific context */}
-                {mode === 'store-credit' && (
+                {mode === STORE_CREDIT_TENDER && (
                   <p className="mb-2 text-xs text-muted-foreground">
-                    Available credit: {formatCurrency(storeCreditAvail, STORE.currency)}
+                    Balance {formatCurrency(creditQuote.available, STORE.currency)} · Using{' '}
+                    {formatCurrency(amountNum, STORE.currency)} · Remaining after{' '}
+                    {formatCurrency(remainingAfter(creditQuote.available, Math.min(amountNum, creditQuote.maxRedeem)), STORE.currency)}
                     {!customer && ' — tag a member first'}
                   </p>
                 )}
-                {mode === 'gift-card' && (
+                {mode === GIFT_CARD_TENDER && (
                   <p className="mb-2 text-xs text-muted-foreground">
-                    Gift card {customer?.giftCardNo ?? '—'}: {formatCurrency(giftAvail, STORE.currency)}
+                    Balance {formatCurrency(giftQuote.available, STORE.currency)} · Redeeming{' '}
+                    {formatCurrency(amountNum, STORE.currency)} · Remaining after{' '}
+                    {formatCurrency(remainingAfter(giftQuote.available, Math.min(amountNum, giftQuote.maxRedeem)), STORE.currency)}
                   </p>
                 )}
                 {mode === 'paynow' && (
@@ -788,7 +831,10 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                       {quickAmounts.map((q) => (
                         <button
                           key={q}
-                          onClick={() => setAmount(q.toFixed(2))}
+                          onClick={() => {
+                            setAmount(q.toFixed(2))
+                            setAmountPrefill(storedValueMode)
+                          }}
                           className="rounded-md border py-1.5 text-xs font-medium transition-colors hover:bg-accent cursor-pointer"
                         >
                           {formatCurrency(q, STORE.currency)}
@@ -798,10 +844,14 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                     <Numpad
                       decimal
                       onPress={(k) => {
-                        if (k === '.' && amount.includes('.')) return
-                        setAmount((a) => a + k)
+                        const next = nextTenderAmount(amount, k, storedValueMode && amountPrefill)
+                        setAmount(next.amount)
+                        setAmountPrefill(next.replacePrefill)
                       }}
-                      onBackspace={() => setAmount((a) => a.slice(0, -1))}
+                      onBackspace={() => {
+                        setAmountPrefill(false)
+                        setAmount((a) => a.slice(0, -1))
+                      }}
                     />
                   </>
                 )}
@@ -822,10 +872,10 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                       className="mt-3 h-11 w-full text-base"
                       onClick={() => void handleConfirm()}
                       disabled={
-                        (mode === 'store-credit' && storeCreditAvail <= 0) ||
-                        (mode === 'gift-card' && giftAvail <= 0) ||
+                        (mode === STORE_CREDIT_TENDER && creditQuote.available <= 0) ||
+                        (mode === GIFT_CARD_TENDER && giftQuote.available <= 0) ||
                         amountTooHigh ||
-                        (mode === 'cash' ? amountNum <= 0 : amountNum < 0) ||
+                        (storedValueMode || mode === 'cash' ? amountNum <= 0 : amountNum < 0) ||
                         ((mode === 'paynow' || mode === 'wechat') && (amountNum || remaining) < 0.5)
                       }
                     >
