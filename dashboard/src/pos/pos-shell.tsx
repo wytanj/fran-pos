@@ -33,6 +33,7 @@ import { useCompanySettings } from '@/hooks/use-settings'
 import { BrandMark } from '@/components/brand-mark'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { useS700Status } from '@/hooks/use-s700-status'
+import { usePosImmersive } from '@/pos/lib/pos-immersive'
 
 const NAV_COLLAPSED_KEY = 'fran-pos-nav-collapsed'
 
@@ -69,6 +70,8 @@ export function PosShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(readNavCollapsed)
   const [rosterZoneLabel, setRosterZoneLabel] = useState<string | null>(null)
+
+  usePosImmersive(true)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000 * 30)

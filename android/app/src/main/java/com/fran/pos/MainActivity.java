@@ -24,6 +24,8 @@ public class MainActivity extends BridgeActivity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    // Galaxy Tab store registers stay awake on the counter next to the S700.
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     requestRuntimePermissions();
     attachMirrorOrientation();
   }
@@ -38,12 +40,13 @@ public class MainActivity extends BridgeActivity {
         @Override
         public void onPageLoaded(WebView webView) {
           if (webView == null) return;
-          boolean mirror = mirrorPathRequestsPortrait(webView.getUrl());
-          if (mirror) {
+          String url = webView.getUrl();
+          boolean portrait = mirrorPathRequestsPortrait(url);
+          boolean immersive = posPathRequestsImmersive(url);
+          if (portrait) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
           }
-          setMirrorImmersive(mirror);
-          if (!mirror) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+          setPosImmersive(immersive);
         }
       }
     );
@@ -53,6 +56,7 @@ public class MainActivity extends BridgeActivity {
     @JavascriptInterface
     public void applyPath(String path) {
       final boolean portrait = mirrorPathRequestsPortrait(path);
+      final boolean immersive = posPathRequestsImmersive(path);
       runOnUiThread(
         () -> {
           setRequestedOrientation(
@@ -60,24 +64,24 @@ public class MainActivity extends BridgeActivity {
               ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
               : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
           );
-          setMirrorImmersive(portrait);
+          setPosImmersive(immersive);
         }
       );
     }
 
     @JavascriptInterface
     public void setSession(boolean live) {
+      // Mirror can reinforce keep-awake while paired; cashier already has FLAG_KEEP_SCREEN_ON in onCreate.
       runOnUiThread(
         () -> {
           if (live) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-          else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
       );
     }
   }
 
   @SuppressWarnings("deprecation")
-  private void setMirrorImmersive(boolean immersive) {
+  private void setPosImmersive(boolean immersive) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       WindowInsetsController controller = getWindow().getInsetsController();
       if (controller == null) return;
@@ -101,9 +105,21 @@ public class MainActivity extends BridgeActivity {
   }
 
   static boolean mirrorPathRequestsPortrait(String raw) {
-    if (raw == null) return false;
+    String path = pathOnly(raw);
+    if (path == null) return false;
+    return path.endsWith("/pos/mirror") || path.contains("/pos/mirror/");
+  }
+
+  static boolean posPathRequestsImmersive(String raw) {
+    String path = pathOnly(raw);
+    if (path == null) return false;
+    return path.equals("/pos") || path.startsWith("/pos/");
+  }
+
+  static String pathOnly(String raw) {
+    if (raw == null) return null;
     String path = raw.trim();
-    if (path.isEmpty()) return false;
+    if (path.isEmpty()) return null;
     int scheme = path.indexOf("://");
     if (scheme >= 0) {
       int slash = path.indexOf('/', scheme + 3);
@@ -114,7 +130,7 @@ public class MainActivity extends BridgeActivity {
     int hash = path.indexOf('#');
     if (hash >= 0) path = path.substring(0, hash);
     if (path.length() > 1 && path.endsWith("/")) path = path.substring(0, path.length() - 1);
-    return path.endsWith("/pos/mirror") || path.contains("/pos/mirror/");
+    return path;
   }
 
   private void requestRuntimePermissions() {

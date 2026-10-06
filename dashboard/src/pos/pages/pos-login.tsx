@@ -8,6 +8,7 @@ import { USERS, STORE, type PosRole } from '@/pos/data/mock'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/providers/auth-provider'
 import { BrandMark } from '@/components/brand-mark'
+import { usePosImmersive } from '@/pos/lib/pos-immersive'
 import {
   HRM_POS_PIN_DIGITS,
   clearRegisterBinding,
@@ -19,6 +20,7 @@ import {
 } from '@/pos/lib/hrm-pos-auth'
 
 export default function PosLogin() {
+  usePosImmersive(true)
   const { mode, setMode, setUser } = usePos()
   const { user, company, signInWithGoogle, signOut, hydrateRegisterCompany } = useAuth()
   const navigate = useNavigate()

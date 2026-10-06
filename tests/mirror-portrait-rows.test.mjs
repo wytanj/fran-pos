@@ -25,7 +25,7 @@ test('mirror basket rows wrap the full line name and keep qty, price, and scroll
   assert.match(row[0], /money\(line\.net\)/)
 })
 
-test('mirror wake and nav chrome stay on the mirror route and off the cashier sale page', () => {
+test('mirror wake/session + POS immersive; cashier sale page does not own mirror wake APIs', () => {
   const face = readFileSync(new URL('../dashboard/src/pos/pages/mirror-face.tsx', import.meta.url), 'utf8')
   const orientation = readFileSync(new URL('../dashboard/src/pos/mirror/mirror-orientation.ts', import.meta.url), 'utf8')
   const activity = readFileSync(
@@ -44,10 +44,11 @@ test('mirror wake and nav chrome stay on the mirror route and off the cashier sa
   assert.match(orientation, /function postMirrorSession/)
   assert.match(orientation, /MIRROR_RELEASE_PATH = '\/pos\/sale'/)
   assert.match(orientation, /navigationUI: 'hide'/)
-  assert.doesNotMatch(onCreate, /FLAG_KEEP_SCREEN_ON/)
+  // #39: cashier registers stay awake via onCreate FLAG; mirror setSession reinforces while paired.
+  assert.match(onCreate, /FLAG_KEEP_SCREEN_ON/)
   assert.match(activity, /void setSession\(boolean live\)/)
   assert.match(activity, /FLAG_KEEP_SCREEN_ON/)
-  assert.match(activity, /clearFlags/)
+  assert.match(activity, /setPosImmersive/)
   assert.match(activity, /navigationBars\(\)/)
   assert.match(activity, /BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE/)
   assert.doesNotMatch(sale, /postMirrorSession|enterMirrorImmersive|FLAG_KEEP_SCREEN_ON/)
