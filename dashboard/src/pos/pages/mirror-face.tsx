@@ -15,10 +15,15 @@ import {
   type MirrorJoinResult,
 } from '@/pos/mirror/mirror-api'
 import {
+  enterMirrorImmersive,
+  leaveMirrorImmersive,
   lockPortrait,
   postMirrorPath,
+  postMirrorSession,
+  releaseMirrorPath,
   unlockPortrait,
 } from '@/pos/mirror/mirror-orientation'
+import QRCode from 'qrcode'
 import {
   MIRROR_IDLE_PROMOS,
   formatMirrorMoney,
@@ -39,6 +44,12 @@ const POLL_MS = 1000
 const RECONNECTING_AFTER_FAILURES = 3
 const PROMO_ROTATE_MS = 8000
 
+/** Membership join / scan URL for guest basket QR. Override via VITE_MEMBERSHIP_URL. */
+const MEMBERSHIP_SCAN_URL =
+  (import.meta.env.VITE_MEMBERSHIP_URL as string | undefined)?.trim() ||
+  (import.meta.env.VITE_FRAN_MEMBERSHIP_URL as string | undefined)?.trim() ||
+  'https://fran.sg/m' // placeholder until prod membership URL is wired
+
 function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   return {
     v: 1,
@@ -48,12 +59,19 @@ function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   }
 }
 
-function useScreenWakeLock() {
+function useScreenWakeLock(live: boolean) {
   useEffect(() => {
+    if (!live) return
     let lock: { release: () => Promise<void> } | null = null
+    let cancelled = false
     const request = async () => {
       try {
-        lock = (await navigator.wakeLock?.request('screen')) ?? null
+        const next = (await navigator.wakeLock?.request('screen')) ?? null
+        if (cancelled) {
+          void next?.release().catch(() => undefined)
+          return
+        }
+        lock = next
       } catch {
         lock = null
       }
@@ -64,10 +82,18 @@ function useScreenWakeLock() {
     void request()
     document.addEventListener('visibilitychange', onVisible)
     return () => {
+      cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
       void lock?.release().catch(() => undefined)
     }
-  }, [])
+  }, [live])
+}
+
+function useMirrorSession(live: boolean) {
+  useEffect(() => {
+    postMirrorSession(live)
+    return () => postMirrorSession(false)
+  }, [live])
 }
 
 function useMirrorPortraitLock() {
@@ -77,6 +103,9 @@ function useMirrorPortraitLock() {
       postMirrorPath(window.location.href)
       void lockPortrait().then(() => {
         if (cancelled) unlockPortrait()
+      })
+      void enterMirrorImmersive().then(() => {
+        if (cancelled) leaveMirrorImmersive()
       })
     }
     const onVisible = () => {
@@ -88,8 +117,8 @@ function useMirrorPortraitLock() {
       cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
       unlockPortrait()
-      // Release Android SENSOR_PORTRAIT even if href still looks like /pos/mirror during unmount.
-      postMirrorPath('/pos/sale')
+      leaveMirrorImmersive()
+      releaseMirrorPath()
     }
   }, [])
 }
@@ -105,7 +134,9 @@ export default function MirrorFacePage() {
   const [failures, setFailures] = useState(0)
   const seqRef = useRef(0)
 
-  useScreenWakeLock()
+  const live = state.kind === 'live'
+  useScreenWakeLock(live)
+  useMirrorSession(live)
   useMirrorPortraitLock()
 
   const onJoined = useCallback((joined: MirrorJoinResult) => {
@@ -226,7 +257,7 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
           <p className="font-display text-6xl font-bold">Thank you{snapshot.memberName ? `, ${snapshot.memberName}` : ''}</p>
           <p className="text-2xl text-muted-foreground">
-            Paid {formatMirrorMoney(snapshot.nett, snapshot.store.currency)} Ã‚Â· Receipt {snapshot.receiptNo}
+            Paid {formatMirrorMoney(snapshot.nett, snapshot.store.currency)} {'\u00b7'} Receipt {snapshot.receiptNo}
           </p>
           {snapshot.giftCard && (
             <p className="text-2xl">
@@ -283,13 +314,34 @@ function BasketView({
   giftCard?: MirrorGiftCard
 }) {
   const money = (n: number) => formatMirrorMoney(n, store.currency)
+  const showJoinQr = !basket.member
+  const [joinQr, setJoinQr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!showJoinQr) {
+      setJoinQr(null)
+      return
+    }
+    let cancelled = false
+    QRCode.toDataURL(MEMBERSHIP_SCAN_URL, { margin: 1, width: 128 })
+      .then((url) => {
+        if (!cancelled) setJoinQr(url)
+      })
+      .catch(() => {
+        if (!cancelled) setJoinQr(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showJoinQr])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-2xl bg-white px-5 shadow-warm-xs" data-testid="mirror-lines">
         {basket.lines.map((line) => (
           <li key={line.id} className="flex items-baseline justify-between gap-4 py-4 text-2xl">
             <span className="min-w-0 flex-1 truncate">{line.name}</span>
-            <span className="shrink-0 text-muted-foreground">Ãƒâ€”{line.qty}</span>
+            <span className="shrink-0 text-muted-foreground">{'\u00d7'}{line.qty}</span>
             <span className="w-32 shrink-0 text-right font-semibold tabular-nums">{money(line.net)}</span>
           </li>
         ))}
@@ -300,7 +352,9 @@ function BasketView({
           <div className="flex items-baseline justify-between gap-3 rounded-xl bg-secondary px-4 py-3 text-xl">
             <span className="font-semibold">
               {basket.member.name}
-              {basket.member.tierLabel && <span className="font-normal text-muted-foreground"> Ã‚Â· {basket.member.tierLabel}</span>}
+              {basket.member.tierLabel && (
+                <span className="font-normal text-muted-foreground"> {'\u00b7'} {basket.member.tierLabel}</span>
+              )}
             </span>
             {basket.member.pointsToEarn !== null && basket.member.pointsToEarn > 0 && (
               <span className="text-success">+{basket.member.pointsToEarn} pts</span>
@@ -310,25 +364,50 @@ function BasketView({
         {basket.tierNudge && (
           <p className="rounded-xl bg-yellow px-4 py-3 text-center text-xl font-semibold">{basket.tierNudge}</p>
         )}
-        <div className="flex justify-between text-xl text-muted-foreground">
-          <span>Subtotal Ã‚Â· {basket.itemCount} {basket.itemCount === 1 ? 'item' : 'items'}</span>
-          <span className="tabular-nums">{money(basket.subtotal)}</span>
-        </div>
         {basket.rewards.map((reward) => (
           <div key={reward.id} className="flex justify-between text-xl text-success" data-testid="mirror-reward">
             <span className="min-w-0 truncate">{reward.label}</span>
             <span className="tabular-nums">{money(reward.amount)}</span>
           </div>
         ))}
-        <div className="flex items-end justify-between border-t border-line pt-3">
-          <span className="text-2xl font-semibold">Nett</span>
-          <span className="font-display text-6xl font-bold tabular-nums" data-testid="mirror-nett">
-            {money(basket.nett)}
-          </span>
+        <div
+          className={cn('flex items-center gap-4', showJoinQr ? 'justify-between' : 'justify-end')}
+          data-testid="mirror-totals-row"
+        >
+          {showJoinQr && (
+            <div className="flex shrink-0 flex-col items-center gap-1" data-testid="mirror-membership-qr">
+              {joinQr ? (
+                <img
+                  src={joinQr}
+                  alt="Scan to join membership"
+                  className="h-20 w-20 rounded-md bg-white"
+                  width={80}
+                  height={80}
+                />
+              ) : (
+                <div className="h-20 w-20 rounded-md bg-surface-sunken" aria-hidden />
+              )}
+              <span className="text-xs font-medium text-muted-foreground">Scan to join</span>
+            </div>
+          )}
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex justify-between text-xl text-muted-foreground">
+              <span>
+                Subtotal {'\u00b7'} {basket.itemCount} {basket.itemCount === 1 ? 'item' : 'items'}
+              </span>
+              <span className="tabular-nums">{money(basket.subtotal)}</span>
+            </div>
+            <div className="flex items-end justify-between border-t border-line pt-2">
+              <span className="text-2xl font-semibold">Nett</span>
+              <span className="font-display text-6xl font-bold tabular-nums" data-testid="mirror-nett">
+                {money(basket.nett)}
+              </span>
+            </div>
+          </div>
         </div>
         {amountDue !== null && (
           <div className="rounded-xl bg-brown px-4 py-4 text-center text-cream">
-            <p className="text-lg">Amount due Ã‚Â· pay on the card reader</p>
+            <p className="text-lg">Amount due {'\u00b7'} pay on the card reader</p>
             <p className="font-display text-5xl font-bold tabular-nums">{money(amountDue)}</p>
           </div>
         )}

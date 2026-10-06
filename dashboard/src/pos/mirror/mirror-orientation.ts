@@ -1,9 +1,16 @@
 const MIRROR_SEGMENT = '/pos/mirror'
 const PORTRAIT_LOCKS = ['portrait', 'portrait-primary'] as const
+const MIRROR_RELEASE_PATH = '/pos/sale'
 
 export function mirrorPathRequestsPortrait(raw: string): boolean {
   const path = pathOnly(raw)
   return path.endsWith(MIRROR_SEGMENT) || path.includes(`${MIRROR_SEGMENT}/`)
+}
+
+/** Immersive (hide system nav) for any POS route: cashier shell, login, mirror. */
+export function posPathRequestsImmersive(raw: string): boolean {
+  const path = pathOnly(raw)
+  return path === '/pos' || path.startsWith('/pos/')
 }
 
 function pathOnly(raw: string): string {
@@ -23,6 +30,10 @@ function pathOnly(raw: string): string {
   return path
 }
 
+export function releaseMirrorPath(): void {
+  postMirrorPath(MIRROR_RELEASE_PATH)
+}
+
 export function postMirrorPath(path: string): void {
   const host: object = window
   if (!('FranOrientation' in host)) return
@@ -31,6 +42,16 @@ export function postMirrorPath(path: string): void {
   const applyPath = bridge.applyPath
   if (typeof applyPath !== 'function') return
   Reflect.apply(applyPath, bridge, [path])
+}
+
+export function postMirrorSession(live: boolean): void {
+  const host: object = window
+  if (!('FranOrientation' in host)) return
+  const bridge = host.FranOrientation
+  if (typeof bridge !== 'object' || bridge === null || !('setSession' in bridge)) return
+  const setSession = bridge.setSession
+  if (typeof setSession !== 'function') return
+  Reflect.apply(setSession, bridge, [live])
 }
 
 export async function lockPortrait(): Promise<void> {
@@ -58,4 +79,20 @@ export function unlockPortrait(): void {
   } catch {
     return
   }
+}
+
+/** Game-like fullscreen: hide browser chrome (PWA / Cap / Chrome). */
+export async function enterMirrorImmersive(): Promise<void> {
+  const root = document.documentElement
+  if (document.fullscreenElement != null || typeof root.requestFullscreen !== 'function') return
+  try {
+    await root.requestFullscreen({ navigationUI: 'hide' })
+  } catch {
+    return
+  }
+}
+
+export function leaveMirrorImmersive(): void {
+  if (document.fullscreenElement == null || typeof document.exitFullscreen !== 'function') return
+  void document.exitFullscreen().catch(() => undefined)
 }

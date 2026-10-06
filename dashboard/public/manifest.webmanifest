@@ -1,0 +1,20 @@
+{
+  "name": "Fran POS",
+  "short_name": "Fran POS",
+  "description": "Fran store register and customer display",
+  "start_url": "/pos/sale",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#FFFEF5",
+  "theme_color": "#FFFEF5",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
