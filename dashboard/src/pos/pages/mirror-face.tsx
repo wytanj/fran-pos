@@ -339,10 +339,21 @@ function BasketView({
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-2xl bg-white px-5 shadow-warm-xs" data-testid="mirror-lines">
         {basket.lines.map((line) => (
-          <li key={line.id} className="flex items-baseline justify-between gap-4 py-4 text-2xl">
-            <span className="min-w-0 flex-1 truncate">{line.name}</span>
+          <li key={line.id} className="flex items-baseline justify-between gap-4 py-8 text-2xl">
+            <span className="min-w-0 flex-1 whitespace-normal break-words">{line.name}</span>
             <span className="shrink-0 text-muted-foreground">{'\u00d7'}{line.qty}</span>
-            <span className="w-32 shrink-0 text-right font-semibold tabular-nums">{money(line.net)}</span>
+            <span className="shrink-0 text-right tabular-nums">
+              {line.discount != null && line.discount !== 0 && line.list != null && (
+                <>
+                  <span className="block text-xl text-muted-foreground line-through">{money(line.list)}</span>
+                  <span className="block text-xl text-success">
+                    {line.discountLabel ? `${line.discountLabel} ` : ''}
+                    {money(-line.discount)}
+                  </span>
+                </>
+              )}
+              <span className="block font-semibold">{money(line.net)}</span>
+            </span>
           </li>
         ))}
       </ul>
