@@ -50,6 +50,9 @@ const MEMBERSHIP_SCAN_URL =
   (import.meta.env.VITE_FRAN_MEMBERSHIP_URL as string | undefined)?.trim() ||
   'https://fran.sg/m' // placeholder until prod membership URL is wired
 
+const MEMBERSHIP_QR_BOX = 'h-[min(3cm,7.5rem)] w-[min(3cm,7.5rem)] rounded-md'
+const MEMBERSHIP_QR_RASTER = 360
+
 function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   return {
     v: 1,
@@ -323,7 +326,7 @@ function BasketView({
       return
     }
     let cancelled = false
-    QRCode.toDataURL(MEMBERSHIP_SCAN_URL, { margin: 1, width: 128 })
+    QRCode.toDataURL(MEMBERSHIP_SCAN_URL, { margin: 1, width: MEMBERSHIP_QR_RASTER })
       .then((url) => {
         if (!cancelled) setJoinQr(url)
       })
@@ -391,12 +394,12 @@ function BasketView({
                 <img
                   src={joinQr}
                   alt="Scan to join membership"
-                  className="h-20 w-20 rounded-md bg-white"
-                  width={80}
-                  height={80}
+                  className={`${MEMBERSHIP_QR_BOX} bg-white`}
+                  width={120}
+                  height={120}
                 />
               ) : (
-                <div className="h-20 w-20 rounded-md bg-surface-sunken" aria-hidden />
+                <div className={`${MEMBERSHIP_QR_BOX} bg-surface-sunken`} aria-hidden />
               )}
               <span className="text-xs font-medium text-muted-foreground">Scan to join</span>
             </div>
