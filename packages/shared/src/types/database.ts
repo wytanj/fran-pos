@@ -471,6 +471,12 @@ export interface PosConfig {
 
 export type StripeTerminalReaderKind = 's700' | 'tap_to_pay' | 'auto'
 
+export interface S700ReaderConfig {
+  id: string
+  label: string
+  register_id?: string | null
+}
+
 export interface StripeTerminalSettings {
   enabled: boolean
   /** Stripe test mode — uses test keys and simulated present_payment_method. */
@@ -478,6 +484,8 @@ export interface StripeTerminalSettings {
   location_id: string
   /** Registered S700/S710 reader id (tmr_...). Required for server-driven S700. */
   s700_reader_id: string
+  /** Extra readers. An empty list still uses s700_reader_id. */
+  s700_readers?: S700ReaderConfig[]
   /** Display name shown on the reader and Tap to Pay sheet. */
   merchant_display_name: string
   /** Store kit default is S700 (Galaxy Tab is the cashier screen). */

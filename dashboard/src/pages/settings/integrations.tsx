@@ -15,11 +15,15 @@ import {
   collectS700Inputs,
   createStripeLocation,
   listStripeLocations,
+  listStripeReaders,
   registerStripeReader,
   stripeTerminalHealth,
   waitForS700Action,
   type S700DemoForm,
+  type StripeListedReader,
 } from '@/pos/lib/stripe-terminal-api'
+import type { S700ReaderConfig } from '@pos/shared'
+import { configuredS700Readers, readerIdAfterEdit, reRegisterNeedsConfirm } from '@/pos/lib/s700-readers'
 import { maskCustomerEmailToken } from '@/pos/lib/customer-email-connector'
 import { listSkumsPosCatalog } from '@/pos/lib/skums-client'
 import { buildSkumsConnectorSettings, maskSkumsApiKey, toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
@@ -63,11 +67,13 @@ export default function IntegrationsPage() {
     simulated: true,
     location_id: '',
     s700_reader_id: '',
+    s700_readers: [] as S700ReaderConfig[],
     merchant_display_name: 'Fran Beauty',
     default_reader: 's700' as 's700' | 'tap_to_pay' | 'auto',
     registration_code: '',
   })
   const [stripeHealth, setStripeHealth] = useState('')
+  const [stripeReaders, setStripeReaders] = useState<StripeListedReader[] | null>(null)
   const [readerDemoBusy, setReaderDemoBusy] = useState(false)
   const [readerDemoResult, setReaderDemoResult] = useState('')
   const [franForm, setFranForm] = useState(() => {
@@ -106,9 +112,11 @@ export default function IntegrationsPage() {
       simulated: saved.simulated,
       location_id: saved.location_id || '',
       s700_reader_id: saved.s700_reader_id || '',
+      s700_readers: configuredS700Readers(saved),
       merchant_display_name: saved.merchant_display_name || 'Fran Beauty',
       default_reader: saved.default_reader || 's700',
     }))
+    void refreshStripeReaders(saved.location_id || '', Boolean(saved.simulated))
   }, [settings])
 
   useEffect(() => {
@@ -201,16 +209,56 @@ export default function IntegrationsPage() {
     }
   }
 
-  const handleRegisterReader = async () => {
+  const refreshStripeReaders = async (locationId: string, simulated: boolean) => {
+    try {
+      const { readers } = await listStripeReaders({ location_id: locationId, simulated })
+      setStripeReaders(readers)
+    } catch {
+      setStripeReaders(null)
+    }
+  }
+
+  const rememberReader = (
+    current: typeof stripeForm,
+    reader: { id: string; label: string | null },
+    replaceIndex: number | null,
+  ) => {
+    const label = reader.label || 'S700'
+    let s700_readers = current.s700_readers
+    if (replaceIndex != null && s700_readers[replaceIndex]) {
+      s700_readers = s700_readers.map((row, index) => (
+        index === replaceIndex ? { ...row, id: reader.id, label: row.label || label } : row
+      ))
+    } else if (s700_readers.some((row) => row.id === reader.id)) {
+      s700_readers = s700_readers.map((row) => (
+        row.id === reader.id ? { ...row, label: row.label || label } : row
+      ))
+    } else {
+      s700_readers = [...s700_readers, { id: reader.id, label, register_id: null }]
+    }
+    return {
+      ...current,
+      s700_readers,
+      s700_reader_id: readerIdAfterEdit(s700_readers, current.s700_reader_id || reader.id),
+      registration_code: '',
+    }
+  }
+
+  const handleRegisterReader = async (replaceIndex: number | null = null) => {
     try {
       if (!stripeForm.location_id) throw new Error('Create or paste a location first')
+      if (!stripeForm.registration_code.trim()) throw new Error('Enter the pairing code from the reader first')
+      const row = replaceIndex == null ? null : stripeForm.s700_readers[replaceIndex]
+      const pairedIds = (stripeReaders || []).map((reader) => reader.id)
+      if (row && reRegisterNeedsConfirm(row.id, pairedIds) && !window.confirm('This restarts the reader')) return
       const { reader } = await registerStripeReader({
         registration_code: stripeForm.registration_code,
         location_id: stripeForm.location_id,
-        label: stripeForm.merchant_display_name || 'Fran S700',
+        label: row?.label || stripeForm.merchant_display_name || 'Fran S700',
       })
-      setStripeForm((current) => ({ ...current, s700_reader_id: reader.id, registration_code: '' }))
+      setStripeForm((current) => rememberReader(current, reader, replaceIndex))
       toast.success(`Registered reader ${reader.id}`)
+      void refreshStripeReaders(stripeForm.location_id, stripeForm.simulated)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not register reader')
     }
@@ -418,13 +466,118 @@ export default function IntegrationsPage() {
                 placeholder="tml_..."
               />
             </div>
-            <div className="space-y-2">
-              <Label>S700 reader ID</Label>
-              <Input
-                value={stripeForm.s700_reader_id}
-                onChange={(e) => setStripeForm({ ...stripeForm, s700_reader_id: e.target.value })}
-                placeholder="tmr_..."
-              />
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>S700 readers</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStripeForm((current) => ({
+                    ...current,
+                    s700_readers: [...current.s700_readers, { id: '', label: 'S700', register_id: null }],
+                  }))}
+                >
+                  Add reader
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {stripeForm.s700_readers.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No readers saved yet.</p>
+                )}
+                {stripeForm.s700_readers.map((row, index) => {
+                  const live = stripeReaders?.find((reader) => reader.id === row.id) || null
+                  const status = !row.id || (stripeReaders != null && !live) ? 'Not paired yet' : live?.status === 'online' ? 'Online' : live ? 'Offline' : row.id
+                  return (
+                    <div key={`${row.id || 'new'}-${index}`} className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_1fr_8rem_auto]">
+                      <Input
+                        value={row.label}
+                        aria-label={`Reader ${index + 1} label`}
+                        placeholder="Label"
+                        onChange={(event) => setStripeForm((current) => ({
+                          ...current,
+                          s700_readers: current.s700_readers.map((item, itemIndex) => (
+                            itemIndex === index ? { ...item, label: event.target.value } : item
+                          )),
+                        }))}
+                      />
+                      <Input
+                        value={row.id}
+                        aria-label={`Reader ${index + 1} id`}
+                        placeholder="tmr_... or leave blank"
+                        onChange={(event) => {
+                          const id = event.target.value
+                          setStripeForm((current) => {
+                            const s700_readers = current.s700_readers.map((item, itemIndex) => (
+                              itemIndex === index ? { ...item, id } : item
+                            ))
+                            return {
+                              ...current,
+                              s700_readers,
+                              s700_reader_id: readerIdAfterEdit(s700_readers, current.s700_reader_id),
+                            }
+                          })
+                        }}
+                      />
+                      <Input
+                        value={row.register_id || ''}
+                        aria-label={`Reader ${index + 1} register`}
+                        placeholder="Register"
+                        onChange={(event) => setStripeForm((current) => ({
+                          ...current,
+                          s700_readers: current.s700_readers.map((item, itemIndex) => (
+                            itemIndex === index ? { ...item, register_id: event.target.value.trim() || null } : item
+                          )),
+                        }))}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{status}</span>
+                        {row.id && live && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => void handleRegisterReader(index)}>
+                            Re-register
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setStripeForm((current) => {
+                            const s700_readers = current.s700_readers.filter((_, itemIndex) => itemIndex !== index)
+                            return {
+                              ...current,
+                              s700_readers,
+                              s700_reader_id: readerIdAfterEdit(s700_readers, current.s700_reader_id),
+                            }
+                          })}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+                {(stripeReaders || []).filter((reader) => !stripeForm.s700_readers.some((row) => row.id === reader.id)).map((reader) => (
+                  <div key={reader.id} className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-3 text-sm">
+                    <span className="min-w-0 truncate">{reader.label || reader.id}</span>
+                    <span className="text-xs text-muted-foreground">{reader.status || 'unknown'}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStripeForm((current) => {
+                        const s700_readers = [...current.s700_readers, { id: reader.id, label: reader.label || 'S700', register_id: null }]
+                        return {
+                          ...current,
+                          s700_readers,
+                          s700_reader_id: readerIdAfterEdit(s700_readers, current.s700_reader_id),
+                        }
+                      })}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Register S700 pairing code</Label>
@@ -440,7 +593,7 @@ export default function IntegrationsPage() {
             <div className="rounded-lg bg-secondary p-3 text-sm">
               <p className="font-medium">Stripe Terminal configured</p>
               <p className="mt-1 text-muted-foreground">
-                Location {stripe.location_id || 'not set'} · Reader {stripe.s700_reader_id || 'not set'}
+                Location {stripe.location_id || 'not set'} · Readers {(stripe.s700_readers && stripe.s700_readers.length > 0 ? stripe.s700_readers.map((reader) => reader.label).join(', ') : stripe.s700_reader_id) || 'not set'}
                 {stripe.simulated ? ' · Simulated' : ' · Live hardware'}
               </p>
               {stripeHealth && <p className="mt-1 text-xs text-muted-foreground">{stripeHealth}</p>}
@@ -475,7 +628,8 @@ export default function IntegrationsPage() {
             <Button variant="outline" onClick={() => void handleStripeHealth()}>Check Stripe backend</Button>
             <Button variant="outline" onClick={() => void handleListLocations()}>Load locations</Button>
             <Button variant="outline" onClick={() => void handleCreateLocation()}>Create location</Button>
-            <Button variant="outline" onClick={() => void handleRegisterReader()}>Register reader</Button>
+            <Button variant="outline" onClick={() => void refreshStripeReaders(stripeForm.location_id, stripeForm.simulated)}>Refresh readers</Button>
+            <Button variant="outline" onClick={() => void handleRegisterReader(null)}>Register reader</Button>
             <Button onClick={() => void handleSaveStripe()} disabled={saveStripeConnector.isPending}>
               {saveStripeConnector.isPending ? 'Saving...' : 'Save Stripe Terminal'}
             </Button>

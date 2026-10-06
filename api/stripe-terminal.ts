@@ -159,6 +159,21 @@ function assertReader(reader: Stripe.Terminal.Reader | Stripe.Terminal.DeletedRe
   return reader as Stripe.Terminal.Reader
 }
 
+function isSimulatedReader(reader: { device_type?: string | null }) {
+  return String(reader.device_type || '').toLowerCase().includes('simulated')
+}
+
+async function listReadersForSale(stripe: Stripe, locationId: string) {
+  if (!locationId) {
+    const page = await stripe.terminal.readers.list({ limit: 100 })
+    return page.data
+  }
+  const scoped = await stripe.terminal.readers.list({ location: locationId, limit: 100 })
+  if (scoped.data.length > 0) return scoped.data
+  const all = await stripe.terminal.readers.list({ limit: 100 })
+  return all.data
+}
+
 function mapReader(input: Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader) {
   const reader = assertReader(input)
   const action = reader.action
@@ -527,6 +542,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         metadata: { source: 'fran-pos', form },
       })
       return json(res, 200, { reader: mapReader(reader) })
+    }
+
+    if (action === 'list_readers') {
+      const locationId = String(body.location_id || '').trim()
+      const includeSimulated = Boolean(body.simulated)
+      const readers = await listReadersForSale(stripe, locationId)
+      return json(res, 200, {
+        readers: readers
+          .filter((reader) => includeSimulated || !isSimulatedReader(reader))
+          .map((reader) => ({
+            id: reader.id,
+            label: reader.label,
+            status: reader.status,
+            device_type: reader.device_type,
+            serial_number: reader.serial_number || null,
+            action_type: reader.action?.type || null,
+          })),
+      })
     }
 
     if (action === 'register_reader') {

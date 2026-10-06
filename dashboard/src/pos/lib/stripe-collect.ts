@@ -24,6 +24,7 @@ export interface StripeCollectResult {
 export async function collectStripeInPerson(input: {
   kind: StripeCollectKind
   config: StripeTerminalConfig
+  readerId?: string
   amount: number
   currency: string
   description?: string
@@ -59,19 +60,20 @@ export async function collectStripeInPerson(input: {
     if (!payment_intent?.id) throw new Error('Stripe did not return a PaymentIntent. Check the Google session and try again.')
 
     if (input.kind === 's700') {
-      if (!input.config.s700_reader_id) throw new Error('Register an S700 reader id in Settings → Integrations')
+      const readerId = input.readerId?.trim() || ''
+      if (!readerId) throw new Error('Register an S700 reader id in Settings → Integrations')
       input.onStatus?.('Sending the sale to the S700…')
       await processS700Payment({
-        readerId: input.config.s700_reader_id,
+        readerId,
         paymentIntentId: payment_intent.id,
       })
       if (input.config.simulated) {
         input.onStatus?.('Presenting simulated card on the test reader…')
-        await presentSimulatedPaymentMethod(input.config.s700_reader_id)
+        await presentSimulatedPaymentMethod(readerId)
       } else {
         input.onStatus?.('Ask the customer to tap, insert, or swipe on the S700…')
       }
-      await waitForS700Action(input.config.s700_reader_id)
+      await waitForS700Action(readerId)
     } else {
       if (!payment_intent.client_secret) throw new Error('Stripe did not return a client secret for Tap to Pay')
       await collectTapToPay({
@@ -93,8 +95,8 @@ export async function collectStripeInPerson(input: {
       amount: stripeCentsToAmount(finalIntent.amount) || input.amount,
     }
   } catch (error) {
-    if (input.config.s700_reader_id) {
-      await cancelStripeReader(input.config.s700_reader_id).catch(() => {})
+    if (input.kind === 's700' && input.readerId) {
+      await cancelStripeReader(input.readerId).catch(() => {})
     }
     // Never call Capgo disconnectReader for S700 — Terminal may never have been init'd.
     if (input.kind === 'tap_to_pay') {
@@ -107,12 +109,12 @@ export async function collectStripeInPerson(input: {
   }
 }
 
-export async function cancelStripeCollection(config: StripeTerminalConfig | null) {
+export async function cancelStripeCollection(readerId: string | null | undefined) {
   if (isTapToPayTerminalReady()) {
     await cancelTapToPay().catch(() => {})
   }
-  if (config?.s700_reader_id) {
-    await cancelStripeReader(config.s700_reader_id).catch(() => {})
+  if (readerId) {
+    await cancelStripeReader(readerId).catch(() => {})
   }
 }
 
@@ -126,6 +128,7 @@ export class S700QrStartError extends Error {}
 // QR methods, so callers should expect S700QrStartError and fall back.
 export async function collectS700Qr(input: {
   config: StripeTerminalConfig
+  readerId: string
   method: 'paynow' | 'wechat_pay'
   amount: number
   currency: string
@@ -135,7 +138,7 @@ export async function collectS700Qr(input: {
   onDisplaying?: () => void
   shouldStop?: () => boolean
 }): Promise<StripePaymentIntentResult> {
-  const readerId = input.config.s700_reader_id
+  const readerId = input.readerId.trim()
   if (!input.config.enabled || !readerId) throw new S700QrStartError('No S700 reader configured')
   if (input.config.simulated) throw new S700QrStartError('Simulated readers cannot display QR payments')
 
