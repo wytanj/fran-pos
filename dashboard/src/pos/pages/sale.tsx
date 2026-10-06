@@ -1020,11 +1020,12 @@ export default function SalePage() {
 
   const retryQueuedSourceEvents = useCallback(async () => {
     refreshPendingSourceEvents()
-    if (!company?.id || pendingPosOutboxEventCount() === 0) return
+    const registerToken = loadRegisterBinding()?.device_token?.trim()
+    if ((!company?.id && !registerToken) || pendingPosOutboxEventCount() === 0) return
 
     setRetryingSourceEvents(true)
     try {
-      await retryPendingPosOutboxEvents(company.id)
+      await retryPendingPosOutboxEvents(company?.id)
     } finally {
       refreshPendingSourceEvents()
       setRetryingSourceEvents(false)
@@ -1033,7 +1034,8 @@ export default function SalePage() {
 
   useEffect(() => {
     refreshPendingSourceEvents()
-    if (!company?.id) return
+    const registerToken = loadRegisterBinding()?.device_token?.trim()
+    if (!company?.id && !registerToken) return
 
     void retryQueuedSourceEvents()
     const retryOnReconnect = () => { void retryQueuedSourceEvents() }

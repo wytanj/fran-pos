@@ -130,7 +130,7 @@ test('anon insert into pos_outbox_events is denied when no company membership is
       db,
       `insert into public.pos_outbox_events (
         company_id, event_id, event_type, idempotency_key, aggregate_type, aggregate_id, workspace_id, occurred_at, payload
-      ) values ($1, 'evt_direct', 'pos.sale.completed', 'direct-key', 'sale', 'R-1', $1::text, now(), '{}'::jsonb)`,
+      ) values ($1::uuid, 'evt_direct', 'pos.sale.completed', 'direct-key', 'sale', 'R-1', $1::text, now(), '{}'::jsonb)`,
       [COMPANY_ID],
     ),
     /row-level security/,
@@ -189,7 +189,7 @@ test('a register with no company cannot enqueue', async () => {
 })
 
 test('the device-token RPC is security definer and does not grant anon a table insert', () => {
-  assert.match(migration, /enqueue_pos_outbox_events\(p_device_token text, p_events jsonb\)/)
+  assert.match(migration, /enqueue_pos_outbox_events\(\s*p_device_token text,\s*p_events jsonb\s*\)/)
   assert.match(migration, /security definer/)
   assert.match(migration, /grant execute on function public\.enqueue_pos_outbox_events\(text, jsonb\) to anon, authenticated, service_role/)
   assert.doesNotMatch(migration, /grant insert on table public\.pos_outbox_events to anon/)
