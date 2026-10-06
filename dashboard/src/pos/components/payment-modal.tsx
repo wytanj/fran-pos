@@ -21,8 +21,13 @@ import { Numpad } from '@/pos/components/numpad'
 import { CARD_TYPES, PAYMENT_MODES, STORE, type PaymentModeId } from '@/pos/data/mock'
 import { usePos } from '@/pos/lib/pos-context'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
+import { useS700Readers } from '@/hooks/use-s700-readers'
 import { preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
 import { cancelStripeCollection, collectS700Qr, collectStripeInPerson, S700QrStartError } from '@/pos/lib/stripe-collect'
+import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
+import { POS_REGISTER_CODE } from '@/pos/lib/skums-sale-adapter'
+import { readerIdFromPlan, sendBlockMessage } from '@/pos/lib/s700-readers'
+import { S700ReaderPicker } from '@/pos/components/s700-reader-picker'
 import { resolveTapToPayConfig, tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import {
   cancelStripePaymentIntent,
@@ -68,6 +73,9 @@ interface PaymentModalProps {
 export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: PaymentModalProps) {
   const { totals, payments, addPayment, removePayment, customer } = usePos()
   const { connector: stripe } = useStripeConnector()
+  const registerId = useMemo(() => loadRegisterBinding()?.register_id || POS_REGISTER_CODE, [])
+  const s700 = useS700Readers(stripe, registerId)
+  const activeReaderId = useRef<string | null>(null)
   const [mode, setMode] = useState<PaymentModeId | null>(null)
   const [amount, setAmount] = useState('')
   const [amountPrefill, setAmountPrefill] = useState(false)
@@ -205,7 +213,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
       if (elapsed < limit) return
       chargeGen.current += 1
       logTapToPayTrace(`watchdog fired after ${elapsed}s, last status: ${terminalMessageRef.current}`)
-      void cancelStripeCollection(stripe)
+      void cancelStripeCollection(activeReaderId.current)
       setTerminalState('idle')
       setTerminalError(
         collecting
@@ -291,13 +299,16 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
     // S700-first registers show the QR on the reader's customer-facing screen.
     // If the reader can't start (offline, simulated, not configured) we fall
     // back to the on-screen QR below without having charged anything.
+    const readerPlan = stripe ? await s700.resolve() : null
+    const qrReaderId = readerPlan ? readerIdFromPlan(readerPlan) : null
     const readerFirst = Boolean(
+      qrReaderId &&
       stripe &&
-      stripeS700Ready(stripe) &&
       !stripe.simulated &&
       preferredStoreChargeMode(stripe, tapToPaySupported()) === 'stripe_s700',
     )
-    if (readerFirst) {
+    if (readerFirst && qrReaderId) {
+      activeReaderId.current = qrReaderId
       setQrSession({
         method,
         modeId,
@@ -313,6 +324,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
         logTapToPayTrace(`qr ${method} via s700 for ${chargeAmount}`)
         const finalIntent = await collectS700Qr({
           config: stripe!,
+          readerId: qrReaderId,
           method,
           amount: chargeAmount,
           currency: STORE.currency,
@@ -458,8 +470,19 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
       if (stripeBusy.current) return
       if (mode === 'stripe_s700' && !stripe) return
       stripeBusy.current = true
-      const gen = ++chargeGen.current
       setTerminalError('')
+      let readerId = ''
+      if (mode === 'stripe_s700') {
+        const plan = await s700.resolve()
+        readerId = readerIdFromPlan(plan) || ''
+        if (!readerId) {
+          stripeBusy.current = false
+          setTerminalError(sendBlockMessage(plan))
+          return
+        }
+      }
+      activeReaderId.current = readerId || null
+      const gen = ++chargeGen.current
       setWaitElapsed(0)
       setTerminalState('waiting')
       setTerminalMessage(
@@ -473,6 +496,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
         const result = await collectStripeInPerson({
           kind: mode === 'stripe_s700' ? 's700' : 'tap_to_pay',
           config,
+          ...(readerId ? { readerId } : {}),
           amount: amountNum || remaining,
           currency: STORE.currency,
           description: `Fran POS ${STORE.code}`,
@@ -483,6 +507,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
           onStatus: setTerminalMessage,
         })
         if (gen !== chargeGen.current) return
+        if (readerId) s700.select(readerId)
         setTerminalState('approved')
         setTerminalMessage('Payment approved')
         commit(mode === 'stripe_s700' ? 'Stripe S700' : 'Tap to Pay', result.amount, result.paymentIntent.id, {
@@ -581,7 +606,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
 
   const failPayment = () => {
     if (!mode) return
-    void cancelStripeCollection(stripe)
+    void cancelStripeCollection(activeReaderId.current)
     const modeMeta = PAYMENT_MODES.find((m) => m.id === mode)
     const label = mode === 'card' ? cardType : modeMeta?.label ?? 'Payment'
     onPaymentFailed?.(`${label} payment_failed`)
@@ -858,6 +883,14 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
 
                 {!((mode === 'card' || mode === 'square_pos' || mode === 'stripe_s700' || mode === 'stripe_tap') && terminalState !== 'idle') && (
                   <>
+                    {mode === 'stripe_s700' && s700.plan.kind === 'choose' && (
+                      <S700ReaderPicker plan={s700.plan} onSelect={s700.select} />
+                    )}
+                    {mode === 'stripe_s700' && s700.plan.kind === 'blocked' && !terminalError && (
+                      <p className="mb-2 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        {s700.plan.message}
+                      </p>
+                    )}
                     {terminalError && (
                       <p className="mb-2 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                         {terminalError}
@@ -876,7 +909,8 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                         (mode === GIFT_CARD_TENDER && giftQuote.available <= 0) ||
                         amountTooHigh ||
                         (storedValueMode || mode === 'cash' ? amountNum <= 0 : amountNum < 0) ||
-                        ((mode === 'paynow' || mode === 'wechat') && (amountNum || remaining) < 0.5)
+                        ((mode === 'paynow' || mode === 'wechat') && (amountNum || remaining) < 0.5) ||
+                        (mode === 'stripe_s700' && readerIdFromPlan(s700.plan) == null && s700.phase !== 'loading')
                       }
                     >
                       {mode === 'card'

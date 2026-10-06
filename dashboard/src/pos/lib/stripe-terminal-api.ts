@@ -12,6 +12,7 @@ export type StripeTerminalAction =
   | 'cancel_reader'
   | 'cancel_payment_intent'
   | 'register_reader'
+  | 'list_readers'
   | 'ensure_simulated_reader'
   | 'list_locations'
   | 'create_location'
@@ -224,6 +225,22 @@ export function ensureSimulatedReader(locationId: string) {
 
 export function registerStripeReader(input: { registration_code: string; location_id: string; label?: string }) {
   return callStripeTerminal<{ reader: StripeReaderStatus }>('register_reader', input)
+}
+
+export interface StripeListedReader {
+  id: string
+  label: string | null
+  status: string | null
+  device_type: string | null
+  serial_number: string | null
+  action_type: string | null
+}
+
+export function listStripeReaders(input: { location_id?: string; simulated?: boolean } = {}) {
+  return callStripeTerminal<{ readers: StripeListedReader[] }>('list_readers', {
+    location_id: input.location_id || '',
+    simulated: Boolean(input.simulated),
+  })
 }
 
 // Fire-and-forget breadcrumb to the Vercel function log so tap-to-pay progress

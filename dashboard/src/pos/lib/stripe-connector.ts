@@ -1,4 +1,5 @@
 import type { CompanySettings, StripeTerminalSettings } from '@pos/shared'
+import { copyS700Readers, hasConfiguredS700Reader, readerIdAfterEdit } from './s700-readers'
 
 export type StripeTerminalConfig = StripeTerminalSettings
 
@@ -19,6 +20,7 @@ export function toStripeTerminalConfig(
     simulated: Boolean(connector.simulated),
     location_id: (connector.location_id || '').trim(),
     s700_reader_id: (connector.s700_reader_id || '').trim(),
+    s700_readers: copyS700Readers(connector.s700_readers),
     merchant_display_name: (connector.merchant_display_name || 'Fran POS').trim() || 'Fran POS',
     default_reader: connector.default_reader || 's700',
     updated_at: connector.updated_at,
@@ -26,11 +28,13 @@ export function toStripeTerminalConfig(
 }
 
 export function buildStripeTerminalSettings(input: Partial<StripeTerminalSettings> & { enabled?: boolean }): StripeTerminalSettings {
+  const readers = copyS700Readers(input.s700_readers)
   return {
     enabled: input.enabled ?? true,
     simulated: Boolean(input.simulated),
     location_id: (input.location_id || '').trim(),
-    s700_reader_id: (input.s700_reader_id || '').trim(),
+    s700_reader_id: readerIdAfterEdit(readers, input.s700_reader_id),
+    ...(readers ? { s700_readers: readers } : {}),
     merchant_display_name: (input.merchant_display_name || 'Fran POS').trim() || 'Fran POS',
     default_reader: input.default_reader || 's700',
     updated_at: new Date().toISOString(),
@@ -49,7 +53,7 @@ export function mergePosConfigWithStripe(
 }
 
 export function stripeS700Ready(config: StripeTerminalConfig | null | undefined) {
-  return Boolean(config?.enabled && config.s700_reader_id)
+  return Boolean(config?.enabled && hasConfiguredS700Reader(config))
 }
 
 export function stripeLocationReady(config: StripeTerminalConfig | null | undefined) {
@@ -62,7 +66,7 @@ export function preferredStoreChargeMode(
 ): 'stripe_s700' | 'stripe_tap' | null {
   if (config?.enabled) {
     if (config.default_reader === 'tap_to_pay' && tapReady) return 'stripe_tap'
-    if (config.s700_reader_id) return 'stripe_s700'
+    if (hasConfiguredS700Reader(config)) return 'stripe_s700'
     if (tapReady) return 'stripe_tap'
     return null
   }

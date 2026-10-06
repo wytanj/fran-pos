@@ -1,40 +1,35 @@
 import { useEffect, useState } from 'react'
 import { getStripeReaderStatus } from '@/pos/lib/stripe-terminal-api'
-import { stripeS700Ready, type StripeTerminalConfig } from '@/pos/lib/stripe-connector'
+import type { StripeTerminalConfig } from '@/pos/lib/stripe-connector'
 
 export type S700LinkStatus = 'idle' | 'checking' | 'online' | 'offline'
 
-export function useS700Status(config: StripeTerminalConfig | null) {
-  const [status, setStatus] = useState<S700LinkStatus>('idle')
-  const ready = stripeS700Ready(config)
+export function useS700Status(config: StripeTerminalConfig | null, readerId?: string | null) {
+  const id = (readerId ?? config?.s700_reader_id ?? '').trim()
+  const ready = Boolean(config?.enabled && id)
+  const [polled, setPolled] = useState<{ id: string; status: 'online' | 'offline' } | null>(null)
 
   useEffect(() => {
-    if (!ready || !config?.s700_reader_id) {
-      setStatus('idle')
-      return
-    }
-
+    if (!ready) return
     let cancelled = false
-    const readerId = config.s700_reader_id
-
     async function tick() {
       try {
-        const { reader } = await getStripeReaderStatus(readerId)
+        const { reader } = await getStripeReaderStatus(id)
         if (cancelled) return
-        setStatus(reader.status === 'online' ? 'online' : 'offline')
+        setPolled({ id, status: reader.status === 'online' ? 'online' : 'offline' })
       } catch {
-        if (!cancelled) setStatus('offline')
+        if (!cancelled) setPolled({ id, status: 'offline' })
       }
     }
-
-    setStatus('checking')
     void tick()
     const timer = window.setInterval(() => void tick(), 20_000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [ready, config?.s700_reader_id])
+  }, [ready, id])
 
-  return status
+  if (!ready) return 'idle'
+  if (!polled || polled.id !== id) return 'checking'
+  return polled.status
 }

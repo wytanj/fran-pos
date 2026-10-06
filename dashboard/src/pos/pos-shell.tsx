@@ -33,6 +33,9 @@ import { useCompanySettings } from '@/hooks/use-settings'
 import { BrandMark } from '@/components/brand-mark'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { useS700Status } from '@/hooks/use-s700-status'
+import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
+import { POS_REGISTER_CODE } from '@/pos/lib/skums-sale-adapter'
+import { chooseS700Reader, readS700ReaderChoice, readerIdFromPlan } from '@/pos/lib/s700-readers'
 
 const NAV_COLLAPSED_KEY = 'fran-pos-nav-collapsed'
 
@@ -63,7 +66,16 @@ export function PosShell() {
   const { company } = useAuth()
   const { data: settings } = useCompanySettings()
   const { connector: stripe } = useStripeConnector()
-  const s700Status = useS700Status(stripe)
+  const registerId = loadRegisterBinding()?.register_id || POS_REGISTER_CODE
+  const rememberedReaderId = readS700ReaderChoice(registerId)
+  const shellPlan = chooseS700Reader({
+    config: stripe,
+    live: null,
+    rememberedId: rememberedReaderId,
+    registerId,
+  })
+  const shellReaderId = readerIdFromPlan(shellPlan) || (shellPlan.kind === 'blocked' ? shellPlan.readerId : null)
+  const s700Status = useS700Status(stripe, shellReaderId)
   const navigate = useNavigate()
   const [now, setNow] = useState(new Date())
   const [mobileNavOpen, setMobileNavOpen] = useState(false)

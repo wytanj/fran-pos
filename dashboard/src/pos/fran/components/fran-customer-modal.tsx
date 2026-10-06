@@ -1,8 +1,12 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Loader2, Nfc, Plane, QrCode, Search, UserPlus, UsersRound, X } from 'lucide-react'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
-import { stripeS700Ready } from '@/pos/lib/stripe-connector'
+import { useS700Readers } from '@/hooks/use-s700-readers'
 import { cancelStripeReader, collectS700Inputs, waitForS700Action } from '@/pos/lib/stripe-terminal-api'
+import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
+import { POS_REGISTER_CODE } from '@/pos/lib/skums-sale-adapter'
+import { readerIdFromPlan, sendBlockMessage } from '@/pos/lib/s700-readers'
+import { S700ReaderPicker } from '@/pos/components/s700-reader-picker'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -147,8 +151,8 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
   // Customer keys their own mobile on the S700 (server-driven collect_inputs);
   // staff typing into the search box above stays available the whole time.
   const { connector: stripeConnector } = useStripeConnector()
-  const s700ReaderId =
-    stripeS700Ready(stripeConnector) && !stripeConnector?.simulated ? stripeConnector!.s700_reader_id : ''
+  const registerId = useMemo(() => loadRegisterBinding()?.register_id || POS_REGISTER_CODE, [])
+  const s700 = useS700Readers(open && stripeConnector && !stripeConnector.simulated ? stripeConnector : null, registerId)
   const [readerWait, setReaderWait] = useState(false)
   const [lookupDial, setLookupDial] = useState('+65')
   const readerCancelRef = useRef(false)
@@ -157,7 +161,13 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
   // screen — the +65 phone widget for Singapore, the numeric keypad for a
   // chosen country (the app prepends the dial code), or free text for Other.
   const askOnReader = async () => {
-    if (!s700ReaderId || readerWait) return
+    if (readerWait) return
+    const plan = await s700.resolve()
+    const s700ReaderId = readerIdFromPlan(plan) || ''
+    if (!s700ReaderId) {
+      setError(sendBlockMessage(plan))
+      return
+    }
     setReaderWait(true)
     setError(null)
     readerCancelRef.current = false
@@ -195,6 +205,7 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
   }
 
   const cancelReaderAsk = () => {
+    const s700ReaderId = readerIdFromPlan(s700.plan) || ''
     if (!s700ReaderId) return
     // Stop the wait loop immediately; the reader action is cleared in parallel.
     readerCancelRef.current = true
@@ -338,7 +349,15 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
           </Button>
         </div>
 
-        {s700ReaderId && (
+        {s700.plan.kind === 'choose' && (
+          <div className="mt-3">
+            <S700ReaderPicker plan={s700.plan} onSelect={s700.select} />
+          </div>
+        )}
+        {s700.plan.kind === 'blocked' && (
+          <p className="mt-2 text-xs text-destructive">{s700.plan.message}</p>
+        )}
+        {readerIdFromPlan(s700.plan) && (
           <div className="mt-2 flex gap-2">
             <Select
               aria-label="Country for S700 number entry"
