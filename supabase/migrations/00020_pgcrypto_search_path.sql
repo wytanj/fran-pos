@@ -1,9 +1,9 @@
--- Qualify pgcrypto for SECURITY DEFINER fns that pin search_path = public.
--- Live was hotfixed by hand; this migration is durable + idempotent.
+-- Supabase installs pgcrypto in the extensions schema.
+-- A function that sets search_path = public cannot resolve unqualified gen_random_bytes.
 
 create schema if not exists extensions;
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 do $$
 begin
@@ -19,7 +19,6 @@ begin
 end
 $$;
 
--- Mint a pending pair row (authenticated ops). Returns pair_code + device_token.
 create or replace function public.create_pos_register_pair(
   p_company_id uuid,
   p_store_code text,
