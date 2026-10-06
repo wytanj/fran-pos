@@ -23,7 +23,7 @@ import {
   releaseMirrorPath,
   unlockPortrait,
 } from '@/pos/mirror/mirror-orientation'
-import QRCode from 'qrcode'
+import { renderFranMembershipQr } from '@/pos/mirror/fran-membership-qr'
 import {
   MIRROR_IDLE_PROMOS,
   formatMirrorMoney,
@@ -51,7 +51,6 @@ const MEMBERSHIP_SCAN_URL =
   'https://fran.sg/m' // placeholder until prod membership URL is wired
 
 const MEMBERSHIP_QR_BOX = 'h-[min(3cm,7.5rem)] w-[min(3cm,7.5rem)] rounded-md'
-const MEMBERSHIP_QR_RASTER = 360
 
 function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   return {
@@ -318,25 +317,7 @@ function BasketView({
 }) {
   const money = (n: number) => formatMirrorMoney(n, store.currency)
   const showJoinQr = !basket.member
-  const [joinQr, setJoinQr] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!showJoinQr) {
-      setJoinQr(null)
-      return
-    }
-    let cancelled = false
-    QRCode.toDataURL(MEMBERSHIP_SCAN_URL, { margin: 1, width: MEMBERSHIP_QR_RASTER })
-      .then((url) => {
-        if (!cancelled) setJoinQr(url)
-      })
-      .catch(() => {
-        if (!cancelled) setJoinQr(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [showJoinQr])
+  const joinQr = showJoinQr ? renderFranMembershipQr(MEMBERSHIP_SCAN_URL) : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -391,12 +372,11 @@ function BasketView({
           {showJoinQr && (
             <div className="flex shrink-0 flex-col items-center gap-1" data-testid="mirror-membership-qr">
               {joinQr ? (
-                <img
-                  src={joinQr}
-                  alt="Scan to join membership"
+                <div
                   className={`${MEMBERSHIP_QR_BOX} bg-white`}
-                  width={120}
-                  height={120}
+                  role="img"
+                  aria-label="Scan to join membership"
+                  dangerouslySetInnerHTML={{ __html: joinQr }}
                 />
               ) : (
                 <div className={`${MEMBERSHIP_QR_BOX} bg-surface-sunken`} aria-hidden />
