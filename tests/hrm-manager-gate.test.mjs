@@ -30,7 +30,7 @@ test('HRM manager+ allowlist covers POS roles and HRM matrix manager-level roles
 })
 
 test('Live manager PIN length matches unlock; demo keeps 9999', () => {
-  assert.match(hrmPosAuth, /export const HRM_POS_PIN_DIGITS = 8/)
+  assert.match(hrmPosAuth, /export const HRM_POS_PIN_DIGITS = 5/)
   assert.match(managerAuth, /HRM_POS_PIN_DIGITS/)
   assert.match(managerAuth, /Demo manager PIN: 9999/)
   assert.match(posLogin, /HRM_POS_PIN_DIGITS/)
