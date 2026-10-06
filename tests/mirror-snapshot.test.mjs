@@ -131,6 +131,37 @@ test('tier nudge says nothing it cannot back up', () => {
   assert.equal(formatTierNudge({ nextTierLabel: 'Gold', spendRequiredForNextTier: 7.5 }, 'SGD'), 'S$7.50 more to Gold')
 })
 
+test('done and paying can carry a gift card remainder, and older snapshots still parse', () => {
+  const lastSale = { receiptNo: 'R-9', total: 30, saleStatus: 'completed', pointsEarned: 0 }
+  const done = buildMirrorSnapshot(input({
+    cart: [],
+    completedOpen: true,
+    lastSale,
+    giftCard: { redeemed: 30, remaining: 70 },
+  }))
+  assert.equal(done.phase, 'done')
+  assert.deepEqual(done.giftCard, { redeemed: 30, remaining: 70 })
+  assert.deepEqual(parseMirrorSnapshot(JSON.parse(JSON.stringify(done))), done)
+
+  const paying = buildMirrorSnapshot(input({ paymentOpen: true, giftCard: { redeemed: 25, remaining: 75 } }))
+  assert.equal(paying.phase, 'paying')
+  assert.deepEqual(paying.giftCard, { redeemed: 25, remaining: 75 })
+
+  const legacy = {
+    v: 1,
+    phase: 'done',
+    store,
+    receiptNo: 'R-1',
+    nett: 10,
+    memberName: null,
+    pointsEarned: null,
+  }
+  const parsed = parseMirrorSnapshot(legacy)
+  assert.equal(parsed.phase, 'done')
+  assert.equal(parsed.giftCard, undefined)
+  assert.equal(parseMirrorSnapshot({ ...legacy, giftCard: { redeemed: '30', remaining: 70 } }), null)
+})
+
 test('money formats for the guest', () => {
   assert.equal(formatMirrorMoney(12.5, 'SGD'), 'S$12.50')
   assert.equal(formatMirrorMoney(-3, 'SGD'), '-S$3.00')

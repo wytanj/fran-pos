@@ -6,6 +6,7 @@ import {
   cartLineNetValue,
   isFranRewardReceiptLine,
 } from '@/pos/lib/reward-receipt'
+import { settleGiftCard } from '@/pos/lib/gift-card'
 
 interface ReceiptPreviewProps {
   sale: CompletedSale
@@ -16,6 +17,7 @@ interface ReceiptPreviewProps {
 /** Thermal-receipt rendering — covers receipt format requirements (item 23). */
 export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
   const receiptRewards = buildReceiptRewardRedemptions(sale)
+  const giftCard = settleGiftCard(sale.payments)
   const franProjectedPoints = sale.fran?.basketPreview?.projectedPointsBalance ?? null
   const franMember = sale.fran?.counterSession?.member ?? null
   const franLoyaltySync = sale.fran?.loyaltySync ?? null
@@ -149,6 +151,11 @@ export function ReceiptPreview({ sale, duplicate }: ReceiptPreviewProps) {
       {sale.payments.map((p) => (
         <Row key={p.id} label={p.label + (p.detail ? ` ${p.detail}` : '')} value={formatCurrency(p.amount, STORE.currency)} />
       ))}
+      {giftCard?.remaining != null && (
+        <p className="mt-1">
+          Gift card {giftCard.giftCardNo ? `${giftCard.giftCardNo} ` : ''}remaining: {formatCurrency(giftCard.remaining, STORE.currency)}
+        </p>
+      )}
 
       {sale.customer && (
         <>
