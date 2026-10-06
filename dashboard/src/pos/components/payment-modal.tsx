@@ -19,9 +19,9 @@ import { Button } from '@/components/ui/button'
 import { formatCurrency, cn } from '@/lib/utils'
 import { Numpad } from '@/pos/components/numpad'
 import { CARD_TYPES, PAYMENT_MODES, STORE, type PaymentModeId } from '@/pos/data/mock'
-import { usePos } from '@/pos/lib/pos-context'
+import { usePos, type Payment } from '@/pos/lib/pos-context'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
-import { preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
+import { isPrimaryTenderTile, preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
 import { cancelStripeCollection, collectS700Qr, collectStripeInPerson, S700QrStartError } from '@/pos/lib/stripe-collect'
 import { resolveTapToPayConfig, tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import {
@@ -43,7 +43,7 @@ import {
   storedValueQuote,
 } from '@/pos/lib/gift-card'
 
-const ICONS: Record<string, typeof Banknote> = {
+const ICONS: Record<PaymentModeId, typeof Banknote> = {
   cash: Banknote,
   stripe_s700: Nfc,
   stripe_tap: SmartphoneNfc,
@@ -57,18 +57,110 @@ const ICONS: Record<string, typeof Banknote> = {
 }
 
 const MAX_TENDERS_PER_PAYMENT = 2
+const LAST_TENDER_KEY = 'pos_last_tender'
+
+function readLastTender(): PaymentModeId | null {
+  if (typeof localStorage === 'undefined') return null
+  const raw = localStorage.getItem(LAST_TENDER_KEY)
+  return PAYMENT_MODES.find((mode) => mode.id === raw)?.id ?? null
+}
+
+function MethodPicker({
+  modes,
+  lastTender,
+  disabled,
+  remaining,
+  payments,
+  total,
+  paid,
+  tapReady,
+  onChoose,
+  onRemove,
+}: {
+  modes: readonly (typeof PAYMENT_MODES)[number][]
+  lastTender: PaymentModeId | null
+  disabled: boolean
+  remaining: number
+  payments: Payment[]
+  total: number
+  paid: number
+  tapReady: boolean
+  onChoose: (mode: PaymentModeId) => void
+  onRemove: (id: string) => void
+}) {
+  const primary = modes.filter((mode) => isPrimaryTenderTile(mode.id))
+  const rest = modes.filter((mode) => !isPrimaryTenderTile(mode.id))
+  const tile = (mode: (typeof PAYMENT_MODES)[number], large: boolean) => {
+    const Icon = ICONS[mode.id]
+    const label = mode.id === 'stripe_tap' && tapReady ? 'Credit / Debit' : mode.label
+    const last = mode.id === lastTender
+    return (
+      <button
+        key={mode.id}
+        type="button"
+        onClick={() => onChoose(mode.id)}
+        disabled={disabled}
+        className={cn(
+          'flex h-full flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 font-semibold transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer',
+          large ? 'min-h-40 text-2xl' : 'min-h-28 text-lg',
+          last && 'ring-2 ring-yellow',
+        )}
+      >
+        <Icon className={large ? 'h-12 w-12' : 'h-8 w-8'} />
+        {label}
+        {mode.id === 'stripe_s700' && (
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer reader</span>
+        )}
+        {mode.id === 'stripe_tap' && (
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stripe Tap to Pay</span>
+        )}
+        {last && <span className="rounded-full bg-yellow px-2 py-0.5 text-xs font-semibold text-brown">Last used</span>}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4 pr-16">
+      <div>
+        <p className="text-sm text-muted-foreground">Balance due</p>
+        <p className="font-display text-4xl font-bold tabular-nums">{formatCurrency(Math.max(remaining, 0), STORE.currency)}</p>
+        <p className="text-sm text-muted-foreground">
+          Total {formatCurrency(total, STORE.currency)} · Paid {formatCurrency(paid, STORE.currency)}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">Supports split payment with up to two tenders per sale.</p>
+      </div>
+      {payments.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {payments.map((payment) => (
+            <span key={payment.id} className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-sm">
+              {payment.label} {formatCurrency(payment.amount, STORE.currency)}
+              <button type="button" onClick={() => onRemove(payment.id)} aria-label={`Remove ${payment.label}`}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {disabled && <p className="text-sm text-muted-foreground">Two tenders added. Remove one to change the split.</p>}
+      <div className="grid min-h-0 flex-[1.45] grid-cols-2 gap-3">{primary.map((mode) => tile(mode, true))}</div>
+      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">{rest.map((mode) => tile(mode, false))}</div>
+    </div>
+  )
+}
 
 interface PaymentModalProps {
   open: boolean
   onClose: () => void
   onComplete: () => void
   onPaymentFailed?: (reason: string) => void
+  onActiveTender?: (mode: PaymentModeId | null) => void
 }
 
-export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: PaymentModalProps) {
+export function PaymentModal({ open, onClose, onComplete, onPaymentFailed, onActiveTender }: PaymentModalProps) {
   const { totals, payments, addPayment, removePayment, customer } = usePos()
   const { connector: stripe } = useStripeConnector()
   const [mode, setMode] = useState<PaymentModeId | null>(null)
+  const [lastTender, setLastTender] = useState<PaymentModeId | null>(readLastTender)
   const [amount, setAmount] = useState('')
   const [amountPrefill, setAmountPrefill] = useState(false)
   const [cardType, setCardType] = useState<string>(CARD_TYPES[0])
@@ -97,19 +189,15 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
 
   const tapReady = tapToPaySupported()
   const visibleModes = useMemo(() => {
-    const allowed = new Set(
-      visiblePaymentModes({
-        stripeEnabled: Boolean(stripe?.enabled),
-        s700Ready: stripeS700Ready(stripe),
-        tapReady,
-      }),
-    )
-    const modes = PAYMENT_MODES.filter((item) => allowed.has(item.id))
-    const preferS700 = preferredStoreChargeMode(stripe, tapReady) !== 'stripe_tap'
-    return [...modes].sort((a, b) => {
-      if (a.id === 'stripe_s700' && preferS700) return -1
-      if (b.id === 'stripe_s700' && preferS700) return 1
-      return 0
+    const allowed = visiblePaymentModes({
+      stripeEnabled: Boolean(stripe?.enabled),
+      s700Ready: stripeS700Ready(stripe),
+      tapReady,
+    })
+    const byId = new Map(PAYMENT_MODES.map((item) => [item.id, item]))
+    return allowed.flatMap((id) => {
+      const item = byId.get(id)
+      return item ? [item] : []
     })
   }, [stripe, tapReady])
 
@@ -123,27 +211,13 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   useEffect(() => {
     if (wasOpen.current && !open) reset()
     wasOpen.current = open
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Auto-pick the store's preferred method once per modal open. The ref stops
-  // it re-firing after "Change method" clears the mode — without it the
-  // preferred mode is forced straight back and the tile grid is unreachable.
-  const autoPickedMode = useRef(false)
+  const onActiveTenderRef = useRef(onActiveTender)
+  onActiveTenderRef.current = onActiveTender
   useEffect(() => {
-    if (!open) {
-      autoPickedMode.current = false
-      return
-    }
-    if (autoPickedMode.current) return
-    if (mode || payments.length > 0) return
-    const preferred = preferredStoreChargeMode(stripe, tapToPaySupported())
-    if (preferred) {
-      autoPickedMode.current = true
-      setMode(preferred)
-      setAmount(Math.max(remaining, 0).toFixed(2))
-    }
-  }, [open, mode, payments.length, remaining, stripe])
+    onActiveTenderRef.current?.(open ? mode : null)
+  }, [open, mode])
 
   useEffect(() => {
     if (open && tapToPaySupported() && !stripeBusy.current) {
@@ -248,6 +322,8 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
   const quickAmounts = buildQuickAmounts()
 
   const chooseMode = (paymentMode: PaymentModeId) => {
+    localStorage.setItem(LAST_TENDER_KEY, paymentMode)
+    setLastTender(paymentMode)
     setMode(paymentMode)
     setAmount(getTenderLimit(paymentMode).toFixed(2))
     setAmountPrefill(paymentMode === GIFT_CARD_TENDER || paymentMode === STORE_CREDIT_TENDER)
@@ -609,7 +685,28 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
         />
       )}
     <Dialog open={open} onOpenChange={(o) => !o && closeAndReset()}>
-      <DialogContent className="max-w-2xl p-0" onClose={closeAndReset}>
+      <DialogContent
+        className={
+          mode === null && !fullyPaid
+            ? 'flex h-[calc(100dvh-2rem)] max-h-[960px] w-full max-w-5xl flex-col overflow-hidden p-0'
+            : 'max-w-2xl p-0'
+        }
+        onClose={closeAndReset}
+      >
+        {mode === null && !fullyPaid ? (
+          <MethodPicker
+            modes={visibleModes}
+            lastTender={lastTender}
+            disabled={paymentLimitReached}
+            remaining={remaining}
+            payments={payments}
+            total={totals.total}
+            paid={totals.paid}
+            tapReady={tapReady}
+            onChoose={chooseMode}
+            onRemove={removePayment}
+          />
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* Left: balance + applied payments */}
           <div className="rounded-l-lg bg-primary p-6 text-primary-foreground">
@@ -682,43 +779,6 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
                 <p className="mt-3 text-sm font-medium">Payment complete</p>
                 <p className="mt-1 text-xs text-muted-foreground">Review the tender summary, then print the receipt.</p>
               </div>
-            ) : mode === null ? (
-              <>
-                <p className="mb-3 text-sm font-medium text-muted-foreground">Select payment mode</p>
-                {paymentLimitReached && (
-                  <div className="mb-3 rounded-lg border bg-muted/40 p-4 text-center">
-                    <p className="text-sm font-medium">Two tenders added</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Remove one tender to change the split or clear the remaining balance.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  {visibleModes.map((m) => {
-                    const Icon = ICONS[m.id]
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => chooseMode(m.id)}
-                        disabled={paymentLimitReached}
-                        className="flex flex-col items-center gap-2 rounded-lg border p-4 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-                      >
-                        <Icon className="h-6 w-6" />
-                        {m.id === 'stripe_tap' && tapReady ? 'Credit / Debit' : m.label}
-                        {m.id === 'stripe_s700' && (
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Customer reader</span>
-                        )}
-                        {m.id === 'stripe_tap' && (
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Stripe Tap to Pay</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-                <p className="mt-4 text-center text-xs text-muted-foreground">
-                  Supports split payment with up to two tenders per sale.
-                </p>
-              </>
             ) : (
               <div>
                 <div className="mb-3 flex items-center justify-between">
@@ -905,6 +965,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed }: Pay
             )}
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
     </>

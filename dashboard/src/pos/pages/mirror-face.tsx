@@ -26,14 +26,18 @@ import {
 } from '@/pos/mirror/mirror-orientation'
 import { renderFranMembershipQr } from '@/pos/mirror/fran-membership-qr'
 import {
+  MIRROR_DONE_IDLE_MS,
   MIRROR_IDLE_PROMOS,
   formatMirrorMoney,
+  mirrorAfterDoneIdle,
+  mirrorPayBanner,
   parseMirrorSnapshot,
   type MirrorBasket,
   type MirrorGiftCard,
   type MirrorPromo,
   type MirrorSnapshot,
   type MirrorStore,
+  type MirrorTenderKind,
 } from '@/pos/mirror/mirror-snapshot'
 
 type FaceState =
@@ -53,6 +57,18 @@ const MEMBERSHIP_SCAN_URL =
 
 const MEMBERSHIP_QR_BOX = 'h-[min(3cm,7.5rem)] w-[min(3cm,7.5rem)] rounded-md'
 const MEMBERSHIP_QR_ENLARGE_BOX = 'h-[62vmin] w-[62vmin]'
+
+function usePresentedSnapshot(snapshot: MirrorSnapshot | null): MirrorSnapshot | null {
+  const [releasedReceipt, setReleasedReceipt] = useState<string | null>(null)
+  const receipt = snapshot?.phase === 'done' ? snapshot.receiptNo : null
+  useEffect(() => {
+    if (!receipt) return
+    const timer = window.setTimeout(() => setReleasedReceipt(receipt), MIRROR_DONE_IDLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [receipt])
+  if (!snapshot || snapshot.phase !== 'done' || releasedReceipt !== snapshot.receiptNo) return snapshot
+  return mirrorAfterDoneIdle(snapshot, MIRROR_DONE_IDLE_MS, MIRROR_IDLE_PROMOS)
+}
 
 function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   return {
@@ -139,6 +155,7 @@ export default function MirrorFacePage() {
   const seqRef = useRef(0)
 
   const live = state.kind === 'live'
+  const presented = usePresentedSnapshot(snapshot)
   useScreenWakeLock(live)
   useMirrorSession(live)
   useMirrorPortraitLock()
@@ -219,7 +236,7 @@ export default function MirrorFacePage() {
     return <PairScreen joining={state.kind === 'joining'} message={state.kind === 'pairing' ? state.message : null} onJoin={join} />
   }
 
-  const view = snapshot ?? idleFallback(state.binding)
+  const view = presented ?? idleFallback(state.binding)
   return (
     <div data-mirror-face className="flex h-dvh flex-col overflow-hidden bg-cream text-brown select-none">
       <header className="flex items-center justify-between px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3">
@@ -254,6 +271,8 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
           basket={snapshot.basket}
           store={snapshot.store}
           amountDue={snapshot.amountDue}
+          changeDue={snapshot.changeDue ?? 0}
+          tender={snapshot.tender ?? null}
           giftCard={snapshot.giftCard}
         />
       )
@@ -264,6 +283,11 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
           <p className="text-2xl text-muted-foreground">
             Paid {formatMirrorMoney(snapshot.nett, snapshot.store.currency)} {'\u00b7'} Receipt {snapshot.receiptNo}
           </p>
+          {snapshot.changeDue != null && snapshot.changeDue > 0 && (
+            <p className="font-display text-5xl font-bold">
+              Change due {formatMirrorMoney(snapshot.changeDue, snapshot.store.currency)}
+            </p>
+          )}
           {snapshot.giftCard && (
             <p className="text-2xl">
               Gift card remaining {formatMirrorMoney(snapshot.giftCard.remaining, snapshot.store.currency)}
@@ -311,11 +335,15 @@ function BasketView({
   basket,
   store,
   amountDue,
+  changeDue = 0,
+  tender = null,
   giftCard,
 }: {
   basket: MirrorBasket
   store: MirrorStore
   amountDue: number | null
+  changeDue?: number
+  tender?: MirrorTenderKind | null
   giftCard?: MirrorGiftCard
 }) {
   const [qrEnlarged, setQrEnlarged] = useState(false)
@@ -405,12 +433,7 @@ function BasketView({
             </div>
           </div>
         </div>
-        {amountDue !== null && (
-          <div className="rounded-xl bg-brown px-4 py-4 text-center text-cream">
-            <p className="text-lg">Amount due {'\u00b7'} pay on the card reader</p>
-            <p className="font-display text-5xl font-bold tabular-nums">{money(amountDue)}</p>
-          </div>
-        )}
+        {amountDue !== null && <PayBanner amountDue={amountDue} changeDue={changeDue} tender={tender} money={money} />}
         {giftCard && (
           <p className="text-center text-xl">Gift card remaining {money(giftCard.remaining)}</p>
         )}
@@ -431,6 +454,27 @@ function BasketView({
           </DialogContent>
         </Dialog>
       )}
+    </div>
+  )
+}
+
+function PayBanner({
+  amountDue,
+  changeDue,
+  tender,
+  money,
+}: {
+  amountDue: number
+  changeDue: number
+  tender: MirrorTenderKind | null
+  money: (amount: number) => string
+}) {
+  const banner = mirrorPayBanner({ amountDue, changeDue, tender })
+  if (banner.kind === 'hidden') return null
+  return (
+    <div className="rounded-xl bg-brown px-4 py-4 text-center text-cream">
+      <p className="text-lg">{banner.label}</p>
+      <p className="font-display text-5xl font-bold tabular-nums">{money(banner.amount)}</p>
     </div>
   )
 }

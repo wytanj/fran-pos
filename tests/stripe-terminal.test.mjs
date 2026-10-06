@@ -38,16 +38,6 @@ function stripeS700Ready(config) {
   return Boolean(config?.enabled && config.s700_reader_id)
 }
 
-function visiblePaymentModes({ stripeEnabled, s700Ready, tapReady }) {
-  const modes = ['cash', 'stripe_s700', 'stripe_tap', 'card', 'paynow']
-  return modes.filter((id) => {
-    if (id === 'stripe_s700') return stripeEnabled && s700Ready
-    if (id === 'stripe_tap') return tapReady
-    if (id === 'card') return !stripeEnabled && !tapReady
-    return true
-  })
-}
-
 test('SGD amounts convert to Stripe cents without float drift', () => {
   assert.equal(amountToStripeCents(38), 3800)
   assert.equal(amountToStripeCents(19.99), 1999)
@@ -81,11 +71,14 @@ test('S700 is ready only when enabled and a reader id exists', () => {
   assert.equal(stripeS700Ready({ ...config, s700_reader_id: '' }), false)
 })
 
-test('payment sheet hides simulated card when Stripe is on', () => {
-  assert.deepEqual(visiblePaymentModes({ stripeEnabled: false, s700Ready: false, tapReady: false }), ['cash', 'card', 'paynow'])
-  assert.deepEqual(visiblePaymentModes({ stripeEnabled: false, s700Ready: false, tapReady: true }), ['cash', 'stripe_tap', 'paynow'])
-  assert.deepEqual(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: false }), ['cash', 'stripe_s700', 'paynow'])
-  assert.deepEqual(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: true }), ['cash', 'stripe_s700', 'stripe_tap', 'paynow'])
+test('payment sheet hides simulated card when Stripe is on', async () => {
+  const { visiblePaymentModes } = await import('../dashboard/src/pos/lib/stripe-connector.ts')
+  const named = ['cash', 'paynow', 'gift-card', 'store-credit', 'wechat', 'misc']
+  assert.deepEqual(visiblePaymentModes({ stripeEnabled: false, s700Ready: false, tapReady: false }), [...named, 'card', 'square_pos'])
+  assert.deepEqual(visiblePaymentModes({ stripeEnabled: false, s700Ready: false, tapReady: true }), ['cash', 'paynow', 'stripe_tap', 'gift-card', 'store-credit', 'wechat', 'misc', 'square_pos'])
+  assert.deepEqual(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: false }), ['cash', 'paynow', 'stripe_s700', 'gift-card', 'store-credit', 'wechat', 'misc', 'square_pos'])
+  assert.deepEqual(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: true }), ['cash', 'paynow', 'stripe_s700', 'stripe_tap', 'gift-card', 'store-credit', 'wechat', 'misc', 'square_pos'])
+  assert.equal(visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: true }).includes('card'), false)
 })
 
 test('Galaxy Tab store kit charges the S700 first', () => {

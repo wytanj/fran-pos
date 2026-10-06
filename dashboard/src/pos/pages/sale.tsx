@@ -579,6 +579,7 @@ export default function SalePage() {
   const [franRewardBasketKey, setFranRewardBasketKey] = useState<string | null>(null)
   const [franVoucherScans, setFranVoucherScans] = useState<FranVoucherScan[]>([])
   const [paymentOpen, setPaymentOpen] = useState(false)
+  const [activeTenderMode, setActiveTenderMode] = useState<string | null>(null)
   const [cartOverrideOpen, setCartOverrideOpen] = useState(false)
   const [openAmountOpen, setOpenAmountOpen] = useState(false)
   const [openAmountScan, setOpenAmountScan] = useState<string | null>(null)
@@ -616,6 +617,8 @@ export default function SalePage() {
       giftSettlement?.remaining == null
         ? null
         : { redeemed: giftSettlement.redeemed, remaining: giftSettlement.remaining }
+    const stashedMember = pos.lastSale?.fran?.counterSession
+    const memberName = stashedMember?.mode === 'member' ? stashedMember.member?.name ?? null : null
     return buildMirrorSnapshot({
       store: { name: store.name, code: store.code, currency: store.currency },
       cart,
@@ -627,8 +630,11 @@ export default function SalePage() {
       franPreview,
       promos: MIRROR_IDLE_PROMOS,
       giftCard,
+      tenders: pos.payments.map((payment) => ({ mode: payment.mode, amount: payment.amount })),
+      activeTenderMode,
+      memberName,
     })
-  }, [cart, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview])
+  }, [cart, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview, activeTenderMode])
   const mirror = useMirrorPublisher(mirrorSnapshot, mirrorRegisterToken)
   const productEntryRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -2611,6 +2617,7 @@ export default function SalePage() {
         onClose={() => setPaymentOpen(false)}
         onComplete={() => { void completePaidSale() }}
         onPaymentFailed={(reason) => { void handlePaymentFailure(reason) }}
+        onActiveTender={setActiveTenderMode}
       />
 
       <SaleCompleteModal

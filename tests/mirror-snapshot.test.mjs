@@ -2,10 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const {
+  MIRROR_DONE_IDLE_MS,
   MIRROR_IDLE_PROMOS,
   buildMirrorSnapshot,
   formatMirrorMoney,
   formatTierNudge,
+  mirrorAfterDoneIdle,
+  mirrorPayBanner,
+  mirrorPayingCopy,
   parseMirrorSnapshot,
 } = await import('../dashboard/src/pos/mirror/mirror-snapshot.ts')
 
@@ -111,6 +115,70 @@ test('paying phase shows the outstanding balance, never negative', () => {
   assert.equal(paying.amountDue, 15.5)
   const change = buildMirrorSnapshot(input({ paymentOpen: true, totals: { balance: -4 } }))
   assert.equal(change.amountDue, 0)
+  assert.equal(change.changeDue, 4)
+})
+
+test('paying banner follows the tender and hides a zero amount when change is due', () => {
+  const cash = buildMirrorSnapshot(input({
+    paymentOpen: true,
+    activeTenderMode: 'cash',
+    totals: { balance: 20 },
+  }))
+  assert.equal(cash.tender, 'cash')
+  assert.equal(mirrorPayingCopy('cash'), 'Pay with cash')
+  assert.equal(mirrorPayingCopy('paynow'), 'Scan PayNow')
+  assert.equal(mirrorPayBanner({ amountDue: 20, changeDue: 0, tender: 'cash' }).label.includes('card reader'), false)
+  assert.equal(mirrorPayBanner({ amountDue: 20, changeDue: 0, tender: 'paynow' }).label, 'Scan PayNow')
+  assert.equal(mirrorPayBanner({ amountDue: 20, changeDue: 0, tender: 'card' }).label, 'Pay on the card reader')
+  assert.deepEqual(mirrorPayBanner({ amountDue: 0, changeDue: 4, tender: 'cash' }), { kind: 'change', label: 'Change due', amount: 4 })
+  assert.equal(mirrorPayBanner({ amountDue: 0, changeDue: 0, tender: null }).kind, 'hidden')
+
+  const paynow = buildMirrorSnapshot(input({
+    paymentOpen: true,
+    tenders: [{ mode: 'paynow', amount: 10 }],
+    totals: { balance: 10 },
+  }))
+  assert.equal(paynow.tender, 'paynow')
+  const reader = buildMirrorSnapshot(input({
+    paymentOpen: true,
+    activeTenderMode: 'stripe_s700',
+    totals: { balance: 10 },
+  }))
+  assert.equal(reader.tender, 'card')
+})
+
+test('done keeps a stashed member name and the cash change', () => {
+  const lastSale = {
+    receiptNo: 'R-7',
+    total: 40,
+    saleStatus: 'completed',
+    pointsEarned: 40,
+    payments: [{ mode: 'cash', amount: 50 }],
+  }
+  const done = buildMirrorSnapshot(input({
+    cart: [],
+    completedOpen: true,
+    lastSale,
+    franSession: null,
+    memberName: 'Mei Tan',
+  }))
+  assert.equal(done.phase, 'done')
+  assert.equal(done.memberName, 'Mei Tan')
+  assert.equal(done.changeDue, 10)
+  assert.deepEqual(parseMirrorSnapshot(JSON.parse(JSON.stringify(done))), done)
+  assert.equal(parseMirrorSnapshot({ ...done, changeDue: -1 }), null)
+})
+
+test('mirror returns to promos 8 to 15 seconds after done', () => {
+  const lastSale = { receiptNo: 'R-8', total: 10, saleStatus: 'completed', pointsEarned: 0 }
+  const done = buildMirrorSnapshot(input({ cart: [], completedOpen: true, lastSale, memberName: 'Mei Tan' }))
+  assert.ok(MIRROR_DONE_IDLE_MS >= 8000 && MIRROR_DONE_IDLE_MS <= 15000)
+  assert.equal(mirrorAfterDoneIdle(done, MIRROR_DONE_IDLE_MS - 1, MIRROR_IDLE_PROMOS).phase, 'done')
+  const idle = mirrorAfterDoneIdle(done, MIRROR_DONE_IDLE_MS, MIRROR_IDLE_PROMOS)
+  assert.equal(idle.phase, 'idle')
+  assert.ok(idle.promos.length >= 1)
+  const paying = buildMirrorSnapshot(input({ paymentOpen: true }))
+  assert.equal(mirrorAfterDoneIdle(paying, MIRROR_DONE_IDLE_MS, MIRROR_IDLE_PROMOS).phase, 'paying')
 })
 
 test('done phase shows the receipt only for a completed sale', () => {

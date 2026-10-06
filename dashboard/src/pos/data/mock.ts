@@ -171,15 +171,15 @@ export const SALES_TYPES: { value: SalesType; label: string; hint: string; requi
 
 export const PAYMENT_MODES = [
   { id: 'cash', label: 'Cash', icon: 'Banknote' },
+  { id: 'paynow', label: 'PayNow QR', icon: 'QrCode' },
   { id: 'stripe_s700', label: 'S700 reader', icon: 'Nfc' },
   { id: 'stripe_tap', label: 'Tap on tablet', icon: 'SmartphoneNfc' },
+  { id: 'gift-card', label: 'Gift Card', icon: 'Gift' },
+  { id: 'store-credit', label: 'Store Credit', icon: 'Wallet' },
+  { id: 'wechat', label: 'WeChat Pay', icon: 'QrCode' },
+  { id: 'misc', label: 'Misc / Exchange', icon: 'Shuffle' },
   { id: 'card', label: 'Credit / Debit', icon: 'CreditCard' },
   { id: 'square_pos', label: 'Square POS', icon: 'CreditCard' },
-  { id: 'paynow', label: 'PayNow QR', icon: 'QrCode' },
-  { id: 'wechat', label: 'WeChat Pay', icon: 'QrCode' },
-  { id: 'store-credit', label: 'Store Credit', icon: 'Wallet' },
-  { id: 'gift-card', label: 'Gift Card', icon: 'Gift' },
-  { id: 'misc', label: 'Misc / Exchange', icon: 'Shuffle' },
 ] as const
 
 export type PaymentModeId = (typeof PAYMENT_MODES)[number]['id']
