@@ -1,4 +1,5 @@
-// Imported directly by node tests: keep this module free of imports.
+// Node tests import this file. Import only other import-free modules.
+import { cartPriceFace, type CartPriceOff } from '../lib/cart-price-face.ts'
 
 export const MIRROR_SNAPSHOT_VERSION = 1
 
@@ -13,9 +14,10 @@ export interface MirrorLine {
   name: string
   qty: number
   net: number
+  brand?: string
+  upc?: string
   list?: number
-  discount?: number
-  discountLabel?: string
+  offs?: CartPriceOff[]
 }
 
 export interface MirrorReward {
@@ -52,10 +54,23 @@ export interface MirrorGiftCard {
   remaining: number
 }
 
+export type MirrorTenderKind = 'cash' | 'paynow' | 'card' | 'gift' | 'store-credit' | 'wechat' | 'misc'
+
+export const MIRROR_DONE_IDLE_MS = 12_000
+
 export type MirrorSnapshot =
   | { v: 1; phase: 'idle'; store: MirrorStore; promos: MirrorPromo[] }
   | { v: 1; phase: 'cart'; store: MirrorStore; basket: MirrorBasket }
-  | { v: 1; phase: 'paying'; store: MirrorStore; basket: MirrorBasket; amountDue: number; giftCard?: MirrorGiftCard }
+  | {
+      v: 1
+      phase: 'paying'
+      store: MirrorStore
+      basket: MirrorBasket
+      amountDue: number
+      tender?: MirrorTenderKind
+      changeDue?: number
+      giftCard?: MirrorGiftCard
+    }
   | {
       v: 1
       phase: 'done'
@@ -64,6 +79,7 @@ export type MirrorSnapshot =
       nett: number
       memberName: string | null
       pointsEarned: number | null
+      changeDue?: number
       giftCard?: MirrorGiftCard
     }
 
@@ -100,6 +116,10 @@ export interface MirrorCartLineInput {
   lineDiscount: number
   lineKind?: CartLineKind
   discountLabel?: string
+  listPrice?: number
+  isMarkdown?: boolean
+  brand?: string
+  upc?: string
 }
 
 export interface MirrorTotalsInput {
@@ -109,11 +129,17 @@ export interface MirrorTotalsInput {
   cartAdjustment: number
 }
 
+export interface MirrorTenderInput {
+  mode: string
+  amount: number
+}
+
 export interface MirrorLastSaleInput {
   receiptNo: string
   total: number
   saleStatus: 'completed' | 'voided'
   pointsEarned: number
+  payments?: MirrorTenderInput[]
 }
 
 export interface MirrorFranSessionInput {
@@ -144,6 +170,10 @@ export interface BuildMirrorSnapshotInput {
   franPreview: MirrorFranPreviewInput | null
   promos: MirrorPromo[]
   giftCard?: MirrorGiftCard | null
+  tenders?: MirrorTenderInput[]
+  activeTenderMode?: string | null
+  /** Name stashed on the completed sale after the counter session is cleared. */
+  memberName?: string | null
 }
 
 function round2(value: number) {
@@ -166,14 +196,41 @@ function lineNet(line: MirrorCartLineInput) {
   return round2(line.unitPrice * line.qty - line.lineDiscount * (line.qty < 0 ? -1 : 1))
 }
 
+export function mirrorLineMeta(source: {
+  brand?: string | null
+  upc?: string | null
+  ean?: string | null
+  gtin?: string | null
+  barcode?: string | null
+}) {
+  const brand = source.brand?.trim()
+  const upc = [source.upc, source.ean, source.gtin, source.barcode]
+    .map((value) => value?.trim() ?? '')
+    .find((value) => value.length > 0)
+  return {
+    ...(brand ? { brand } : {}),
+    ...(upc ? { upc } : {}),
+  }
+}
+
 function toProductLine(line: MirrorCartLineInput): MirrorLine {
-  const net = lineNet(line)
-  const list = round2(line.unitPrice * line.qty)
-  const discount = round2(list - net)
-  const base: MirrorLine = { id: line.lineId, name: line.name, qty: line.qty, net }
-  if (discount === 0) return base
-  const label = line.discountLabel?.trim()
-  return label ? { ...base, list, discount, discountLabel: label } : { ...base, list, discount }
+  const face = cartPriceFace({
+    unitPrice: line.unitPrice,
+    listPrice: line.listPrice ?? line.unitPrice,
+    qty: line.qty,
+    lineDiscount: line.lineDiscount,
+    isMarkdown: line.isMarkdown ?? false,
+    discountLabel: line.discountLabel,
+  })
+  const base: MirrorLine = {
+    id: line.lineId,
+    name: line.name,
+    qty: line.qty,
+    net: face.nett,
+    ...mirrorLineMeta({ brand: line.brand, upc: line.upc }),
+  }
+  if (face.kind === 'nett') return base
+  return { ...base, list: face.list, offs: face.offs }
 }
 
 function toMember(session: MirrorFranSessionInput | null, preview: MirrorFranPreviewInput | null): MirrorMember | null {
@@ -232,17 +289,108 @@ function giftField(giftCard: MirrorGiftCard | null | undefined): { giftCard: Mir
   return { giftCard: { redeemed: round2(giftCard.redeemed), remaining: round2(giftCard.remaining) } }
 }
 
+export function mirrorTenderKind(mode: string | null | undefined): MirrorTenderKind | null {
+  switch (mode) {
+    case 'cash':
+      return 'cash'
+    case 'paynow':
+      return 'paynow'
+    case 'wechat':
+      return 'wechat'
+    case 'gift-card':
+      return 'gift'
+    case 'store-credit':
+      return 'store-credit'
+    case 'misc':
+      return 'misc'
+    case 'stripe_s700':
+    case 'stripe_tap':
+    case 'card':
+    case 'square_pos':
+      return 'card'
+    default:
+      return null
+  }
+}
+
+export function mirrorPayingCopy(tender: MirrorTenderKind | null): string {
+  switch (tender) {
+    case 'cash':
+      return 'Pay with cash'
+    case 'paynow':
+      return 'Scan PayNow'
+    case 'card':
+      return 'Pay on the card reader'
+    case 'gift':
+      return 'Gift card'
+    case 'store-credit':
+      return 'Store credit'
+    case 'wechat':
+      return 'Scan WeChat Pay'
+    case 'misc':
+      return 'Other payment'
+    default:
+      return 'Amount due'
+  }
+}
+
+export type MirrorPayBanner =
+  | { kind: 'change'; label: 'Change due'; amount: number }
+  | { kind: 'due'; label: string; amount: number }
+  | { kind: 'hidden' }
+
+export function mirrorPayBanner(input: {
+  amountDue: number
+  changeDue: number
+  tender: MirrorTenderKind | null
+}): MirrorPayBanner {
+  if (input.changeDue > 0) return { kind: 'change', label: 'Change due', amount: round2(input.changeDue) }
+  if (input.amountDue <= 0) return { kind: 'hidden' }
+  return { kind: 'due', label: mirrorPayingCopy(input.tender), amount: round2(input.amountDue) }
+}
+
+export function mirrorAfterDoneIdle(
+  snapshot: MirrorSnapshot,
+  elapsedMs: number,
+  promos: MirrorPromo[],
+): MirrorSnapshot {
+  if (snapshot.phase !== 'done' || elapsedMs < MIRROR_DONE_IDLE_MS) return snapshot
+  return { v: 1, phase: 'idle', store: snapshot.store, promos }
+}
+
+function namedMember(name: string | null | undefined) {
+  const trimmed = name?.trim()
+  return trimmed || null
+}
+
+function changeField(changeDue: number): { changeDue: number } | Record<string, never> {
+  return changeDue > 0 ? { changeDue } : {}
+}
+
+function tenderField(tender: MirrorTenderKind | null): { tender: MirrorTenderKind } | Record<string, never> {
+  return tender ? { tender } : {}
+}
+
+function payingTender(input: BuildMirrorSnapshotInput): MirrorTenderKind | null {
+  return (
+    mirrorTenderKind(input.activeTenderMode) ??
+    mirrorTenderKind(input.tenders?.[input.tenders.length - 1]?.mode)
+  )
+}
+
 export function buildMirrorSnapshot(input: BuildMirrorSnapshotInput): MirrorSnapshot {
   const { store, lastSale } = input
   if (input.completedOpen && lastSale && lastSale.saleStatus !== 'voided') {
+    const paid = (lastSale.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
     return {
       v: 1,
       phase: 'done',
       store,
       receiptNo: lastSale.receiptNo,
       nett: round2(lastSale.total),
-      memberName: toMember(input.franSession, null)?.name ?? null,
+      memberName: toMember(input.franSession, null)?.name ?? namedMember(input.memberName),
       pointsEarned: lastSale.pointsEarned > 0 ? lastSale.pointsEarned : null,
+      ...changeField(round2(Math.max(0, paid - lastSale.total))),
       ...giftField(input.giftCard),
     }
   }
@@ -255,6 +403,8 @@ export function buildMirrorSnapshot(input: BuildMirrorSnapshotInput): MirrorSnap
       store,
       basket,
       amountDue: round2(Math.max(0, input.totals.balance)),
+      ...tenderField(payingTender(input)),
+      ...changeField(round2(Math.max(0, -input.totals.balance))),
       ...giftField(input.giftCard),
     }
   }
@@ -277,13 +427,26 @@ function isStore(value: unknown): value is MirrorStore {
   return isObject(value) && isStr(value.name) && isStr(value.code) && isStr(value.currency)
 }
 
+function isOff(value: unknown): value is CartPriceOff {
+  return isObject(value) && isStr(value.label) && isNum(value.amount)
+}
+
+function isOptionalLabel(value: unknown) {
+  return value == null || (isStr(value) && value.trim().length > 0)
+}
+
 function isLine(value: unknown): value is MirrorLine {
   if (!isObject(value) || !isStr(value.id) || !isStr(value.name) || !isNum(value.qty) || !isNum(value.net)) return false
+  if (!isOptionalLabel(value.brand) || !isOptionalLabel(value.upc)) return false
   const listSet = value.list != null
-  const discountSet = value.discount != null
-  const labelSet = value.discountLabel != null
-  if (!listSet && !discountSet && !labelSet) return true
-  return isNum(value.list) && isNum(value.discount) && (value.discountLabel == null || isStr(value.discountLabel))
+  const offsSet = value.offs != null
+  if (!listSet && !offsSet) return true
+  return (
+    isNum(value.list) &&
+    Array.isArray(value.offs) &&
+    value.offs.length > 0 &&
+    value.offs.every(isOff)
+  )
 }
 
 function isReward(value: unknown): value is MirrorReward {
@@ -327,6 +490,23 @@ function giftCardFrom(value: Json): MirrorGiftCard | null | undefined {
   return isGiftCard(value.giftCard) ? value.giftCard : null
 }
 
+const TENDER_KINDS = ['cash', 'paynow', 'card', 'gift', 'store-credit', 'wechat', 'misc'] as const
+
+function isTenderKind(value: unknown): value is MirrorTenderKind {
+  return TENDER_KINDS.some((kind) => kind === value)
+}
+
+function changeDueFrom(value: Json): number | undefined | null {
+  if (!('changeDue' in value) || value.changeDue == null) return undefined
+  if (!isNum(value.changeDue) || value.changeDue < 0) return null
+  return value.changeDue > 0 ? value.changeDue : undefined
+}
+
+function tenderFrom(value: Json): MirrorTenderKind | undefined | null {
+  if (!('tender' in value) || value.tender == null) return undefined
+  return isTenderKind(value.tender) ? value.tender : null
+}
+
 export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
   if (!isObject(value) || value.v !== MIRROR_SNAPSHOT_VERSION || !isStore(value.store)) return null
   switch (value.phase) {
@@ -339,8 +519,18 @@ export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
       const amountDue = value.amountDue
       if (!isBasket(basket) || !isNum(amountDue)) return null
       const giftCard = giftCardFrom(value)
-      if (giftCard === null) return null
-      const snapshot: MirrorSnapshot = { v: 1, phase: 'paying', store: value.store, basket, amountDue }
+      const changeDue = changeDueFrom(value)
+      const tender = tenderFrom(value)
+      if (giftCard === null || changeDue === null || tender === null) return null
+      const snapshot: MirrorSnapshot = {
+        v: 1,
+        phase: 'paying',
+        store: value.store,
+        basket,
+        amountDue,
+        ...tenderField(tender ?? null),
+        ...changeField(changeDue ?? 0),
+      }
       return giftCard ? { ...snapshot, giftCard } : snapshot
     }
     case 'done': {
@@ -350,7 +540,8 @@ export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
       const pointsEarned = value.pointsEarned === null || isNum(value.pointsEarned) ? value.pointsEarned : undefined
       if (!isStr(receiptNo) || !isNum(nett) || memberName === undefined || pointsEarned === undefined) return null
       const giftCard = giftCardFrom(value)
-      if (giftCard === null) return null
+      const changeDue = changeDueFrom(value)
+      if (giftCard === null || changeDue === null) return null
       const snapshot: MirrorSnapshot = {
         v: 1,
         phase: 'done',
@@ -359,6 +550,7 @@ export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
         nett,
         memberName,
         pointsEarned,
+        ...changeField(changeDue ?? 0),
       }
       return giftCard ? { ...snapshot, giftCard } : snapshot
     }

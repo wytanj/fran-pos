@@ -69,13 +69,30 @@ export function preferredStoreChargeMode(
   return tapReady ? 'stripe_tap' : null
 }
 
+/** Cashier tile order. Card and Square stay available, after the named tenders. */
+const TENDER_TILE_ORDER = [
+  'cash',
+  'paynow',
+  'stripe_s700',
+  'stripe_tap',
+  'gift-card',
+  'store-credit',
+  'wechat',
+  'misc',
+  'card',
+  'square_pos',
+] as const
+
+export function isPrimaryTenderTile(id: string) {
+  return id === 'cash' || id === 'paynow'
+}
+
 export function visiblePaymentModes(input: {
   stripeEnabled: boolean
   s700Ready: boolean
   tapReady: boolean
 }) {
-  const modes = ['cash', 'stripe_s700', 'stripe_tap', 'card', 'square_pos', 'paynow', 'wechat', 'store-credit', 'gift-card', 'misc'] as const
-  return modes.filter((id) => {
+  return TENDER_TILE_ORDER.filter((id) => {
     if (id === 'stripe_s700') return input.stripeEnabled && input.s700Ready
     if (id === 'stripe_tap') return input.tapReady
     if (id === 'card') return !input.stripeEnabled && !input.tapReady

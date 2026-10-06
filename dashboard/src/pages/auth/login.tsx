@@ -52,68 +52,67 @@ export default function LoginPage() {
         <AuthBrand subtitle="HQ dashboard, catalog, and live register" />
       <Card className="w-full">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Sign In</CardTitle>
-          <CardDescription>Enter your credentials to access your dashboard</CardDescription>
+          <CardTitle className="text-2xl">Register</CardTitle>
+          <CardDescription>Open the cashier register. HQ sign-in stays below.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            type="button"
-            variant="outline"
-            className="mb-4 w-full"
-            disabled={googleSubmitting}
-            onClick={handleGoogleSignIn}
+          <Link
+            to="/pos?mode=demo"
+            className="press inline-flex h-16 w-full items-center justify-center rounded-full bg-yellow text-lg font-semibold text-brown shadow-glow"
           >
-            {googleSubmitting ? 'Opening Google...' : 'Continue with Google'}
-          </Button>
-          <div className="relative mb-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t" />
+            Open POS Register
+          </Link>
+          <details className="mt-4 rounded-md border border-dashed">
+            <summary className="cursor-pointer list-none px-3 py-3 text-center text-sm text-muted-foreground">
+              HQ sign in with Google or email
+            </summary>
+            <div className="px-3 pb-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="mb-4 w-full"
+                disabled={googleSubmitting}
+                onClick={handleGoogleSignIn}
+              >
+                {googleSubmitting ? 'Opening Google...' : 'Continue with Google'}
+              </Button>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" variant="outline" className="w-full" disabled={submitting}>
+                  {submitting ? 'Signing in...' : 'Sign In'}
+                </Button>
+                <p className="text-center text-sm text-muted-foreground">
+                  Don't have an account?{' '}
+                  <Link to="/register" className="text-primary underline">
+                    Register
+                  </Link>
+                </p>
+              </form>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">or continue with email</span>
-            </div>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? 'Signing in...' : 'Sign In'}
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary underline">
-                Register
-              </Link>
-            </p>
-          </form>
-          <div className="mt-4 rounded-md border border-dashed p-3 text-center text-sm">
-            <p className="text-muted-foreground">Want to try the cashier terminal?</p>
-            <Link to="/pos?mode=demo" className="font-medium text-primary underline">
-              Open POS Register →
-            </Link>
-          </div>
+          </details>
         </CardContent>
       </Card>
       </div>

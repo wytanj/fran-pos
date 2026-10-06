@@ -21,8 +21,14 @@ test('mirror basket rows wrap the full line name and keep qty, price, and scroll
   assert.match(basket, /overflow-y-auto/)
   assert.match(row[0], /line-through/)
   assert.match(row[0], /line\.list/)
-  assert.match(row[0], /line\.discount/)
+  assert.match(row[0], /line\.offs/)
+  assert.match(row[0], /off\.label/)
+  assert.match(row[0], /money\(-off\.amount\)/)
   assert.match(row[0], /money\(line\.net\)/)
+  assert.match(row[0], /line\.brand/)
+  assert.match(row[0], /line\.upc/)
+  assert.match(row[0], /mirror-line-meta/)
+  assert.doesNotMatch(row[0], /N\/A|—/)
 })
 
 test('mirror wake/session + POS immersive; cashier sale page does not own mirror wake APIs', () => {

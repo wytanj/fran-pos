@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { readFileSync } from 'node:fs'
+
 const {
+  MIRROR_DONE_IDLE_MS,
   MIRROR_IDLE_PROMOS,
   buildMirrorSnapshot,
   formatMirrorMoney,
   formatTierNudge,
+  mirrorAfterDoneIdle,
+  mirrorLineMeta,
+  mirrorPayBanner,
+  mirrorPayingCopy,
   parseMirrorSnapshot,
 } = await import('../dashboard/src/pos/mirror/mirror-snapshot.ts')
 
@@ -65,7 +72,7 @@ test('cart phase splits products from rewards and keeps nett equal to the regist
   )
   assert.equal(snap.phase, 'cart')
   assert.deepEqual(snap.basket.lines, [
-    { id: 'a', name: 'Item a', qty: 2, net: 75, list: 80, discount: 5 },
+    { id: 'a', name: 'Item a', qty: 2, net: 75, list: 80, offs: [{ label: '', amount: 5 }] },
     { id: 'b', name: 'Item b', qty: 1, net: 25 },
   ])
   assert.deepEqual(snap.basket.rewards.map((r) => [r.id, r.label, r.amount]), [
@@ -89,14 +96,85 @@ test('a labelled discount round-trips, and a line missing list price does not pa
     qty: 2,
     net: 75,
     list: 80,
-    discount: 5,
-    discountLabel: 'Member 5',
+    offs: [{ label: 'Member 5', amount: 5 }],
   })
   const parsed = parseMirrorSnapshot(JSON.parse(JSON.stringify(snap)))
   assert.deepEqual(parsed, snap)
-  const broken = JSON.parse(JSON.stringify(snap))
-  delete broken.basket.lines[0].list
-  assert.equal(parseMirrorSnapshot(broken), null)
+  const missingList = JSON.parse(JSON.stringify(snap))
+  delete missingList.basket.lines[0].list
+  assert.equal(parseMirrorSnapshot(missingList), null)
+  const missingOffs = JSON.parse(JSON.stringify(snap))
+  delete missingOffs.basket.lines[0].offs
+  assert.equal(parseMirrorSnapshot(missingOffs), null)
+})
+
+test('markdown and a line discount use the cashier price face', () => {
+  const snap = buildMirrorSnapshot(input({
+    cart: [{
+      ...product('a', 80, 2, 10),
+      listPrice: 100,
+      isMarkdown: true,
+      discountLabel: 'Staff Discount 15%',
+    }],
+  }))
+  const line = snap.basket.lines[0]
+  assert.deepEqual(line, {
+    id: 'a',
+    name: 'Item a',
+    qty: 2,
+    net: 150,
+    list: 200,
+    offs: [
+      { label: 'MD', amount: 40 },
+      { label: 'Staff Discount 15%', amount: 10 },
+    ],
+  })
+  assert.equal(line.list - line.offs[0].amount - line.offs[1].amount, line.net)
+})
+
+test('brand and upc show when present and drop when blank', () => {
+  const present = buildMirrorSnapshot(input({
+    cart: [{ ...product('a', 40), brand: ' CeraVe ', upc: '012345678905' }],
+  }))
+  assert.deepEqual(present.basket.lines[0], {
+    id: 'a',
+    name: 'Item a',
+    qty: 1,
+    net: 40,
+    brand: 'CeraVe',
+    upc: '012345678905',
+  })
+  const absent = buildMirrorSnapshot(input({
+    cart: [{ ...product('a', 40), brand: '  ', upc: '' }],
+  }))
+  assert.deepEqual(absent.basket.lines[0], { id: 'a', name: 'Item a', qty: 1, net: 40 })
+  assert.equal('brand' in absent.basket.lines[0], false)
+  assert.equal('upc' in absent.basket.lines[0], false)
+  const blank = JSON.parse(JSON.stringify(present))
+  blank.basket.lines[0].brand = ''
+  assert.equal(parseMirrorSnapshot(blank), null)
+})
+
+test('catalog meta prefers UPC, then another barcode, and omits a missing brand', () => {
+  assert.deepEqual(mirrorLineMeta({ brand: ' The Ordinary ', upc: '111', ean: '222', barcode: '333' }), {
+    brand: 'The Ordinary',
+    upc: '111',
+  })
+  assert.deepEqual(mirrorLineMeta({ brand: ' ', ean: ' 5901234123457 ' }), { upc: '5901234123457' })
+  assert.deepEqual(mirrorLineMeta({}), {})
+})
+
+test('the sale publisher sends list price, markdown, brand, and upc', () => {
+  const sale = readFileSync(new URL('../dashboard/src/pos/pages/sale.tsx', import.meta.url), 'utf8')
+  const start = sale.indexOf('const mirrorCart = cart.map')
+  const end = sale.indexOf('return buildMirrorSnapshot')
+  const block = sale.slice(start, end)
+  assert.ok(start >= 0 && end > start)
+  assert.match(block, /listPrice: line\.listPrice/)
+  assert.match(block, /isMarkdown: line\.isMarkdown/)
+  assert.match(block, /mirrorLineMeta\(\{ brand: product\?\.brand, upc: product\?\.upc \}\)/)
+  assert.match(sale, /brand: item\.brand_name/)
+  assert.match(sale, /source_brand/)
 })
 
 test('open amount lines count as products', () => {
@@ -111,6 +189,70 @@ test('paying phase shows the outstanding balance, never negative', () => {
   assert.equal(paying.amountDue, 15.5)
   const change = buildMirrorSnapshot(input({ paymentOpen: true, totals: { balance: -4 } }))
   assert.equal(change.amountDue, 0)
+  assert.equal(change.changeDue, 4)
+})
+
+test('paying banner follows the tender and hides a zero amount when change is due', () => {
+  const cash = buildMirrorSnapshot(input({
+    paymentOpen: true,
+    activeTenderMode: 'cash',
+    totals: { balance: 20 },
+  }))
+  assert.equal(cash.tender, 'cash')
+  assert.equal(mirrorPayingCopy('cash'), 'Pay with cash')
+  assert.equal(mirrorPayingCopy('paynow'), 'Scan PayNow')
+  assert.equal(mirrorPayBanner({ amountDue: 20, changeDue: 0, tender: 'cash' }).label.includes('card reader'), false)
+  assert.equal(mirrorPayBanner({ amountDue: 20, changeDue: 0, tender: 'paynow' }).label, 'Scan PayNow')
+  assert.equal(mirrorPayBanner({ amountDue: 20, changeDue: 0, tender: 'card' }).label, 'Pay on the card reader')
+  assert.deepEqual(mirrorPayBanner({ amountDue: 0, changeDue: 4, tender: 'cash' }), { kind: 'change', label: 'Change due', amount: 4 })
+  assert.equal(mirrorPayBanner({ amountDue: 0, changeDue: 0, tender: null }).kind, 'hidden')
+
+  const paynow = buildMirrorSnapshot(input({
+    paymentOpen: true,
+    tenders: [{ mode: 'paynow', amount: 10 }],
+    totals: { balance: 10 },
+  }))
+  assert.equal(paynow.tender, 'paynow')
+  const reader = buildMirrorSnapshot(input({
+    paymentOpen: true,
+    activeTenderMode: 'stripe_s700',
+    totals: { balance: 10 },
+  }))
+  assert.equal(reader.tender, 'card')
+})
+
+test('done keeps a stashed member name and the cash change', () => {
+  const lastSale = {
+    receiptNo: 'R-7',
+    total: 40,
+    saleStatus: 'completed',
+    pointsEarned: 40,
+    payments: [{ mode: 'cash', amount: 50 }],
+  }
+  const done = buildMirrorSnapshot(input({
+    cart: [],
+    completedOpen: true,
+    lastSale,
+    franSession: null,
+    memberName: 'Mei Tan',
+  }))
+  assert.equal(done.phase, 'done')
+  assert.equal(done.memberName, 'Mei Tan')
+  assert.equal(done.changeDue, 10)
+  assert.deepEqual(parseMirrorSnapshot(JSON.parse(JSON.stringify(done))), done)
+  assert.equal(parseMirrorSnapshot({ ...done, changeDue: -1 }), null)
+})
+
+test('mirror returns to promos 8 to 15 seconds after done', () => {
+  const lastSale = { receiptNo: 'R-8', total: 10, saleStatus: 'completed', pointsEarned: 0 }
+  const done = buildMirrorSnapshot(input({ cart: [], completedOpen: true, lastSale, memberName: 'Mei Tan' }))
+  assert.ok(MIRROR_DONE_IDLE_MS >= 8000 && MIRROR_DONE_IDLE_MS <= 15000)
+  assert.equal(mirrorAfterDoneIdle(done, MIRROR_DONE_IDLE_MS - 1, MIRROR_IDLE_PROMOS).phase, 'done')
+  const idle = mirrorAfterDoneIdle(done, MIRROR_DONE_IDLE_MS, MIRROR_IDLE_PROMOS)
+  assert.equal(idle.phase, 'idle')
+  assert.ok(idle.promos.length >= 1)
+  const paying = buildMirrorSnapshot(input({ paymentOpen: true }))
+  assert.equal(mirrorAfterDoneIdle(paying, MIRROR_DONE_IDLE_MS, MIRROR_IDLE_PROMOS).phase, 'paying')
 })
 
 test('done phase shows the receipt only for a completed sale', () => {
