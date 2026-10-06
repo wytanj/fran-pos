@@ -232,7 +232,7 @@ export function mockActivePolicyBundle(input: { workspaceId?: string; programKey
     programKey,
     policyVersionId,
     assignmentId,
-    label: "Fran's With Benefits (FWB) demo policy",
+    label: "Fran's With Benefits (FWB)",
     currency: 'SGD',
     activeFrom: '2026-01-01T00:00:00+08:00',
     publishedAt: '2026-01-01T00:00:00+08:00',

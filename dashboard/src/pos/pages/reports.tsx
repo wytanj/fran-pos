@@ -274,7 +274,7 @@ function Integrations() {
           <MigrationRow label="Item master" status="Imported" detail="1,284 SKUs · last run 06:02" />
           <MigrationRow label="Price list" status="Imported" detail="1,284 prices · last run 06:02" />
           <MigrationRow label="Beginning inventory" status="Reconciled" detail="Variance 0 units" />
-          <MigrationRow label="Customer list" status="Imported" detail="demo file · 9,640 members" />
+          <MigrationRow label="Customer list" status="Imported" detail="local file · 9,640 members" />
         </div>
       </div>
     </div>

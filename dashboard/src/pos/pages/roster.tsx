@@ -189,7 +189,7 @@ export default function RosterPage() {
             {board?.date || date} · {board?.timezone || 'Asia/Singapore'}
           </span>
           <span className="rounded-full border px-2 py-0.5">
-            {source === 'live' ? 'Live SKUMS' : 'Demo board'}
+            {source === 'live' ? 'Live SKUMS' : 'Register'}
           </span>
           {board && (
             <span>

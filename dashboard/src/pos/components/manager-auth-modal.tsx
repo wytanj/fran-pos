@@ -181,7 +181,7 @@ export function ManagerAuthModal({ open, action, onCancel, onAuthorized }: Manag
               {submitting ? 'Checking...' : 'Authorise'}
             </Button>
           </div>
-          {mode === 'demo' && <p className="mt-3 text-xs text-muted-foreground">Demo manager PIN: 9999</p>}
+          {mode === 'demo' && <p className="mt-3 text-xs text-muted-foreground">Manager PIN: 9999</p>}
         </div>
       </DialogContent>
     </Dialog>

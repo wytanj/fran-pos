@@ -144,7 +144,7 @@ export default function DashboardPage() {
             </Button>
             <Link to="/pos?mode=demo">
               <Button>
-                <ShoppingBag className="h-4 w-4" /> Open Cashier Demo
+                <ShoppingBag className="h-4 w-4" /> Open POS Register
               </Button>
             </Link>
           </CardContent>

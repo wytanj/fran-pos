@@ -174,7 +174,7 @@ function buildResponse(
       : null,
     policy: {
       version: DEMO_POLICY_VERSION,
-      label: `Demo ${DEMO_RETURN_WINDOW_DAYS} day return policy`,
+      label: `${DEMO_RETURN_WINDOW_DAYS}-day return policy`,
     },
     counterEvidence: [
       { label: 'Email', value: normalizeEmail(input.customerEmail) },

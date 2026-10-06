@@ -111,7 +111,7 @@ export default function LoginPage() {
           <div className="mt-4 rounded-md border border-dashed p-3 text-center text-sm">
             <p className="text-muted-foreground">Want to try the cashier terminal?</p>
             <Link to="/pos?mode=demo" className="font-medium text-primary underline">
-              Open POS Terminal demo →
+              Open POS Register →
             </Link>
           </div>
         </CardContent>

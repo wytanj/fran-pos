@@ -35,7 +35,7 @@ export default function RequestStockPage() {
     let cancelled = false
     async function loadWave() {
       if (mode === 'demo' || !skumsConnector) {
-        setWaveHint('Next scheduled replenishment: Monday / Thursday (demo cadence). Ad-hoc requests are for lift/urgent only.')
+        setWaveHint('Next scheduled replenishment: Monday / Thursday. Ad-hoc requests are for lift/urgent only.')
         return
       }
       try {
@@ -107,7 +107,7 @@ export default function RequestStockPage() {
 
     if (mode === 'demo' || !skumsConnector) {
       setMessage(
-        'Demo / offline: request would be sent to HQ for Mon/Thu wave review (not sent to Loft).',
+        'Offline: request would be sent to HQ for Mon/Thu wave review (not sent to Loft).',
       )
       setLines([])
       return

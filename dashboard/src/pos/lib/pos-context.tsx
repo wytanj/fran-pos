@@ -463,7 +463,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
       tax: snapshot.totals.taxIncluded,
       total: snapshot.totals.total,
       pointsEarned: options.pointsEarned ?? snapshot.totals.pointsEarned,
-      cashier: snapshot.user?.name ?? 'Demo Cashier',
+      cashier: snapshot.user?.name ?? 'Cashier',
       timestamp: completedAt.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }),
       completedAtIso,
       voidedAtIso: null,

@@ -183,7 +183,7 @@ export default function PosLogin() {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              Demo mode
+              Register
             </button>
             <button
               type="button"
@@ -333,11 +333,11 @@ export default function PosLogin() {
                 <div className="rounded-lg border bg-muted/40 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium">Connected demo account</p>
+                      <p className="text-sm font-medium">Connected account</p>
                       <p className="truncate text-xs text-muted-foreground">{connectedAccountLabel}</p>
                     </div>
                     <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
-                      Demo
+                      Register
                     </span>
                   </div>
                   {!company && (
@@ -358,8 +358,8 @@ export default function PosLogin() {
               ) : (
                 <div className="flex flex-col gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-medium">Standalone cashier demo</p>
-                    <p className="text-xs text-muted-foreground">Optional: connect a Google account for demo extras.</p>
+                    <p className="text-sm font-medium">Standalone register</p>
+                    <p className="text-xs text-muted-foreground">Optional: connect a Google account.</p>
                   </div>
                   <Button variant="outline" onClick={handleDemoAccountSignIn} disabled={googleLoading}>
                     {googleLoading ? 'Connecting...' : 'Connect Account'}
@@ -399,7 +399,7 @@ export default function PosLogin() {
                 Enter PIN for <span className="font-medium text-foreground">{selected?.name}</span>
               </p>
               <p className="text-center text-xs text-muted-foreground">
-                Demo PINs — Cashier: <span className="font-mono">1111</span> — Manager:{' '}
+                Register PINs — Cashier: <span className="font-mono">1111</span> — Manager:{' '}
                 <span className="font-mono">9999</span>
               </p>
 
