@@ -120,7 +120,7 @@ export default function ReceiveDeliveryPage() {
     }
 
     if (mode === 'demo' || !connector) {
-      setMessage('Demo: receive would be reported to HQ. Exceptions would show as “reported, not resolved”.')
+      setMessage('Receive would be reported to HQ. Exceptions would show as “reported, not resolved”.')
       return
     }
 

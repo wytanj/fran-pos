@@ -484,7 +484,7 @@ export default function StockPage() {
       flash(
         liveEnabled
           ? `${selectedFloorAction.label} reported to SKUMS for ${skumsStatus(response) === 'applied' ? 'ledger update' : 'HQ approval (no stock change until applied)'}`
-          : `${selectedFloorAction.label} recorded - demo on hand is now ${nextQty.toLocaleString()}`
+          : `${selectedFloorAction.label} recorded - on hand is now ${nextQty.toLocaleString()}`
       )
     } catch (err) {
       const eventError = err instanceof Error ? err : new Error('Failed to submit inventory event.')
@@ -513,7 +513,7 @@ export default function StockPage() {
             <div className="grid gap-2 text-sm sm:grid-cols-3">
               <StoreFact label="Store code" value={STORE.code} />
               <StoreFact label="IMS location" value={STORE.inventoryLocationId} />
-              <StoreFact label="Mode" value={liveEnabled ? 'Live account' : 'Demo terminal'} />
+              <StoreFact label="Mode" value={liveEnabled ? 'Live account' : 'Register'} />
             </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -711,10 +711,10 @@ export default function StockPage() {
               variant="outline"
               onClick={() => { void submitInbound() }}
               disabled={submitting || isLoading || liveEnabled}
-              title={liveEnabled ? 'Disabled in live mode — use Receive delivery or floor reports' : 'Demo-only local display adjust'}
+              title={liveEnabled ? 'Disabled in live mode — use Receive delivery or floor reports' : 'Local display adjust'}
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
-              {liveEnabled ? 'Receive stock (use Receive delivery)' : 'Demo receive (display only)'}
+              {liveEnabled ? 'Receive stock (use Receive delivery)' : 'Receive (display only)'}
             </Button>
           </div>
         </section>
@@ -769,7 +769,7 @@ export default function StockPage() {
                     <td className="p-3 font-mono text-xs text-primary">{p.storeLocationCode ?? '-'}</td>
                     <td className="p-3 text-right tabular-nums">{formatCurrency(p.price, STORE.currency)}</td>
                     <td className="p-3 text-center">
-                      <Badge variant={p.source === 'live' ? 'success' : 'secondary'}>{p.source === 'live' ? 'Live' : 'Demo'}</Badge>
+                      <Badge variant={p.source === 'live' ? 'success' : 'secondary'}>{p.source === 'live' ? 'Live' : 'Register'}</Badge>
                     </td>
                     <td className="p-3 text-right">
                       <span

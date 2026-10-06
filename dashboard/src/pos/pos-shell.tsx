@@ -60,7 +60,7 @@ function readNavCollapsed(): boolean {
 
 export function PosShell() {
   const { user: posUser, setUser, clearSale, mode } = usePos()
-  const { user: accountUser, company } = useAuth()
+  const { company } = useAuth()
   const { data: settings } = useCompanySettings()
   const { connector: stripe } = useStripeConnector()
   const s700Status = useS700Status(stripe)
@@ -175,7 +175,7 @@ export function PosShell() {
     s700Status === 'online' ? 'text-success' : s700Status === 'checking' ? 'text-muted-foreground' : 'text-warning'
 
   const store = getActiveStore()
-  const companyLine = company?.name ?? (accountUser && mode === 'demo' ? 'Account demo' : null)
+  const companyLine = company?.name ?? null
 
   const renderBrandBlock = (opts?: { collapsed?: boolean; showClose?: boolean; onClose?: () => void }) => (
     <div className={cn('flex items-start gap-2 border-b border-line', opts?.collapsed ? 'justify-center px-1 py-3' : 'px-3 py-3')}>

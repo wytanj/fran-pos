@@ -60,7 +60,7 @@ export function FranVoucherScanPanel({
         <p className="text-sm font-semibold text-brown">Scan FWB voucher</p>
       </div>
       <p className="mb-2 text-xs text-ink-soft">
-        Birthday / category earn bonus, or points dens QR (200 / 500 / 1k / 1.5k / 2.5k). Demo codes:{' '}
+        Birthday / category earn bonus, or points dens QR (200 / 500 / 1k / 1.5k / 2.5k). Codes:{' '}
         <code className="rounded bg-white px-1">BDAY</code>,{' '}
         <code className="rounded bg-white px-1">CAT</code>,{' '}
         <code className="rounded bg-white px-1">FWB-RDM-500-TEST01</code>
@@ -94,7 +94,7 @@ export function FranVoucherScanPanel({
 
       {densOptions.length > 0 && onQuoteDens && memberId && (
         <div className="mt-3">
-          <p className="mb-1 text-xs font-medium text-brown">Issue dens QR (demo / app redeem)</p>
+          <p className="mb-1 text-xs font-medium text-brown">Issue dens QR</p>
           <div className="flex flex-wrap gap-1.5">
             {densOptions.map((d) => (
               <Button

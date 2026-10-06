@@ -370,7 +370,7 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
           className="mt-2 w-full border-line bg-yellow-soft text-brown hover:bg-yellow"
           onClick={() => { setQuery('FRAN1001'); void runResolve('FRAN1001', 'qr') }}
         >
-          <QrCode className="h-4 w-4" /> QR demo
+          <QrCode className="h-4 w-4" /> Member QR
         </Button>
         <Button
           type="button"

@@ -173,7 +173,7 @@ export default function OnboardingPage() {
           <div className="rounded-md border border-dashed p-3 text-center text-sm">
             <p className="text-muted-foreground">Need the cashier terminal first?</p>
             <Link to="/pos?mode=demo" className="font-medium text-primary underline">
-              Open Cashier Demo
+              Open POS Register
             </Link>
           </div>
         </CardContent>
