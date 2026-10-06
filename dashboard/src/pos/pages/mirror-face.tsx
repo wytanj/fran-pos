@@ -15,6 +15,11 @@ import {
   type MirrorJoinResult,
 } from '@/pos/mirror/mirror-api'
 import {
+  lockPortrait,
+  postMirrorPath,
+  unlockPortrait,
+} from '@/pos/mirror/mirror-orientation'
+import {
   MIRROR_IDLE_PROMOS,
   formatMirrorMoney,
   parseMirrorSnapshot,
@@ -65,6 +70,30 @@ function useScreenWakeLock() {
   }, [])
 }
 
+function useMirrorPortraitLock() {
+  useEffect(() => {
+    let cancelled = false
+    const sync = () => {
+      postMirrorPath(window.location.href)
+      void lockPortrait().then(() => {
+        if (cancelled) unlockPortrait()
+      })
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sync()
+    }
+    sync()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+      unlockPortrait()
+      // Release Android SENSOR_PORTRAIT even if href still looks like /pos/mirror during unmount.
+      postMirrorPath('/pos/sale')
+    }
+  }, [])
+}
+
 export default function MirrorFacePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [state, setState] = useState<FaceState>(() => {
@@ -77,6 +106,7 @@ export default function MirrorFacePage() {
   const seqRef = useRef(0)
 
   useScreenWakeLock()
+  useMirrorPortraitLock()
 
   const onJoined = useCallback((joined: MirrorJoinResult) => {
     const binding: MirrorFaceBinding = {
@@ -156,7 +186,7 @@ export default function MirrorFacePage() {
 
   const view = snapshot ?? idleFallback(state.binding)
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-cream text-brown select-none">
+    <div data-mirror-face className="flex h-dvh flex-col overflow-hidden bg-cream text-brown select-none">
       <header className="flex items-center justify-between px-6 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3">
         <div className="flex items-center gap-3">
           <BrandMark size="sm" />
@@ -196,7 +226,7 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
           <p className="font-display text-6xl font-bold">Thank you{snapshot.memberName ? `, ${snapshot.memberName}` : ''}</p>
           <p className="text-2xl text-muted-foreground">
-            Paid {formatMirrorMoney(snapshot.nett, snapshot.store.currency)} · Receipt {snapshot.receiptNo}
+            Paid {formatMirrorMoney(snapshot.nett, snapshot.store.currency)} Ã‚Â· Receipt {snapshot.receiptNo}
           </p>
           {snapshot.giftCard && (
             <p className="text-2xl">
@@ -254,23 +284,23 @@ function BasketView({
 }) {
   const money = (n: number) => formatMirrorMoney(n, store.currency)
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 landscape:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-2xl bg-white px-5 shadow-warm-xs" data-testid="mirror-lines">
         {basket.lines.map((line) => (
           <li key={line.id} className="flex items-baseline justify-between gap-4 py-4 text-2xl">
             <span className="min-w-0 flex-1 truncate">{line.name}</span>
-            <span className="shrink-0 text-muted-foreground">×{line.qty}</span>
+            <span className="shrink-0 text-muted-foreground">Ãƒâ€”{line.qty}</span>
             <span className="w-32 shrink-0 text-right font-semibold tabular-nums">{money(line.net)}</span>
           </li>
         ))}
       </ul>
 
-      <section className="shrink-0 space-y-3 rounded-2xl bg-white p-5 shadow-warm-md landscape:w-[42%] landscape:self-end">
+      <section className="shrink-0 space-y-3 rounded-2xl bg-white p-5 shadow-warm-md">
         {basket.member && (
           <div className="flex items-baseline justify-between gap-3 rounded-xl bg-secondary px-4 py-3 text-xl">
             <span className="font-semibold">
               {basket.member.name}
-              {basket.member.tierLabel && <span className="font-normal text-muted-foreground"> · {basket.member.tierLabel}</span>}
+              {basket.member.tierLabel && <span className="font-normal text-muted-foreground"> Ã‚Â· {basket.member.tierLabel}</span>}
             </span>
             {basket.member.pointsToEarn !== null && basket.member.pointsToEarn > 0 && (
               <span className="text-success">+{basket.member.pointsToEarn} pts</span>
@@ -281,7 +311,7 @@ function BasketView({
           <p className="rounded-xl bg-yellow px-4 py-3 text-center text-xl font-semibold">{basket.tierNudge}</p>
         )}
         <div className="flex justify-between text-xl text-muted-foreground">
-          <span>Subtotal · {basket.itemCount} {basket.itemCount === 1 ? 'item' : 'items'}</span>
+          <span>Subtotal Ã‚Â· {basket.itemCount} {basket.itemCount === 1 ? 'item' : 'items'}</span>
           <span className="tabular-nums">{money(basket.subtotal)}</span>
         </div>
         {basket.rewards.map((reward) => (
@@ -298,7 +328,7 @@ function BasketView({
         </div>
         {amountDue !== null && (
           <div className="rounded-xl bg-brown px-4 py-4 text-center text-cream">
-            <p className="text-lg">Amount due · pay on the card reader</p>
+            <p className="text-lg">Amount due Ã‚Â· pay on the card reader</p>
             <p className="font-display text-5xl font-bold tabular-nums">{money(amountDue)}</p>
           </div>
         )}
@@ -326,7 +356,7 @@ function PairScreen({
     if (clean.length === 6) onJoin(clean)
   }
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-cream p-6 text-brown">
+    <div data-mirror-face className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-cream p-6 text-brown">
       <BrandMark size="sm" />
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold">Customer display</h1>
