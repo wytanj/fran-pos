@@ -85,7 +85,7 @@ export async function resolveTapToPayConfig(config: StripeTerminalConfig | null)
     }),
   ])
   if (!session?.data?.session?.access_token) {
-    throw new Error('Google is signed in to the app, but Stripe did not get a session token. Live mode â†’ Use another Google account, then Continue with Google.')
+    throw new Error('Google is signed in to the app, but Stripe did not get a session token. Live mode → Use another Google account, then Continue with Google.')
   }
 
   if (config?.enabled && config.location_id) {
@@ -107,7 +107,7 @@ export async function resolveTapToPayConfig(config: StripeTerminalConfig | null)
     locationId = created?.location?.id || ''
   }
   if (!locationId) {
-    throw new Error('Could not find or create a Stripe Terminal location. Open Settings â†’ Integrations and save a Location ID.')
+    throw new Error('Could not find or create a Stripe Terminal location. Open Settings → Integrations and save a Location ID.')
   }
 
   writeCachedLocationId(locationId)
@@ -129,7 +129,7 @@ let terminalInitialized = false
 let ensureInFlight: Promise<void> | null = null
 
 // NEVER await this or return its result from an async function. The Capacitor
-// plugin proxy fabricates a method for every property â€” including `then` â€” so
+// plugin proxy fabricates a method for every property — including `then` — so
 // resolving a promise with it calls StripeTerminal.then(resolve, reject) as a
 // native method that never invokes either callback: the await hangs forever.
 function terminalApi() {
@@ -171,17 +171,17 @@ export async function initTapToPay(config: StripeTerminalConfig, onStatus?: (mes
     return
   }
 
-  status('2/5 Requesting a Stripe connection tokenâ€¦')
+  status('2/5 Requesting a Stripe connection token…')
   prefetchedConnectionToken = (await createStripeConnectionToken(config.location_id))?.secret || ''
   if (!prefetchedConnectionToken) {
     throw new Error('Stripe did not return a connection token. Sign in again from Live mode and retry Charge.')
   }
 
-  status('3/5 Checking the Tap to Pay pluginâ€¦')
+  status('3/5 Checking the Tap to Pay plugin…')
   const terminal = terminalApi()
 
   if (!tokenListenerAttached) {
-    status('3/5 Attaching the Stripe token listenerâ€¦')
+    status('3/5 Attaching the Stripe token listener…')
     await withTimeout(
       terminal.addListener(TerminalEventsEnum.RequestedConnectionToken, async () => {
         await provideConnectionToken(config.location_id)
@@ -192,7 +192,7 @@ export async function initTapToPay(config: StripeTerminalConfig, onStatus?: (mes
     tokenListenerAttached = true
   }
 
-  status('3/5 Starting Stripe on this phone (initialize)â€¦')
+  status('3/5 Starting Stripe on this phone (initialize)…')
   try {
     await withTimeout(
       terminal.initialize({ isTest: false }),
@@ -204,7 +204,7 @@ export async function initTapToPay(config: StripeTerminalConfig, onStatus?: (mes
     if (!/already initialized/i.test(message)) throw error
   }
   terminalInitialized = true
-  status('3/5 Stripe is running. Configuring the tap screenâ€¦')
+  status('3/5 Stripe is running. Configuring the tap screen…')
 
   await withTimeout(
     terminal.setTapToPayUxConfiguration({
@@ -277,7 +277,7 @@ export async function ensureTapToPayReady(input: {
         'Checking the connected reader',
       ).catch(() => ({ reader: null }))
       if (already?.reader) {
-        input.onStatus?.('Reader already connected â€” ready.')
+        input.onStatus?.('Reader already connected — ready.')
         logTapToPayTrace('tap reuse connected reader')
         return
       }
@@ -287,11 +287,11 @@ export async function ensureTapToPayReady(input: {
       await initTapToPay(input.config, input.onStatus)
       const readyTerminal = terminalApi()
 
-      input.onStatus?.('4/5 Finding the NFC reader on this phoneâ€¦')
+      input.onStatus?.('4/5 Finding the NFC reader on this phone…')
       logTapToPayTrace('4/5 discover readers')
       const reader = await discoverTapToPayReader(readyTerminal, input.config.location_id)
 
-      input.onStatus?.('5/5 Connecting this phone as the Stripe readerâ€¦')
+      input.onStatus?.('5/5 Connecting this phone as the Stripe reader…')
       logTapToPayTrace('5/5 connect reader')
       await withTimeout(
         readyTerminal.connectReader({
@@ -306,7 +306,7 @@ export async function ensureTapToPayReady(input: {
       clearCachedLocationId()
       throw error
     }
-    // Deliberately returns nothing â€” see the thenable trap note on terminalApi.
+    // Deliberately returns nothing — see the thenable trap note on terminalApi.
   })()
 
   try {
@@ -333,7 +333,7 @@ export async function collectTapToPay(input: {
       90_000,
       'Waiting for the iPhone or card tap',
     )
-    input.onStatus?.('Authorizingâ€¦')
+    input.onStatus?.('Authorizing…')
     await withTimeout(terminal.confirmPaymentIntent(), 20_000, 'Authorizing the tap')
     logTapToPayTrace('tap confirmed')
   } catch (error) {
@@ -367,7 +367,7 @@ export async function cancelTapToPay() {
   try {
     await StripeTerminal?.disconnectReader?.()
   } catch {
-    /* ignore â€” includes "init must be called" */
+    /* ignore — includes "init must be called" */
   }
 }
 

@@ -119,7 +119,7 @@ export function storeLocationCodeForSku(sku: string | null | undefined) {
 export const PRODUCTS: Product[] = [
   { id: 'p1', sku: 'SKN-1001', name: 'Hydra Veil Gel Cleanser', category: 'Skincare', price: 38.0, qtyOnHand: 36, returnable: true, emoji: 'ðŸ§´' },
   { id: 'p2', sku: 'SKN-1002', name: 'Barrier Calm Serum', category: 'Skincare', price: 78.0, qtyOnHand: 24, returnable: true, emoji: 'ðŸ’§' },
-  { id: 'p3', sku: 'SKN-1003', name: 'Bright C Renewal Essence', category: 'Skincare', price: 96.0, mdPrice: 72.0, qtyOnHand: 14, returnable: false, emoji: 'âœ¨' },
+  { id: 'p3', sku: 'SKN-1003', name: 'Bright C Renewal Essence', category: 'Skincare', price: 96.0, mdPrice: 72.0, qtyOnHand: 14, returnable: false, emoji: '✨' },
   { id: 'p4', sku: 'SKN-1004', name: 'Squalane Cloud Moisturiser', category: 'Skincare', price: 64.0, qtyOnHand: 31, returnable: true, emoji: 'ðŸ§´' },
   { id: 'p5', sku: 'SKN-1005', name: 'Mineral Silk Sunscreen SPF50', category: 'Skincare', price: 52.0, qtyOnHand: 42, returnable: true, emoji: 'â˜€ï¸' },
   { id: 'p6', sku: 'SKN-1006', name: 'Overnight Repair Mask', category: 'Skincare', price: 88.0, mdPrice: 66.0, qtyOnHand: 8, returnable: false, emoji: 'ðŸŒ™' },
