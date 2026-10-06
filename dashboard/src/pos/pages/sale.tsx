@@ -41,6 +41,7 @@ import {
   type Product,
   type SalesType,
 } from '@/pos/data/mock'
+import { cartPriceFace } from '@/pos/lib/cart-price-face'
 import { usePos, type CartLine, type CompletedSale, type PosSaleSyncState } from '@/pos/lib/pos-context'
 import { settleGiftCard } from '@/pos/lib/gift-card'
 import { persistGiftCardRedeem } from '@/pos/lib/gift-card-sync'
@@ -2785,7 +2786,7 @@ function CartRow({
   onOverride: () => void
   readOnly?: boolean
 }) {
-  const net = cartLineNet(line)
+  const face = cartPriceFace(line)
   const isReturn = line.qty < 0
   const isFranLine = isFranAdjustmentLine(line)
   const isOpenLine = isOpenAmountLine(line)
@@ -2812,11 +2813,6 @@ function CartRow({
           {isOpenLine && (
             <p className="truncate text-xs text-warning">Back office will review</p>
           )}
-          {line.lineDiscount > 0 && (
-            <p className="truncate text-xs text-success">
-              {line.discountLabel}: -{formatCurrency(line.lineDiscount, STORE.currency)}
-            </p>
-          )}
           {line.overridden && line.overrideReason && (
             <p className="truncate text-xs text-brown">Override: {line.overrideReason}</p>
           )}
@@ -2827,8 +2823,29 @@ function CartRow({
             <p className="truncate text-xs text-success">Decision {line.franDecisionRef}</p>
           )}
         </div>
-        <span className={cn('shrink-0 text-sm font-semibold tabular-nums', isReturn && 'text-destructive')}>
-          {formatCurrency(net, STORE.currency)}
+        <span
+          className={cn(
+            'shrink-0 text-right text-sm font-semibold tabular-nums leading-tight',
+            isReturn && 'text-destructive',
+          )}
+        >
+          {face.kind === 'marked' && (
+            <>
+              <span className="block text-[11px] font-normal leading-none text-muted-foreground line-through">
+                {formatCurrency(face.list, STORE.currency)}
+              </span>
+              {face.offs.map((off) => (
+                <span
+                  key={`${off.label}:${off.amount}`}
+                  className="block text-[11px] font-normal leading-none text-success"
+                >
+                  {off.label ? `${off.label} ` : ''}
+                  {formatCurrency(-off.amount, STORE.currency)}
+                </span>
+              ))}
+            </>
+          )}
+          <span className="block">{formatCurrency(face.nett, STORE.currency)}</span>
         </span>
       </div>
       <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2">
