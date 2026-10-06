@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import {
   MIRROR_NOT_PAIRED,
@@ -23,7 +24,7 @@ import {
   releaseMirrorPath,
   unlockPortrait,
 } from '@/pos/mirror/mirror-orientation'
-import QRCode from 'qrcode'
+import { renderFranMembershipQr } from '@/pos/mirror/fran-membership-qr'
 import {
   MIRROR_IDLE_PROMOS,
   formatMirrorMoney,
@@ -51,7 +52,7 @@ const MEMBERSHIP_SCAN_URL =
   'https://fran.sg/m' // placeholder until prod membership URL is wired
 
 const MEMBERSHIP_QR_BOX = 'h-[min(3cm,7.5rem)] w-[min(3cm,7.5rem)] rounded-md'
-const MEMBERSHIP_QR_RASTER = 360
+const MEMBERSHIP_QR_ENLARGE_BOX = 'h-[62vmin] w-[62vmin]'
 
 function idleFallback(binding: MirrorFaceBinding): MirrorSnapshot {
   return {
@@ -236,6 +237,7 @@ export default function MirrorFacePage() {
       <main className="flex min-h-0 flex-1 flex-col px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <FaceBody snapshot={view} />
       </main>
+      <div id="fran-overlay-root" className="hidden" />
     </div>
   )
 }
@@ -316,27 +318,11 @@ function BasketView({
   amountDue: number | null
   giftCard?: MirrorGiftCard
 }) {
+  const [qrEnlarged, setQrEnlarged] = useState(false)
   const money = (n: number) => formatMirrorMoney(n, store.currency)
   const showJoinQr = !basket.member
-  const [joinQr, setJoinQr] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!showJoinQr) {
-      setJoinQr(null)
-      return
-    }
-    let cancelled = false
-    QRCode.toDataURL(MEMBERSHIP_SCAN_URL, { margin: 1, width: MEMBERSHIP_QR_RASTER })
-      .then((url) => {
-        if (!cancelled) setJoinQr(url)
-      })
-      .catch(() => {
-        if (!cancelled) setJoinQr(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [showJoinQr])
+  const joinQr = showJoinQr ? renderFranMembershipQr(MEMBERSHIP_SCAN_URL) : null
+  if (!joinQr && qrEnlarged) setQrEnlarged(false)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -391,12 +377,12 @@ function BasketView({
           {showJoinQr && (
             <div className="flex shrink-0 flex-col items-center gap-1" data-testid="mirror-membership-qr">
               {joinQr ? (
-                <img
-                  src={joinQr}
-                  alt="Scan to join membership"
-                  className={`${MEMBERSHIP_QR_BOX} bg-white`}
-                  width={120}
-                  height={120}
+                <button
+                  type="button"
+                  className={`${MEMBERSHIP_QR_BOX} bg-white border-0 p-0 [&>svg]:block`}
+                  aria-label="Scan to join membership"
+                  onClick={() => setQrEnlarged(true)}
+                  dangerouslySetInnerHTML={{ __html: joinQr }}
                 />
               ) : (
                 <div className={`${MEMBERSHIP_QR_BOX} bg-surface-sunken`} aria-hidden />
@@ -429,6 +415,22 @@ function BasketView({
           <p className="text-center text-xl">Gift card remaining {money(giftCard.remaining)}</p>
         )}
       </section>
+      {joinQr != null && (
+        <Dialog open={qrEnlarged} onOpenChange={setQrEnlarged}>
+          <DialogContent
+            aria-label="Membership QR"
+            data-testid="mirror-membership-qr-modal"
+            onClose={() => setQrEnlarged(false)}
+            className="w-auto max-w-none border-0 bg-transparent p-16 shadow-none"
+          >
+            <div
+              className={`${MEMBERSHIP_QR_ENLARGE_BOX} bg-white`}
+              data-testid="mirror-membership-qr-enlarged"
+              dangerouslySetInnerHTML={{ __html: joinQr }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
