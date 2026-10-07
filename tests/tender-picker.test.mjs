@@ -2,24 +2,26 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const { isPrimaryTenderTile, visiblePaymentModes } = await import('../dashboard/src/pos/lib/stripe-connector.ts')
-
 test('tender tiles stay in cashier order and do not auto-pick Stripe', () => {
-  const modes = visiblePaymentModes({ stripeEnabled: true, s700Ready: true, tapReady: true })
-  assert.deepEqual(modes.slice(0, 7), ['cash', 'paynow', 'stripe_s700', 'stripe_tap', 'gift-card', 'store-credit', 'wechat'])
-  assert.equal(modes[7], 'misc')
-  assert.equal(modes.includes('card'), false)
-  assert.equal(isPrimaryTenderTile('cash'), true)
-  assert.equal(isPrimaryTenderTile('paynow'), true)
-  assert.equal(isPrimaryTenderTile('stripe_s700'), false)
+  const connector = readFileSync(new URL('../dashboard/src/pos/lib/stripe-connector.ts', import.meta.url), 'utf8')
+  assert.match(
+    connector,
+    /TENDER_TILE_ORDER = \[\s*'cash',\s*'paynow',\s*'stripe_s700',\s*'stripe_tap',\s*'gift-card',\s*'store-credit',\s*'wechat'/,
+  )
+  assert.match(connector, /isPrimaryTenderTile\(id: string\) \{\s*return id === 'cash' \|\| id === 'paynow'/)
+  assert.match(connector, /if \(id === 'card'\) return !input\.stripeEnabled && !input\.tapReady/)
 
   const modal = readFileSync(new URL('../dashboard/src/pos/components/payment-modal.tsx', import.meta.url), 'utf8')
   assert.doesNotMatch(modal, /setMode\(preferred\)/)
   assert.doesNotMatch(modal, /autoPickedMode/)
   assert.match(modal, /pos_last_tender/)
   assert.match(modal, /Last used/)
-  assert.match(modal, /min-h-40 text-2xl/)
-  assert.match(modal, /min-h-28 text-lg/)
+  assert.match(modal, /auto-rows-fr grid-cols-2/)
+  assert.match(modal, /min-h-28/)
+  assert.doesNotMatch(modal, /min-h-40 text-2xl/)
+  assert.doesNotMatch(modal, /isPrimaryTenderTile/)
+  assert.doesNotMatch(modal, /primary\.map/)
+  assert.match(modal, /modes\.map\(\(mode\) => tile\(mode\)\)/)
   assert.match(modal, /max-w-5xl/)
 })
 

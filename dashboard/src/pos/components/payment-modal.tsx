@@ -21,7 +21,7 @@ import { Numpad } from '@/pos/components/numpad'
 import { CARD_TYPES, PAYMENT_MODES, STORE, type PaymentModeId } from '@/pos/data/mock'
 import { usePos, type Payment } from '@/pos/lib/pos-context'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
-import { isPrimaryTenderTile, preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
+import { preferredStoreChargeMode, stripeS700Ready, visiblePaymentModes } from '@/pos/lib/stripe-connector'
 import { cancelStripeCollection, collectS700Qr, collectStripeInPerson, S700QrStartError } from '@/pos/lib/stripe-collect'
 import { resolveTapToPayConfig, tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import {
@@ -88,9 +88,9 @@ function MethodPicker({
   onChoose: (mode: PaymentModeId) => void
   onRemove: (id: string) => void
 }) {
-  const primary = modes.filter((mode) => isPrimaryTenderTile(mode.id))
-  const rest = modes.filter((mode) => !isPrimaryTenderTile(mode.id))
-  const tile = (mode: (typeof PAYMENT_MODES)[number], large: boolean) => {
+  // One equal-track grid so Cash / PayNow / S700 / Tap / Gift / Store Credit
+  // (and any trailing modes) share the same tile size on S10 tablet.
+  const tile = (mode: (typeof PAYMENT_MODES)[number]) => {
     const Icon = ICONS[mode.id]
     const label = mode.id === 'stripe_tap' && tapReady ? 'Credit / Debit' : mode.label
     const last = mode.id === lastTender
@@ -101,13 +101,12 @@ function MethodPicker({
         onClick={() => onChoose(mode.id)}
         disabled={disabled}
         className={cn(
-          'flex h-full flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 font-semibold transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer',
-          large ? 'min-h-40 text-2xl' : 'min-h-28 text-lg',
+          'flex h-full min-h-28 flex-col items-center justify-center gap-1.5 rounded-2xl border px-3 py-3 text-xl font-semibold transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer',
           last && 'ring-2 ring-yellow',
         )}
       >
-        <Icon className={large ? 'h-12 w-12' : 'h-8 w-8'} />
-        {label}
+        <Icon className="h-10 w-10 shrink-0" />
+        <span className="text-center leading-tight">{label}</span>
         {mode.id === 'stripe_s700' && (
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer reader</span>
         )}
@@ -121,7 +120,7 @@ function MethodPicker({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 pr-16">
-      <div>
+      <div className="shrink-0">
         <p className="text-sm text-muted-foreground">Balance due</p>
         <p className="font-display text-4xl font-bold tabular-nums">{formatCurrency(Math.max(remaining, 0), STORE.currency)}</p>
         <p className="text-sm text-muted-foreground">
@@ -130,7 +129,7 @@ function MethodPicker({
         <p className="mt-1 text-sm text-muted-foreground">Supports split payment with up to two tenders per sale.</p>
       </div>
       {payments.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           {payments.map((payment) => (
             <span key={payment.id} className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-sm">
               {payment.label} {formatCurrency(payment.amount, STORE.currency)}
@@ -141,9 +140,8 @@ function MethodPicker({
           ))}
         </div>
       )}
-      {disabled && <p className="text-sm text-muted-foreground">Two tenders added. Remove one to change the split.</p>}
-      <div className="grid min-h-0 flex-[1.45] grid-cols-2 gap-3">{primary.map((mode) => tile(mode, true))}</div>
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">{rest.map((mode) => tile(mode, false))}</div>
+      {disabled && <p className="shrink-0 text-sm text-muted-foreground">Two tenders added. Remove one to change the split.</p>}
+      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-3">{modes.map((mode) => tile(mode))}</div>
     </div>
   )
 }
