@@ -1,6 +1,7 @@
 import type { PosSourceEventEnvelope, PosSourceEventType } from '@pos/shared'
 import { supabase } from '@/lib/supabase'
 import { STORE } from '@/pos/data/mock'
+import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
 import type { CartLine, CompletedSale } from '@/pos/lib/pos-context'
 
 export const POS_OUTBOX_SCHEMA_VERSION = 1
@@ -629,10 +630,37 @@ export function removePendingPosOutboxEvent(idempotencyKey: string) {
   return next
 }
 
+function boundRegisterToken() {
+  if (typeof localStorage === 'undefined') return null
+  const token = loadRegisterBinding()?.device_token?.trim()
+  return token || null
+}
+
+function finishOutboxPersist(
+  events: PosSourceEventEnvelope[],
+  error: { message: string } | null,
+): PosOutboxPersistResult {
+  if (error) return { status: 'queued', count: events.length, error: error.message }
+
+  for (const event of events) {
+    removePendingPosOutboxEvent(event.idempotency_key)
+  }
+  return { status: 'persisted', count: events.length }
+}
+
 export async function persistPosOutboxEvents(companyId: string | null | undefined, events: PosSourceEventEnvelope[]): Promise<PosOutboxPersistResult> {
   if (events.length === 0) return { status: 'not_required', count: 0 }
 
   enqueuePosOutboxEvents(events)
+  const deviceToken = boundRegisterToken()
+  if (deviceToken) {
+    const { error } = await supabase.rpc('enqueue_pos_outbox_events', {
+      p_device_token: deviceToken,
+      p_events: events.map((event) => toPosOutboxRow(companyId || event.workspace_id, event)),
+    })
+    return finishOutboxPersist(events, error)
+  }
+
   if (!companyId) return { status: 'queued', count: events.length }
 
   const { error } = await supabase
@@ -642,14 +670,7 @@ export async function persistPosOutboxEvents(companyId: string | null | undefine
       ignoreDuplicates: true,
     })
 
-  if (error) {
-    return { status: 'queued', count: events.length, error: error.message }
-  }
-
-  for (const event of events) {
-    removePendingPosOutboxEvent(event.idempotency_key)
-  }
-  return { status: 'persisted', count: events.length }
+  return finishOutboxPersist(events, error)
 }
 
 export async function retryPendingPosOutboxEvents(companyId: string | null | undefined) {
