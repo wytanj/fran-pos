@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, MapPin, RefreshCw, Users } from 'lucide-react'
+import { Clock, Loader2, MapPin, RefreshCw, Users } from 'lucide-react'
+import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/pos/components/page-header'
 import { usePos } from '@/pos/lib/pos-context'
@@ -87,6 +88,7 @@ function isOnNow(startsAt: string, endsAt: string, now = new Date()) {
 }
 
 export default function RosterPage() {
+  const [clockInOpen, setClockInOpen] = useState(false)
   const { mode, user } = usePos()
   const { data: settings } = useCompanySettings()
   const todaySgt = useMemo(
@@ -322,7 +324,20 @@ export default function RosterPage() {
             </section>
           </>
         )}
+
+        <div className="mt-6 px-0 pb-4">
+          <Button
+            type="button"
+            className="h-12 w-full text-base"
+            onClick={() => setClockInOpen(true)}
+            data-testid="pos-clock-in-roster"
+          >
+            <Clock className="h-4 w-4" />
+            Clock in
+          </Button>
+        </div>
       </div>
+      <PosClockInModal open={clockInOpen} onClose={() => setClockInOpen(false)} />
     </div>
   )
 }
