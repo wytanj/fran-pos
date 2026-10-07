@@ -172,6 +172,13 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed, onAct
   const stripeBusy = useRef(false)
   const chargeGen = useRef(0)
   const terminalMessageRef = useRef('')
+  // PayNow / WeChat: after Stripe succeeds we commit then auto-finish the sale so
+  // the customer mirror publishes phase=done (thank-you). Cash still uses Complete & Print
+  // because the cashier may need to count change. Deferred via effect so completeSale
+  // sees the new tender in saleSnapshotRef (addPayment is async setState).
+  const pendingQrAutoComplete = useRef(false)
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
 
   const QR_VALID_MS = 5 * 60_000
   const [qrSession, setQrSession] = useState<{
@@ -225,6 +232,11 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed, onAct
     }
   }, [open])
   const fullyPaid = remaining <= 0.001
+  useEffect(() => {
+    if (!pendingQrAutoComplete.current || !fullyPaid) return
+    pendingQrAutoComplete.current = false
+    onCompleteRef.current()
+  }, [fullyPaid, payments.length])
   const paymentLimitReached = payments.length >= MAX_TENDERS_PER_PAYMENT
   const quoteFor = (paymentMode: string) =>
     storedValueQuote({
@@ -408,7 +420,9 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed, onAct
         logTapToPayTrace(`qr ${method} paid on s700 ${finalIntent.id}`)
         setQrSession((s) => s && { ...s, phase: 'approved' })
         scheduleTerminalStep(() => {
-          commit(methodLabel, stripeCentsToAmount(finalIntent.amount) || chargeAmount, finalIntent.id, {
+          const paidAmount = stripeCentsToAmount(finalIntent.amount) || chargeAmount
+          if (paidAmount >= remaining - 0.001) pendingQrAutoComplete.current = true
+          commit(methodLabel, paidAmount, finalIntent.id, {
             provider: 'stripe',
             providerRef: finalIntent.id,
             status: 'captured',
@@ -479,7 +493,9 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed, onAct
       logTapToPayTrace(`qr ${method} paid ${finalIntent.id}`)
       setQrSession((s) => s && { ...s, phase: 'approved' })
       scheduleTerminalStep(() => {
-        commit(methodLabel, stripeCentsToAmount(finalIntent.amount) || chargeAmount, finalIntent.id, {
+        const paidAmount = stripeCentsToAmount(finalIntent.amount) || chargeAmount
+        if (paidAmount >= remaining - 0.001) pendingQrAutoComplete.current = true
+        commit(methodLabel, paidAmount, finalIntent.id, {
           provider: 'stripe',
           providerRef: finalIntent.id,
           status: 'captured',
@@ -518,6 +534,7 @@ export function PaymentModal({ open, onClose, onComplete, onPaymentFailed, onAct
   const cancelQr = () => {
     const current = qrSession
     chargeGen.current += 1
+    pendingQrAutoComplete.current = false
     stripeBusy.current = false
     if (current?.pi?.id && current.phase === 'waiting') {
       void cancelStripePaymentIntent(current.pi.id).catch(() => {})
