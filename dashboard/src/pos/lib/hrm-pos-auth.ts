@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { supabase } from '@/lib/supabase'
+import type { HrmStoreId } from '@/pos/lib/pos-clock-in'
 
 const DEVICE_TOKEN_KEY = 'pos_register_device_token'
 const BINDING_KEY = 'pos_register_binding'
@@ -31,6 +32,11 @@ export type HrmPosStaff = {
 function hrmPosVerifyUrl() {
   if (Capacitor.isNativePlatform()) return `${POS_API_ORIGIN}/api/hrm-pos-verify`
   return '/api/hrm-pos-verify'
+}
+
+function hrmPosClockUrl() {
+  if (Capacitor.isNativePlatform()) return `${POS_API_ORIGIN}/api/hrm-pos-clock`
+  return '/api/hrm-pos-clock'
 }
 
 function asJsonRecord(value: unknown): Record<string, unknown> {
@@ -181,6 +187,22 @@ export async function verifyHrmPosPin(input: {
     )
   }
   return { staff }
+}
+
+export async function clockHrmPosIn(input: { staffId: string; storeId: HrmStoreId }): Promise<void> {
+  const res = await fetch(hrmPosClockUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      staff_id: input.staffId,
+      store_id: input.storeId,
+    }),
+  })
+  const body = asJsonRecord(await res.json().catch(() => ({})))
+  if (!res.ok) {
+    const msg = jsonString(body, 'message') || jsonString(body, 'error') || 'Clock in failed'
+    throw new Error(msg)
+  }
 }
 
 export type RegisterCompanyContext = {

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Clock, Loader2, MapPin, RefreshCw, Users } from 'lucide-react'
-import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
+import { Camera, Loader2, MapPin, RefreshCw, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/pos/components/page-header'
+import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { usePos } from '@/pos/lib/pos-context'
 import { useCompanySettings } from '@/hooks/use-settings'
 import { toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
@@ -88,7 +88,6 @@ function isOnNow(startsAt: string, endsAt: string, now = new Date()) {
 }
 
 export default function RosterPage() {
-  const [clockInOpen, setClockInOpen] = useState(false)
   const { mode, user } = usePos()
   const { data: settings } = useCompanySettings()
   const todaySgt = useMemo(
@@ -100,6 +99,7 @@ export default function RosterPage() {
   const [source, setSource] = useState<'live' | 'demo'>('demo')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [clockOpen, setClockOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -274,6 +274,17 @@ export default function RosterPage() {
               ))}
             </div>
 
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 h-12 w-full text-base"
+              onClick={() => setClockOpen(true)}
+            >
+              <Camera className="h-4 w-4" />
+              Clock in
+            </Button>
+            {clockOpen && <PosClockInModal onClose={() => setClockOpen(false)} />}
+
             <section className="mt-6 rounded-xl border bg-card">
               <header className="border-b px-3 py-2.5">
                 <h2 className="text-sm font-semibold">Everyone today</h2>
@@ -324,20 +335,7 @@ export default function RosterPage() {
             </section>
           </>
         )}
-
-        <div className="mt-6 px-0 pb-4">
-          <Button
-            type="button"
-            className="h-12 w-full text-base"
-            onClick={() => setClockInOpen(true)}
-            data-testid="pos-clock-in-roster"
-          >
-            <Clock className="h-4 w-4" />
-            Clock in
-          </Button>
-        </div>
       </div>
-      <PosClockInModal open={clockInOpen} onClose={() => setClockInOpen(false)} />
     </div>
   )
 }

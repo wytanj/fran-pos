@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { HRM_CLOCK_PATH, hrmClockInBody, parseHrmClockRequest } from '../dashboard/src/pos/lib/pos-clock-in.ts'
 
 function allowOrigin(req: VercelRequest) {
   const origin = String(req.headers.origin || '')
@@ -35,12 +36,41 @@ function hrmBaseUrl() {
     .replace(/\/+$/, '')
 }
 
-/**
- * Browser / Capacitor → this proxy → fran-hrm /api/v1/clock
- * Uses FRAN_HRM_API_KEY (attendance:write) for manual clock_in after POS PIN verify.
- * Photo is collected on-device as a UX gate; HRM clock has no photo column today,
- * so optional photo_data_url is forwarded only as note metadata if present.
- */
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+function text(record: Record<string, unknown>, key: string): string {
+  const value = record[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function readJsonBody(req: VercelRequest): unknown {
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body || '{}') as unknown
+    } catch {
+      return null
+    }
+  }
+  return req.body ?? {}
+}
+
+function upstreamMessage(parsed: Record<string, unknown>, fallback: string): string {
+  const direct = text(parsed, 'statusMessage') || text(parsed, 'message') || text(parsed, 'error')
+  if (direct) return direct
+  const data = asRecord(parsed.data)
+  if (data) {
+    const nested = text(data, 'message') || text(data, 'error') || text(data, 'statusMessage')
+    if (nested) return nested
+  }
+  return fallback
+}
+
+/** Manual clock_in needs attendance:write on that key. */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     setCors(res, req)
@@ -59,55 +89,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
-  const action = body.action || 'clock_in'
-  const staff_id = body.staff_id || body.staffId
-  const store_id = body.store_id || body.storeId
-  if (!staff_id || !store_id) {
-    return json(res, req, 400, { error: 'staff_id and store_id required' })
+  const ids = parseHrmClockRequest(readJsonBody(req))
+  if (!ids) {
+    return json(res, req, 400, { error: 'staff_id and a store UUID are required' })
   }
 
-  const noteParts = ['pos_clock_in']
-  if (body.store_code || body.storeCode) noteParts.push(`store_code=${body.store_code || body.storeCode}`)
-  if (body.register_id || body.registerId) noteParts.push(`register=${body.register_id || body.registerId}`)
-  if (body.photo_captured || body.photoCaptured) noteParts.push('photo_captured=1')
-
   try {
-    const upstream = await fetch(`${hrmUrl}/api/v1/clock`, {
+    const upstream = await fetch(`${hrmUrl}${HRM_CLOCK_PATH}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${apiKey}`,
         'x-api-key': apiKey,
       },
-      body: JSON.stringify({
-        action,
-        staff_id,
-        store_id,
-        note: noteParts.join(' '),
-        device_id: body.device_token || body.deviceToken || null,
-      }),
+      body: JSON.stringify(hrmClockInBody(ids)),
     })
-    const text = await upstream.text()
-    let parsed: any = {}
+    const raw = await upstream.text()
+    let parsed: Record<string, unknown> = {}
     try {
-      parsed = text ? JSON.parse(text) : {}
+      const value: unknown = raw ? JSON.parse(raw) : {}
+      parsed = asRecord(value) ?? { message: raw }
     } catch {
-      parsed = { message: text }
+      parsed = { message: raw }
     }
     if (!upstream.ok) {
       return json(res, req, upstream.status, {
         error: 'HRM clock failed',
-        message: parsed.statusMessage || parsed.message || parsed.error || text || upstream.statusText,
+        message: upstreamMessage(parsed, raw || upstream.statusText),
       })
     }
     return json(res, req, 200, {
       ok: true,
-      action: parsed.action || action,
-      entry: parsed.data || parsed.entry || null,
-      flags: parsed.flags || [],
+      entry: parsed.data ?? null,
     })
-  } catch (e: any) {
-    return json(res, req, 502, { error: 'HRM unreachable', message: e?.message || 'fetch failed' })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'fetch failed'
+    return json(res, req, 502, { error: 'HRM unreachable', message })
   }
 }
