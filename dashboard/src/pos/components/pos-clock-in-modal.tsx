@@ -8,6 +8,7 @@ import {
   clockHrmPosIn,
   loadRegisterBinding,
   verifyHrmPosPin,
+  type RegisterBinding,
 } from '@/pos/lib/hrm-pos-auth'
 import {
   clockInControls,
@@ -38,7 +39,26 @@ async function openClockCamera(): Promise<MediaStream> {
   throw lastError instanceof Error ? lastError : new Error('Camera is unavailable')
 }
 
-export function PosClockInModal({ onClose }: { onClose: () => void }) {
+export function PosClockInModal({
+  open,
+  onClose,
+  binding: bindingProp,
+}: {
+  open: boolean
+  onClose: () => void
+  binding?: RegisterBinding | null
+}) {
+  if (!open) return null
+  return <PosClockInSession onClose={onClose} binding={bindingProp ?? null} />
+}
+
+function PosClockInSession({
+  onClose,
+  binding: bindingProp,
+}: {
+  onClose: () => void
+  binding: RegisterBinding | null
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [step, setStep] = useState<ClockInStep>(initialClockInStep)
@@ -111,7 +131,7 @@ export function PosClockInModal({ onClose }: { onClose: () => void }) {
 
   const submitPin = async () => {
     if (step.step !== 'pin') return
-    const binding = loadRegisterBinding()
+    const binding = bindingProp ?? loadRegisterBinding()
     if (!binding) {
       setError('Bind this register before clocking in')
       return

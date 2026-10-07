@@ -90,3 +90,41 @@ export function clearMirrorFace() {
     // Nothing stored to clear.
   }
 }
+
+export type MirrorFaceMemberPhoneInput = {
+  kind: 'member_phone'
+  dial: string
+  nationalNumber: string
+  raw: string
+  at: string
+}
+
+export type MirrorFaceInput = MirrorFaceMemberPhoneInput
+
+export interface MirrorFaceInputReadResult {
+  station_id: string
+  face_input_seq: number
+  face_input: MirrorFaceInput | null
+  face_input_at?: string | null
+}
+
+export interface MirrorFaceInputSubmitResult {
+  station_id: string
+  face_input_seq: number
+}
+
+export const submitMirrorFaceInput = (displayToken: string, input: MirrorFaceInput) =>
+  call<MirrorFaceInputSubmitResult>('submit_mirror_face_input', {
+    p_display_token: displayToken,
+    p_input: input,
+  })
+
+export const readMirrorFaceInput = (registerToken: string, afterSeq = 0) =>
+  call<MirrorFaceInputReadResult>('read_mirror_face_input', {
+    p_register_token: registerToken,
+    p_after_seq: afterSeq,
+  })
+
+export const clearMirrorFaceInput = (registerToken: string) =>
+  call<MirrorFaceInputSubmitResult>('clear_mirror_face_input', { p_register_token: registerToken })
+

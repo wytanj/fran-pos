@@ -91,7 +91,7 @@ import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { tapToPaySupported, warmUpTapToPay } from '@/pos/lib/stripe-tap-to-pay'
 import { loadRegisterBinding } from '@/pos/lib/hrm-pos-auth'
 import { getActiveStore } from '@/pos/lib/pos-store-config'
-import { MIRROR_IDLE_PROMOS, buildMirrorSnapshot, mirrorLineMeta } from '@/pos/mirror/mirror-snapshot'
+import { MIRROR_IDLE_PROMOS, buildMirrorSnapshot, mirrorLineMeta, type MirrorMemberPhonePrompt } from '@/pos/mirror/mirror-snapshot'
 import { mirrorLinkSummary, useMirrorPublisher } from '@/pos/mirror/use-mirror-publisher'
 import { MirrorPairDialog, MirrorStatusDot } from '@/pos/mirror/mirror-pair-dialog'
 import type {
@@ -591,6 +591,7 @@ export default function SalePage() {
   franCustomerOpenRef.current = franCustomerOpen
   const [franMemberDialogOpen, setFranMemberDialogOpen] = useState(false)
   const [franSession, setFranSession] = useState<FranCounterSession | null>(null)
+  const [memberPhonePrompt, setMemberPhonePrompt] = useState<MirrorMemberPhonePrompt | null>(null)
   const [franPreview, setFranPreview] = useState<FranBasketPreview | null>(null)
   const [franPreviewLoading, setFranPreviewLoading] = useState(false)
   const [franPreviewError, setFranPreviewError] = useState<string | null>(null)
@@ -671,8 +672,9 @@ export default function SalePage() {
       tenders: pos.payments.map((payment) => ({ mode: payment.mode, amount: payment.amount })),
       activeTenderMode,
       memberName,
+      memberPhonePrompt,
     })
-  }, [cart, catalog, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview, activeTenderMode])
+  }, [cart, catalog, totals, paymentOpen, completedOpen, pos.lastSale, pos.payments, franSession, franPreview, activeTenderMode, memberPhonePrompt])
   const mirror = useMirrorPublisher(mirrorSnapshot, mirrorRegisterToken)
   const productEntryRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -2035,11 +2037,15 @@ export default function SalePage() {
         <FranCustomerModal
           open
           client={franCrm}
+          mirrorRegisterToken={mirrorRegisterToken}
+          onMirrorPhonePrompt={setMemberPhonePrompt}
           onClose={() => {
+            setMemberPhonePrompt(null)
             franCustomerOpenRef.current = false
             setFranCustomerOpen(false)
           }}
           onResolved={(session, nextCustomer) => {
+            setMemberPhonePrompt(null)
             clearFranReward()
             setFranSession(session)
             setCustomer(nextCustomer)

@@ -1,65 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Camera, Loader2, MapPin, RefreshCw, Users } from 'lucide-react'
+import { Clock, Loader2, MapPin, RefreshCw, Users } from 'lucide-react'
+import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/pos/components/page-header'
-import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { usePos } from '@/pos/lib/pos-context'
 import { useCompanySettings } from '@/hooks/use-settings'
 import { toSkumsConnectorConfig } from '@/pos/lib/skums-connector'
 import {
   fetchSkumsRosterBoard,
   type SkumsRosterBoard,
-  type SkumsRosterBoardZone,
 } from '@/pos/lib/skums-client'
 import { cn } from '@/lib/utils'
 
-/** Demo board when SKUMS is offline — matches sample seed staff at Bugis+. */
-function demoRosterBoard(date: string): SkumsRosterBoard {
+/** Empty board when SKUMS is offline / unscoped — no demo seed staff. */
+function emptyRosterBoard(date: string): SkumsRosterBoard {
   const day = date
-  function sgt(h: number, dur: number) {
-    const start = new Date(`${day}T${String(h).padStart(2, '0')}:00:00+08:00`)
-    const end = new Date(start.getTime() + dur * 3600 * 1000)
-    return { starts_at: start.toISOString(), ends_at: end.toISOString() }
-  }
-  const mk = (
-    id: string,
-    name: string,
-    h: number,
-    dur: number,
-    status = 'published',
-  ) => ({
-    id,
-    employee_id: id,
-    employee_name: name,
-    ...sgt(h, dur),
-    status,
-    notes: null as string | null,
-  })
-
-  const zones: SkumsRosterBoardZone[] = [
-    {
-      zone: { id: 'z1', code: 'zone_1', name: 'Zone 1' },
-      shifts: [mk('e-jarrell', 'Jarrell', 9, 8), mk('e-jazelle', 'Jazelle', 11, 5)],
-    },
-    {
-      zone: { id: 'z2', code: 'zone_2', name: 'Zone 2' },
-      shifts: [mk('e-jeremy', 'Jeremy', 10, 6), mk('e-fern', 'Fern', 12, 4)],
-    },
-    {
-      zone: { id: 'z3', code: 'zone_3', name: 'Zone 3' },
-      shifts: [mk('e-kristle', 'Kristle', 10, 5), mk('e-mj', 'MJ', 14, 4)],
-    },
-    {
-      zone: { id: 'zc', code: 'cashier', name: 'Cashier' },
-      shifts: [mk('e-tiffany', 'Tiffany', 10, 6), mk('e-hiok', 'Hiok', 14, 5)],
-    },
-    {
-      zone: { id: 'zb', code: 'back_of_house', name: 'Back of House' },
-      shifts: [mk('e-soobin', 'Soobin', 8, 8)],
-    },
-  ]
-
-  const shift_count = zones.reduce((n, z) => n + z.shifts.length, 0)
   return {
     date: day,
     timezone: 'Asia/Singapore',
@@ -67,9 +22,9 @@ function demoRosterBoard(date: string): SkumsRosterBoard {
       from: `${day}T00:00:00+08:00`,
       to: `${day}T23:59:59.999+08:00`,
     },
-    zone_count: zones.length,
-    shift_count,
-    zones,
+    zone_count: 0,
+    shift_count: 0,
+    zones: [],
   }
 }
 
@@ -88,6 +43,7 @@ function isOnNow(startsAt: string, endsAt: string, now = new Date()) {
 }
 
 export default function RosterPage() {
+  const [clockInOpen, setClockInOpen] = useState(false)
   const { mode, user } = usePos()
   const { data: settings } = useCompanySettings()
   const todaySgt = useMemo(
@@ -99,7 +55,6 @@ export default function RosterPage() {
   const [source, setSource] = useState<'live' | 'demo'>('demo')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [clockOpen, setClockOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -115,14 +70,14 @@ export default function RosterPage() {
         return
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to load roster'
-        // Fall through to demo when offline / unscoped
+        // Fall through to empty board when offline / unscoped
         if (mode !== 'demo') {
           setError(msg)
         }
       }
     }
 
-    setBoard(demoRosterBoard(date))
+    setBoard(emptyRosterBoard(date))
     setSource('demo')
     if (!connector && mode === 'live') {
       setError('Connect SKUMS in Settings to load the live roster board.')
@@ -191,7 +146,7 @@ export default function RosterPage() {
             {board?.date || date} · {board?.timezone || 'Asia/Singapore'}
           </span>
           <span className="rounded-full border px-2 py-0.5">
-            {source === 'live' ? 'Live SKUMS' : 'Register'}
+            {source === 'live' ? 'Live SKUMS' : 'Empty (offline)'}
           </span>
           {board && (
             <span>
@@ -274,17 +229,6 @@ export default function RosterPage() {
               ))}
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-4 h-12 w-full text-base"
-              onClick={() => setClockOpen(true)}
-            >
-              <Camera className="h-4 w-4" />
-              Clock in
-            </Button>
-            {clockOpen && <PosClockInModal onClose={() => setClockOpen(false)} />}
-
             <section className="mt-6 rounded-xl border bg-card">
               <header className="border-b px-3 py-2.5">
                 <h2 className="text-sm font-semibold">Everyone today</h2>
@@ -335,7 +279,20 @@ export default function RosterPage() {
             </section>
           </>
         )}
+
+        <div className="mt-6 px-0 pb-4">
+          <Button
+            type="button"
+            className="h-12 w-full text-base"
+            onClick={() => setClockInOpen(true)}
+            data-testid="pos-clock-in-roster"
+          >
+            <Clock className="h-4 w-4" />
+            Clock in
+          </Button>
+        </div>
       </div>
+      <PosClockInModal open={clockInOpen} onClose={() => setClockInOpen(false)} />
     </div>
   )
 }

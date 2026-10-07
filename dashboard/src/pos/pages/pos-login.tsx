@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, Camera, KeyRound, LogOut, MonitorSmartphone, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
+import { AlertCircle, Clock, KeyRound, LogOut, MonitorSmartphone, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
+import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { Button } from '@/components/ui/button'
 import { Numpad } from '@/pos/components/numpad'
-import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { usePos } from '@/pos/lib/pos-context'
 import { USERS, STORE, type PosRole } from '@/pos/data/mock'
 import { cn } from '@/lib/utils'
@@ -34,13 +34,13 @@ export default function PosLogin() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
+  const [clockInOpen, setClockInOpen] = useState(false)
   const [binding, setBinding] = useState<RegisterBinding | null>(() =>
     typeof window !== 'undefined' ? loadRegisterBinding() : null
   )
   const [storeCode, setStoreCode] = useState('')
   const [pairCode, setPairCode] = useState('')
   const [pairing, setPairing] = useState(false)
-  const [clockOpen, setClockOpen] = useState(false)
   const requestedMode = searchParams.get('mode')
   const connectedAccountLabel = company?.name || user?.email || null
 
@@ -161,6 +161,7 @@ export default function PosLogin() {
   }
 
   return (
+    <>
     <div className="flex min-h-dvh flex-col bg-cream p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col rounded-xl border border-line bg-white p-3 shadow-warm-md sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -265,16 +266,6 @@ export default function PosLogin() {
                   </span>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 w-full text-base"
-                  onClick={() => setClockOpen(true)}
-                >
-                  <Camera className="h-4 w-4" />
-                  Clock in
-                </Button>
-
                 <label className="block flex-1">
                   <span className="text-sm text-muted-foreground">Employee code</span>
                   <input
@@ -290,6 +281,16 @@ export default function PosLogin() {
                   />
                 </label>
 
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full text-base"
+                  onClick={() => setClockInOpen(true)}
+                  data-testid="pos-clock-in-prelive"
+                >
+                  <Clock className="h-4 w-4" />
+                  Clock in
+                </Button>
                 <Button
                   className="h-12 w-full text-base"
                   onClick={() => void openLiveWithHrmPin()}
@@ -467,8 +468,6 @@ export default function PosLogin() {
           </div>
         )}
 
-        {clockOpen && <PosClockInModal onClose={() => setClockOpen(false)} />}
-
         <div className="mt-3 flex justify-center">
           <Link
             to="/pos/mirror"
@@ -480,5 +479,7 @@ export default function PosLogin() {
         </div>
       </div>
     </div>
+      <PosClockInModal open={clockInOpen} onClose={() => setClockInOpen(false)} binding={binding} />
+    </>
   )
 }

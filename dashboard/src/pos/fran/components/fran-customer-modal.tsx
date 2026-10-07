@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Loader2, Nfc, Plane, QrCode, Search, UserPlus, UsersRound, X } from 'lucide-react'
+import { Loader2, Nfc, Plane, QrCode, Search, Tablet, UserPlus, UsersRound, X } from 'lucide-react'
 import { useStripeConnector } from '@/hooks/use-stripe-connector'
 import { stripeS700Ready } from '@/pos/lib/stripe-connector'
 import { cancelStripeReader, collectS700Inputs, waitForS700Action } from '@/pos/lib/stripe-terminal-api'
@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import type { Customer } from '@/pos/data/mock'
 import type { FranCrmClient } from '../lib/fran-crm-client'
+import { clearMirrorFaceInput, readMirrorFaceInput } from '@/pos/mirror/mirror-api'
+import type { MirrorMemberPhonePrompt } from '@/pos/mirror/mirror-snapshot'
 import { tierBadgeClass, tierLabel, tierSummaryLine } from '../lib/tier-display'
 import {
   customerFromFranMember,
@@ -23,6 +25,10 @@ interface FranCustomerModalProps {
   client: FranCrmClient
   onClose: () => void
   onResolved: (session: FranCounterSession, customer: Customer | null) => void
+  /** Register device token — enables Ask on mirror when a customer display is paired. */
+  mirrorRegisterToken?: string | null
+  /** Publish / clear member_phone phase on the paired mirror. */
+  onMirrorPhonePrompt?: (prompt: MirrorMemberPhonePrompt | null) => void
 }
 
 const emptyResolution: FranMemberResolution = {
@@ -132,7 +138,14 @@ export function createFranExceptionSession(mode: 'non_member' | 'tourist'): Fran
   }
 }
 
-export function FranCustomerModal({ open, client, onClose, onResolved }: FranCustomerModalProps) {
+export function FranCustomerModal({
+  open,
+  client,
+  onClose,
+  onResolved,
+  mirrorRegisterToken = null,
+  onMirrorPhonePrompt,
+}: FranCustomerModalProps) {
   const [query, setQuery] = useState('')
   const [resolution, setResolution] = useState<FranMemberResolution>(emptyResolution)
   const [loading, setLoading] = useState(false)
@@ -152,6 +165,10 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
   const [readerWait, setReaderWait] = useState(false)
   const [lookupDial, setLookupDial] = useState('+65')
   const readerCancelRef = useRef(false)
+  const [mirrorWait, setMirrorWait] = useState(false)
+  const mirrorCancelRef = useRef(false)
+  const mirrorSeqRef = useRef(0)
+
 
   // Staff pick the country on the register; the reader shows exactly one
   // screen — the +65 phone widget for Singapore, the numeric keypad for a
@@ -201,6 +218,69 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
     void cancelStripeReader(s700ReaderId).catch(() => {})
   }
 
+  const cancelMirrorAsk = () => {
+    mirrorCancelRef.current = true
+    setMirrorWait(false)
+    onMirrorPhonePrompt?.(null)
+    if (mirrorRegisterToken) {
+      void clearMirrorFaceInput(mirrorRegisterToken).catch(() => {})
+    }
+  }
+
+  const askOnMirror = async () => {
+    if (!mirrorRegisterToken || !onMirrorPhonePrompt || mirrorWait) return
+    setMirrorWait(true)
+    setError(null)
+    mirrorCancelRef.current = false
+    mirrorSeqRef.current = 0
+    onMirrorPhonePrompt({ status: 'awaiting' })
+    try {
+      const deadline = Date.now() + 120_000
+      while (!mirrorCancelRef.current && Date.now() < deadline) {
+        const read = await readMirrorFaceInput(mirrorRegisterToken, mirrorSeqRef.current)
+        if (read.face_input && read.face_input.kind === 'member_phone') {
+          mirrorSeqRef.current = read.face_input_seq
+          const raw = read.face_input.raw
+          const dial = read.face_input.dial
+          const nationalNumber = read.face_input.nationalNumber
+          setQuery(raw)
+          setLoading(true)
+          const next = await client.resolveMember({ raw, method: 'mobile' })
+          setResolution(next)
+          if (next.status === 'none') {
+            setRegistration((current) => ({ ...current, phone: raw }))
+          }
+          setLoading(false)
+          const found = next.status === 'matched' && next.matches.length > 0
+          const memberName = found ? next.matches[0]?.name ?? null : null
+          onMirrorPhonePrompt({
+            status: 'result',
+            found,
+            dial,
+            nationalNumber,
+            memberName,
+          })
+          await clearMirrorFaceInput(mirrorRegisterToken).catch(() => {})
+          setMirrorWait(false)
+          return
+        }
+        await new Promise((r) => setTimeout(r, 800))
+      }
+      if (!mirrorCancelRef.current) {
+        setError('Timed out waiting for the customer display. Enter the number here instead.')
+        onMirrorPhonePrompt(null)
+      }
+    } catch (err) {
+      if (!mirrorCancelRef.current) {
+        setError(err instanceof Error ? err.message : 'Could not ask on the customer display.')
+        onMirrorPhonePrompt(null)
+      }
+    } finally {
+      setMirrorWait(false)
+    }
+  }
+
+
   const reset = () => {
     setQuery('')
     setResolution(emptyResolution)
@@ -209,6 +289,8 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
   }
 
   const close = () => {
+    if (mirrorWait) cancelMirrorAsk()
+    else onMirrorPhonePrompt?.(null)
     reset()
     onClose()
   }
@@ -363,6 +445,23 @@ export function FranCustomerModal({ open, client, onClose, onResolved }: FranCus
               </span>
             </Button>
           </div>
+        )}
+
+        {mirrorRegisterToken && onMirrorPhonePrompt && (
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2 w-full border-line bg-yellow-soft text-brown hover:bg-yellow"
+            onClick={() => (mirrorWait ? cancelMirrorAsk() : void askOnMirror())}
+            data-testid="ask-on-mirror"
+          >
+            {mirrorWait ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tablet className="h-4 w-4" />}
+            <span className="truncate">
+              {mirrorWait
+                ? 'Customer entering number on mirror — tap to cancel'
+                : 'Ask for number on customer mirror'}
+            </span>
+          </Button>
         )}
         <Button
           type="button"

@@ -81,10 +81,8 @@ test('login and roster both open the shared photo-then-PIN modal', () => {
   const zones = roster.indexOf('(board?.zones || []).map')
   const afterZones = roster.slice(zones)
   const clock = afterZones.indexOf('Clock in')
-  const everyone = afterZones.indexOf('Everyone today')
   assert.ok(clock > 0)
-  assert.ok(everyone > clock)
-  assert.match(afterZones, /<PosClockInModal/)
+  assert.match(afterZones, /<PosClockInModal open=/)
 
   assert.match(modal, /clockInControls/)
   assert.match(modal, /getUserMedia/)
