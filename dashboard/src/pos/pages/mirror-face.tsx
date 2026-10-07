@@ -12,9 +12,12 @@ import {
   loadMirrorFace,
   readMirrorSnapshot,
   saveMirrorFace,
+  // face→register channel used by member phone prompt
+
   type MirrorFaceBinding,
   type MirrorJoinResult,
 } from '@/pos/mirror/mirror-api'
+import { MemberPhonePromptView } from '@/pos/mirror/member-phone-prompt'
 import {
   enterMirrorImmersive,
   leaveMirrorImmersive,
@@ -252,14 +255,14 @@ export default function MirrorFacePage() {
         )}
       </header>
       <main className="flex min-h-0 flex-1 flex-col px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <FaceBody snapshot={view} />
+        <FaceBody snapshot={view} displayToken={state.binding.display_token} />
       </main>
       <div id="fran-overlay-root" className="hidden" />
     </div>
   )
 }
 
-function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
+function FaceBody({ snapshot, displayToken }: { snapshot: MirrorSnapshot; displayToken: string }) {
   switch (snapshot.phase) {
     case 'idle':
       return <IdlePromos promos={snapshot.promos} store={snapshot.store} />
@@ -276,6 +279,8 @@ function FaceBody({ snapshot }: { snapshot: MirrorSnapshot }) {
           giftCard={snapshot.giftCard}
         />
       )
+    case 'member_phone':
+      return <MemberPhonePromptView prompt={snapshot.prompt} displayToken={displayToken} />
     case 'done':
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">

@@ -58,6 +58,17 @@ export type MirrorTenderKind = 'cash' | 'paynow' | 'card' | 'gift' | 'store-cred
 
 export const MIRROR_DONE_IDLE_MS = 12_000
 
+
+export type MirrorMemberPhonePrompt =
+  | { status: 'awaiting' }
+  | {
+      status: 'result'
+      found: boolean
+      dial: string
+      nationalNumber: string
+      memberName: string | null
+    }
+
 export type MirrorSnapshot =
   | { v: 1; phase: 'idle'; store: MirrorStore; promos: MirrorPromo[] }
   | { v: 1; phase: 'cart'; store: MirrorStore; basket: MirrorBasket }
@@ -81,6 +92,13 @@ export type MirrorSnapshot =
       pointsEarned: number | null
       changeDue?: number
       giftCard?: MirrorGiftCard
+    }
+  | {
+      v: 1
+      phase: 'member_phone'
+      store: MirrorStore
+      prompt: MirrorMemberPhonePrompt
+      basket: MirrorBasket | null
     }
 
 export type MirrorPhase = MirrorSnapshot['phase']
@@ -174,6 +192,8 @@ export interface BuildMirrorSnapshotInput {
   activeTenderMode?: string | null
   /** Name stashed on the completed sale after the counter session is cleared. */
   memberName?: string | null
+  /** Cashier-driven member phone prompt on the customer mirror. */
+  memberPhonePrompt?: MirrorMemberPhonePrompt | null
 }
 
 function round2(value: number) {
@@ -380,6 +400,16 @@ function payingTender(input: BuildMirrorSnapshotInput): MirrorTenderKind | null 
 
 export function buildMirrorSnapshot(input: BuildMirrorSnapshotInput): MirrorSnapshot {
   const { store, lastSale } = input
+  if (input.memberPhonePrompt) {
+    const basket = input.cart.length > 0 ? toBasket(input) : null
+    return {
+      v: 1,
+      phase: 'member_phone',
+      store,
+      prompt: input.memberPhonePrompt,
+      basket,
+    }
+  }
   if (input.completedOpen && lastSale && lastSale.saleStatus !== 'voided') {
     const paid = (lastSale.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
     return {
@@ -553,6 +583,35 @@ export function parseMirrorSnapshot(value: unknown): MirrorSnapshot | null {
         ...changeField(changeDue ?? 0),
       }
       return giftCard ? { ...snapshot, giftCard } : snapshot
+    }
+    case 'member_phone': {
+      const prompt = value.prompt
+      if (!isObject(prompt) || !isStr(prompt.status)) return null
+      if (prompt.status === 'awaiting') {
+        const basket = value.basket == null ? null : isBasket(value.basket) ? value.basket : null
+        if (value.basket != null && basket === null) return null
+        return { v: 1, phase: 'member_phone', store: value.store, prompt: { status: 'awaiting' }, basket }
+      }
+      if (prompt.status === 'result') {
+        if (!isStr(prompt.dial) || !isStr(prompt.nationalNumber) || typeof prompt.found !== 'boolean') return null
+        if (!(prompt.memberName === null || isStr(prompt.memberName))) return null
+        const basket = value.basket == null ? null : isBasket(value.basket) ? value.basket : null
+        if (value.basket != null && basket === null) return null
+        return {
+          v: 1,
+          phase: 'member_phone',
+          store: value.store,
+          prompt: {
+            status: 'result',
+            found: prompt.found,
+            dial: prompt.dial,
+            nationalNumber: prompt.nationalNumber,
+            memberName: prompt.memberName,
+          },
+          basket,
+        }
+      }
+      return null
     }
     default:
       return null
