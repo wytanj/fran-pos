@@ -173,4 +173,10 @@ test('paynow and wechat show a full-screen stripe qr and poll until paid', () =>
   assert.match(overlay, /createPortal/)
   assert.match(overlay, /QR valid for/)
   assert.match(overlay, /Payment received/)
+
+  // Covering PayNow/WeChat success must auto-call onComplete so mirror publishes phase=done.
+  // Cash still uses Complete & Print (change counting). Deferred via fullyPaid effect.
+  assert.match(modal, /pendingQrAutoComplete/)
+  assert.match(modal, /onCompleteRef\.current\(\)/)
+  assert.match(modal, /if \(paidAmount >= remaining - 0\.001\) pendingQrAutoComplete\.current = true/)
 })
