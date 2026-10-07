@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, KeyRound, LogOut, MonitorSmartphone, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
+import { AlertCircle, Clock, KeyRound, LogOut, MonitorSmartphone, Shield, ShoppingBag, Tablet, User, Wifi } from 'lucide-react'
+import { PosClockInModal } from '@/pos/components/pos-clock-in-modal'
 import { Button } from '@/components/ui/button'
 import { Numpad } from '@/pos/components/numpad'
 import { usePos } from '@/pos/lib/pos-context'
@@ -33,6 +34,7 @@ export default function PosLogin() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
+  const [clockInOpen, setClockInOpen] = useState(false)
   const [binding, setBinding] = useState<RegisterBinding | null>(() =>
     typeof window !== 'undefined' ? loadRegisterBinding() : null
   )
@@ -279,6 +281,16 @@ export default function PosLogin() {
                 </label>
 
                 <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full text-base"
+                  onClick={() => setClockInOpen(true)}
+                  data-testid="pos-clock-in-prelive"
+                >
+                  <Clock className="h-4 w-4" />
+                  Clock in
+                </Button>
+                <Button
                   className="h-12 w-full text-base"
                   onClick={() => void openLiveWithHrmPin()}
                   disabled={employeeCode.length < 1 || pin.length !== HRM_POS_PIN_DIGITS || unlocking}
@@ -466,5 +478,6 @@ export default function PosLogin() {
         </div>
       </div>
     </div>
+      <PosClockInModal open={clockInOpen} onClose={() => setClockInOpen(false)} binding={binding} />
   )
 }
