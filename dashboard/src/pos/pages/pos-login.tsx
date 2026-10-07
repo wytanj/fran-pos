@@ -161,6 +161,7 @@ export default function PosLogin() {
   }
 
   return (
+    <>
     <div className="flex min-h-dvh flex-col bg-cream p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col rounded-xl border border-line bg-white p-3 shadow-warm-md sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -479,5 +480,6 @@ export default function PosLogin() {
       </div>
     </div>
       <PosClockInModal open={clockInOpen} onClose={() => setClockInOpen(false)} binding={binding} />
+    </>
   )
 }
